@@ -28,16 +28,28 @@ from portal_sicredi import ler_portal, pix_do_portal  # noqa: E402
 RAIZ = Path(__file__).resolve().parent.parent
 
 
-def ler_extrato(caminho: str) -> pd.DataFrame:
+def chave_loja(nome: str) -> str:
+    """'BIGGS 07 - JAMIL E ACAI' e 'BIGGS 07 E AÇAI' -> 'BIGGS 07'; 'ROBS' -> 'ROBS'."""
+    t = str(nome).upper().replace("-", " ").split()
+    return " ".join(t[:2]) if len(t) > 1 and t[1].isdigit() else t[0] if t else ""
+
+
+def ler_extrato(caminho: str, filiais_pdv=()) -> pd.DataFrame:
+    """Só 'Vendas no Pix' (RECEBIMENTO PIX). Estornos, VR, transferências e demais categorias ficam fora.
+    A coluna Loja é traduzida para o nome da filial no PDV pela chave 'MARCA NN'."""
     wb = CalamineWorkbook.from_path(caminho)
     rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
     h = next(i for i, r in enumerate(rows) if "Descrição" in r)
     ex = pd.DataFrame(rows[h + 1 :], columns=rows[h])
     ex = ex[ex["Descrição"].astype(str).str.upper().str.startswith("RECEBIMENTO PIX")].copy()
+    if "Categoria" in ex.columns and ex["Categoria"].astype(str).str.contains("Vendas no Pix").any():
+        ex = ex[ex["Categoria"].astype(str) == "Vendas no Pix"]
     ex["Valor"] = pd.to_numeric(ex["Valor"], errors="coerce").fillna(0)
     ex["cent"] = (ex["Valor"] * 100).round().astype(int)
     ex["Data"] = pd.to_datetime(ex["Data"]).dt.date
     ex["Pagador"] = ex["Descrição"].str.replace("RECEBIMENTO PIX", "", regex=False).str.strip()
+    mapa = {chave_loja(f): f for f in filiais_pdv}
+    ex["Loja"] = ex["Loja"].map(lambda x: mapa.get(chave_loja(x), str(x)))
     return ex.reset_index(drop=True)
 
 
@@ -75,6 +87,8 @@ def casa_banco(v: pd.DataFrame, ex: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
                         "Dias": (ex.loc[j, "Data"] - a["Data"]).days, "Status": "CONCILIADO"})
         elif a["Data"] > fim:
             out.append({**a.to_dict(), "Status": "AGUARDA EXTRATO"})
+        elif a["Fonte"] == "PDV":
+            out.append({**a.to_dict(), "Status": "SEM PAR NO BANCO · AGUARDA MAQUININHA"})
         else:
             out.append({**a.to_dict(), "Status": "NÃO CAIU NO BANCO"})
     return pd.DataFrame(out), ex[~ex.index.isin(usados)].copy()
@@ -90,9 +104,9 @@ def main() -> None:
     if "--ate" in args:
         i = args.index("--ate"); ate = pd.Timestamp(args[i + 1]).date(); del args[i:i + 2]
     ex_arq, pdv_arq, portais = args[0], args[1], args[2:]
-    ex = ler_extrato(ex_arq)
     lojas = carrega_lojas()
     v = vendas_pix(pdv_arq, portais, lojas)
+    ex = ler_extrato(ex_arq, v["Filial"].unique())
     v = v[v["Filial"].isin(ex["Loja"].unique())]  # só lojas presentes no extrato
     if portais and de is None and ate is None:
         v = v[v["Fonte"] == "Maquininha"]        # período = o que o portal cobre
@@ -101,7 +115,7 @@ def main() -> None:
     if ate:
         v = v[v["Data"] <= ate]
     d0, d1 = v["Data"].min(), v["Data"].max()
-    ex = ex[ex["Data"] >= d0]                    # créditos anteriores ao período não entram
+    ex = ex[(ex["Data"] >= d0) & (ex["Loja"].isin(v["Filial"].unique()))]   # só o período e as lojas com venda
     res, sobra = casa_banco(v, ex)
 
     resumo = []
@@ -113,6 +127,7 @@ def main() -> None:
             "Crédito em": ", ".join(sorted({str(x) for x in g["Crédito"].dropna()})) if "Crédito" in g else "",
             "Aguarda extrato (R$)": g[g["Status"] == "AGUARDA EXTRATO"]["cent"].sum() / 100,
             "Não caiu (R$)": g[g["Status"] == "NÃO CAIU NO BANCO"]["cent"].sum() / 100,
+            "PDV sem par no banco (R$)": g[g["Status"].str.startswith("SEM PAR NO BANCO")]["cent"].sum() / 100,
         })
     resumo = pd.DataFrame(resumo)
     out = RAIZ / "saida" / f"concilia_pix_banco_{d0:%Y-%m-%d}_a_{d1:%Y-%m-%d}.xlsx"
@@ -122,11 +137,11 @@ def main() -> None:
         resumo.to_excel(xw, sheet_name="Resumo loja x dia", index=False)
         res[[c for c in cols if c in res.columns]].to_excel(xw, sheet_name="Venda x banco", index=False)
         res[res["Status"] != "CONCILIADO"][[c for c in cols if c in res.columns]].to_excel(xw, sheet_name="Pendências", index=False)
-        sobra[["Loja", "Data", "Descrição", "Valor"]].to_excel(xw, sheet_name="Banco sem venda", index=False)
+        sobra[["Loja", "Data", "Descrição", "Valor"]].sort_values(["Loja", "Data"]).to_excel(xw, sheet_name="Banco sem venda", index=False)
     n = res["Status"].value_counts()
     print(f"Vendas {d0:%d/%m}–{d1:%d/%m} · extrato até {ex['Data'].max():%d/%m}: {len(ex)} PIX R$ {ex['cent'].sum()/100:,.2f} | vendas PIX {len(res)} | "
           f"conciliado {n.get('CONCILIADO',0)} | aguarda extrato {n.get('AGUARDA EXTRATO',0)} | "
-          f"não caiu {n.get('NÃO CAIU NO BANCO',0)} | banco sem venda {len(sobra)}")
+          f"não caiu {n.get('NÃO CAIU NO BANCO',0)} | PDV sem par no banco {int(res['Status'].str.startswith('SEM PAR NO BANCO').sum())} | banco sem venda {len(sobra)}")
     print(f"gravado em {out}\n")
     print(resumo.to_string(index=False))
 

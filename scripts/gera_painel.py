@@ -10,6 +10,7 @@ painel/template.html no marcador /*DADOS*/.
 """
 import glob
 import json
+import re
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -145,13 +146,20 @@ def main() -> None:
             z = sel(e2, filial, d, "Venda")
             if z is not None:
                 row.update(banco=r2(z["Caiu no banco (R$)"]), credito=str(z["Crédito em"]) if pd.notna(z["Crédito em"]) else "",
-                           aguarda=r2(z["Aguarda extrato (R$)"]), nao_caiu=r2(z["Não caiu (R$)"]))
+                           aguarda=r2(z["Aguarda extrato (R$)"]), nao_caiu=r2(z["Não caiu (R$)"]),
+                           sem_banco=r2(z.get("PDV sem par no banco (R$)", 0)))
             row["lanc"] = lanc_pix(filial, d)
             dias.append(row)
         if len(e1p):
             for _, q in e1p[e1p["Filial"] == filial].iterrows():
-                pend.append({"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Vl. pagamento"]), "ref": f"cupom {q['Cupom']} · {q['Hora']} · {q['Caixa']}",
-                             "status": str(q["Status"]), "detalhe": f"terminal {q['Terminal']} · aut. {q['Autorização']} · comprovante {q['Comprovante']}" if pd.notna(q.get("Terminal")) else ""})
+                item = {"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Vl. pagamento"]), "ref": f"cupom {q['Cupom']} · {q['Hora']} · {q['Caixa']}",
+                        "status": str(q["Status"]), "detalhe": f"terminal {q['Terminal']} · aut. {q['Autorização']} · comprovante {q['Comprovante']}" if pd.notna(q.get("Terminal")) else "",
+                        "cupom": str(q["Cupom"]), "caixa": str(q["Caixa"]), "hora": str(q["Hora"])[:5], "forma": str(q["Desc. pagam."])}
+                mm = re.search(r"FORMA ERRADA: (Crédito|Débito) .* em (\d\d)/(\d\d)", str(q["Status"]))
+                if mm:
+                    item.update(aut=str(q["Autorização"]), para="credito" if mm.group(1) == "Crédito" else "debito",
+                                data_maq=f"{q['Data'].year}-{mm.group(3)}-{mm.group(2)}")
+                pend.append(item)
         if len(e1m):
             for _, q in e1m[e1m["Filial"] == filial].iterrows():
                 pend.append({"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Valor Bruto"]), "ref": f"aut. {q['Cód. de autorização']} · terminal {q['Número do terminal']}", "status": "MAQUININHA SEM PAR NO PDV", "detalhe": ""})

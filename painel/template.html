@@ -122,6 +122,18 @@ td.neg{color:var(--erro)}
 .pend .top{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;justify-content:space-between}
 .pend .top b{font-size:15px} .pend .top span{font-size:12.5px;color:var(--ink-muted)}
 .pend .msg{font-size:13.5px;margin-top:3px} .pend .msg small{display:block;color:var(--ink-muted);font-size:12px;margin-top:2px}
+.pend .acoes{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center}
+.btn{font:inherit;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:6px;border:1px solid var(--rule-strong);background:var(--card);color:var(--ink);cursor:pointer}
+.btn.primario{background:var(--gestao);border-color:var(--gestao);color:#fff}
+.btn:focus-visible{outline:2px solid var(--gestao);outline-offset:2px} .btn[disabled]{opacity:.5;cursor:default}
+.form-aj{display:grid;gap:8px;margin-top:10px;padding:12px;border:1px solid var(--rule);border-radius:8px;background:var(--bg)}
+.form-aj label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-muted);font-weight:600;display:grid;gap:4px}
+.form-aj select,.form-aj textarea{font:inherit;font-size:13.5px;padding:7px 9px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);max-width:100%}
+.form-aj textarea{min-height:56px;resize:vertical}
+.form-aj .erro{color:var(--erro);font-size:12.5px}
+.pend li[data-s="ajuste"] .stripe{background:var(--gestao)}
+.ajuste-nota{font-size:13px;color:var(--ink-soft);margin-top:4px} .ajuste-nota b{color:var(--ink)}
+td.st[data-s="ajuste"]{color:var(--gestao)}
 .pend .expl{font-size:13px;color:var(--ink-soft);margin-top:6px;max-width:70ch}
 
 /* regras */
@@ -170,6 +182,7 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
       <div class="regra"><b>Data do PDV é dia de movimento</b>Cupom antes das 06:00 pertence ao dia seguinte do calendário. Confirmado em 299 de 301 caixas-dia.</div>
       <div class="regra"><b>Hora do PDV é a do fechamento</b>Pode vir até 80 minutos depois do pagamento. Serve só para desempatar valores iguais.</div>
       <div class="regra"><b>POS não é integrado</b>Terminais APT… dependem de digitação: a venda pode entrar no dia seguinte ou com a forma errada. A TEF (TFI…) bate hora a hora.</div>
+      <div class="regra"><b>Reclassificação fica registrada</b>Quando a baixa no PDV saiu com a forma errada, o lançamento pode ser transferido aqui para a forma certa, com justificativa, autor e hora. Como o caixa fechado não aceita correção no PDV, esse ajuste é o registro oficial da conciliação e fica guardado com o painel.</div>
       <div class="regra"><b>Aguardar não é divergir</b>Venda depois da última data do extrato fica como "aguarda extrato", fora do Δ e fora da contagem de casos.</div>
     </div>
   </section>
@@ -181,7 +194,8 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
 </div></main>
 
 <script>
-const D = /*DADOS*/;
+const D0 = /*DADOS*/;
+let D = JSON.parse(JSON.stringify(D0));
 const brl = n => (n ?? 0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const dBR = s => s ? s.slice(8,10)+"/"+s.slice(5,7) : "";
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -195,7 +209,7 @@ const sum = (arr, f) => arr.reduce((a,x) => a + Math.round((f(x) ?? 0)*100), 0) 
 function statusLoja(l){
   const m = M(l);
   if(!m.tem_maq) return {s:"aguarda", t:"aguarda relatório"};
-  const diverg = m.dias.some(d => Math.abs(d.delta ?? 0) > 0.004 || (d.nao_caiu ?? 0) > 0.004) || m.pendencias.some(p => /SEM PAR|FORMA|NÃO CAIU|BANCO SEM/.test(p.status));
+  const diverg = m.dias.some(d => Math.abs(d.delta ?? 0) > 0.004 || (d.nao_caiu ?? 0) > 0.004) || m.pendencias.some(p => !p.ajuste && /SEM PAR|FORMA|NÃO CAIU|BANCO SEM/.test(p.status));
   if(diverg) return {s:"erro", t:"divergência"};
   if(tab !== "pix") return {s:"ok", t:"PDV = máquina"};
   if(!m.tem_banco) return {s:"pendente", t:"sem extrato"};
@@ -232,9 +246,10 @@ function kpis(){
     [`${TABS[tab]} na maquininha`, brl(maq), `${conc.length} loja${conc.length===1?"":"s"} com Histórico de vendas`, ""],
   ];
   if(tab === "pix"){
-    const banco = sum(conc, l => sum(M(l).dias, d => d.banco));
-    const aguarda = sum(conc, l => sum(M(l).dias, d => d.aguarda));
-    k.push(["Caiu no banco", brl(banco), D.extrato_ate ? `extrato lido até ${dBR(D.extrato_ate)}` : "nenhum extrato lido", banco>0?"ok":""]);
+    const comBanco = todas.filter(l => M(l).tem_banco);
+    const banco = sum(comBanco, l => sum(M(l).dias, d => d.banco));
+    const aguarda = sum(comBanco, l => sum(M(l).dias, d => d.aguarda));
+    k.push(["Caiu no banco", brl(banco), D.extrato_ate ? `${comBanco.length} lojas · extrato lido até ${dBR(D.extrato_ate)}` : "nenhum extrato lido", banco>0?"ok":""]);
     k.push(["Aguarda extrato", brl(aguarda), "vendas após a última data lida", aguarda>0?"pendente":""]);
   } else {
     const mdr = sum(conc, l => sum(M(l).dias, d => d.mdr)), liq = sum(conc, l => sum(M(l).dias, d => d.liquido));
@@ -268,6 +283,7 @@ const EXPL = {
   "MAQUININHA SEM PAR NO PDV": "A máquina registrou a venda e o PDV não tem lançamento de mesmo valor em até 36 horas. Venda sem cupom ou lançada com outra forma.",
   "AGUARDA EXTRATO": "A venda é posterior à última data lida do extrato. Não é divergência: rodar de novo quando o painel de extratos capturar o dia.",
   "NÃO CAIU NO BANCO": "O extrato cobre a data prevista e o crédito não apareceu. Abrir caso com a Sicredi.",
+  "SEM PAR NO BANCO": "PIX lançado no PDV sem crédito de mesmo valor no extrato. Sem o relatório da maquininha ainda não dá para dizer se foi forma errada no caixa ou PIX que não caiu. Resolve quando o Histórico de vendas da loja entrar.",
   "BANCO SEM VENDA": "Entrou um PIX na conta sem venda correspondente. Pode ser recebimento de outra natureza classificado como venda.",
 };
 function detalhe(){
@@ -277,10 +293,11 @@ function detalhe(){
   const m = M(l), st = statusLoja(l);
   const pdv = sum(m.dias,d=>d.pdv), maq = sum(m.dias,d=>d.maq), banco = sum(m.dias,d=>d.banco), ag = sum(m.dias,d=>d.aguarda);
   const aberto = sum(m.dias, d => (d.pdv_sem_par ?? 0) + (d.maq_sem_par ?? 0) + (d.nao_caiu ?? 0));
-  const nCasos = m.pendencias.filter(p=>p.status!=="AGUARDA EXTRATO").length;
+  const nCasos = m.pendencias.filter(p=>p.status!=="AGUARDA EXTRATO" && !p.ajuste).length;
   let html = `<div class="det-head"><h3>${esc(l.nome)} · ${TABS[tab]}</h3><span class="meta">${l.ec?`EC ${l.ec} · `:""}${dBR(D.de)} a ${dBR(D.ate)} · <span class="chip" data-s="${st.s}">${st.t}</span></span></div>`;
   if(!m.tem_maq){
-    html += `<p class="vazio">O PDV registrou <b>${brl(pdv)}</b> em ${TABS[tab]} nesta loja no período (${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)} lançamentos). Falta o <b>Histórico de vendas</b> do portal da maquininha para cruzar a primeira ponta${tab==="pix"?", e o extrato da conta para a segunda":""}.</p>`;
+    const semBanco = sum(m.dias, d => d.sem_banco);
+    html += `<p class="vazio">O PDV registrou <b>${brl(pdv)}</b> em ${TABS[tab]} nesta loja no período (${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)} lançamentos). Falta o <b>Histórico de vendas</b> do portal da maquininha para cruzar a primeira ponta.${m.tem_banco?` Contra o extrato, <b>${brl(banco)}</b> já casou e <b>${brl(semBanco)}</b> está sem par no banco.`:""}</p>`;
   } else {
     const bancoPonta = tab === "pix"
       ? `<div class="ponta" data-tone="${!m.tem_banco?"pendente":aberto>0.004?"erro":ag>0.004?"pendente":"ok"}"><div class="lbl">Banco</div><div class="val">${m.tem_banco?brl(banco):"—"}</div><div class="sub">${m.tem_banco?(ag>0.004?`${brl(ag)} aguarda extrato`:"tudo creditado"):"sem extrato"}</div></div>`
@@ -294,11 +311,22 @@ function detalhe(){
   }
   html += tabela(m);
   if(m.pendencias.length){
-    html += `<h2>Pendências · ${m.pendencias.length}</h2><ul class="pend">` + m.pendencias.map(p => {
+    const podeAjustar = !!dbRef && podeEscrever !== false;
+    html += `<h2>Pendências · ${m.pendencias.length}</h2><ul class="pend" id="pend">` + m.pendencias.map((p,i) => {
       const key = Object.keys(EXPL).find(k => p.status.startsWith(k)) || "";
-      const s = /AGUARDA/.test(p.status) ? "pendente" : "erro";
-      return `<li data-s="${s}"><span class="stripe"></span><div><div class="top"><b>${brl(p.valor)} · ${dBR(p.data)}</b><span>etapa ${p.etapa} · ${esc(p.ref)}</span></div>
-        <div class="msg">${esc(p.status)}${p.detalhe?`<small>${esc(p.detalhe)}</small>`:""}</div>${key?`<div class="expl">${EXPL[key]}</div>`:""}</div></li>`;
+      const s = p.ajuste ? "ajuste" : /AGUARDA/.test(p.status) ? "pendente" : "erro";
+      let acoes = "";
+      if(p.ajuste){
+        const a = p.ajuste, dt = a.criado_em ? new Date(a.criado_em).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
+        acoes = `<div class="ajuste-nota"><b>Justificativa:</b> ${esc(a.justificativa)}<br><small>registrado em ${dt}<span data-por="${esc(a.por||"")}"></span></small></div>` +
+                (podeAjustar ? `<div class="acoes"><button type="button" class="btn" data-act="desfazer" data-id="${esc(idAjuste(a))}">Desfazer</button></div>` : "");
+      } else if(p.cupom && podeAjustar){
+        acoes = `<div class="acoes"><button type="button" class="btn primario" data-act="abrir">Transferir para ${p.para ? NOMES[p.para] : "outra forma"}…</button></div>` + formAjuste(p, l);
+      } else if(p.cupom && !dbRef){
+        acoes = `<div class="ajuste-nota"><small>Para reclassificar, abra o painel conectado ao claude.ai.</small></div>`;
+      }
+      return `<li data-s="${s}" data-i="${i}"><span class="stripe"></span><div><div class="top"><b>${brl(p.valor)} · ${dBR(p.data)}</b><span>etapa ${p.etapa} · ${esc(p.ref)}</span></div>
+        <div class="msg">${esc(p.status)}${p.detalhe?`<small>${esc(p.detalhe)}</small>`:""}</div>${key && !p.ajuste?`<div class="expl">${EXPL[key]}</div>`:""}${acoes}</div></li>`;
     }).join("") + `</ul>`;
   }
   el.innerHTML = html;
@@ -325,7 +353,7 @@ function lancamentos(d){
   const pix = tab === "pix", temMaq = d.maq !== undefined;
   const L = d.lanc || [];
   if(!L.length) return `<div class="lanc-vazio">Nenhum lançamento de ${TABS[tab]} neste dia.</div>`;
-  const st = r => r.s==="CONCILIADO" ? ["ok","conciliado"] : r.s==="PDV" ? ["pdv","só PDV"] : ["erro", r.s.toLowerCase().replace("provável forma errada:","forma errada ·")];
+  const st = r => r.aj ? ["ajuste", r.s.toLowerCase()] : r.s==="CONCILIADO" ? ["ok","conciliado"] : r.s==="PDV" ? ["pdv","só PDV"] : ["erro", r.s.toLowerCase().replace("provável forma errada:","forma errada ·")];
   const head = temMaq
     ? `<th>Hora PDV</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th><th>Situação</th><th>Hora máq</th>${pix?"":"<th>Bandeira</th>"}<th>Terminal</th><th>Autorização</th>${pix?"<th>Crédito</th><th>Pagador</th>":"<th>MDR</th>"}`
     : `<th>Hora</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th>`;
@@ -353,11 +381,127 @@ function ligaDias(){
   // reabre o que estava aberto antes de re-renderizar
   document.querySelectorAll("#tab-dias td.dia button").forEach(b => { if(abertos.has(`${sel}|${tab}|${b.dataset.i}`)) b.click(); });
 }
-function render(){ tabs(); kpis(); lojas(); detalhe(); ligaDias(); }
+
+/* ---------- ajustes (reclassificação de forma de pagamento), guardados no banco do painel ---------- */
+let AJ = {};            // id -> ajuste
+let dbRef = null, userRef = null, podeEscrever = null, meuId = null;
+const NOMES = {pix:"PIX", credito:"Crédito", debito:"Débito"};
+const slug = x => String(x).replace(/[^A-Za-z0-9_.~:@+-]+/g, "-");
+const idAjuste = a => `${slug(a.loja)}_${a.data}_${a.cupom}_${a.de}`;
+
+function aplicaAjustes(){
+  D = JSON.parse(JSON.stringify(D0));
+  for(const a of Object.values(AJ)){
+    const l = D.lojas.find(x => x.nome === a.loja); if(!l) continue;
+    const de = l.mod[a.de], para = l.mod[a.para]; if(!de || !para) continue;
+    const dia = de.dias.find(d => d.data === a.data); if(!dia) continue;
+    const v = a.valor;
+    // origem: tira o lançamento das somas e marca a linha
+    const li = (dia.lanc||[]).find(r => r.c === a.cupom && r.s !== "CONCILIADO" && !r.aj);
+    if(li){ li.aj = true; li.s = `RECLASSIFICADO → ${NOMES[a.para]}`; }
+    dia.pdv_qtd -= 1; dia.pdv = r(dia.pdv - v);
+    if(dia.pdv_sem_par !== undefined) dia.pdv_sem_par = r(Math.max(0, dia.pdv_sem_par - v));
+    if(dia.delta !== undefined) dia.delta = r(dia.delta - v);
+    const pi = de.pendencias.findIndex(p => p.cupom === a.cupom && p.data === a.data);
+    if(pi >= 0){ const p = de.pendencias[pi]; p.ajuste = a; p.status = `RECLASSIFICADO → ${NOMES[a.para]}`; }
+    // destino: entra nas somas do dia da máquina (ou do PDV, se não houver par) e casa com a linha órfã
+    const dd = para.dias.find(d => d.data === (a.data_maq || a.data)) || para.dias.find(d => d.data === a.data); if(!dd) continue;
+    dd.pdv_qtd += 1; dd.pdv = r(dd.pdv + v);
+    if(dd.delta !== undefined) dd.delta = r(dd.delta + v);
+    const lm = a.aut ? (dd.lanc||[]).find(x => x.a === a.aut && x.s === "MAQUININHA SEM PAR NO PDV") : null;
+    if(lm){
+      lm.s = "CONCILIADO (ajuste)"; lm.aj = true; lm.h = a.hora; lm.c = a.cupom; lm.cx = a.caixa; lm.f = `${a.forma} → ${NOMES[a.para]}`;
+      if(a.data !== dd.data) lm.dp = a.data;
+      if(dd.maq_sem_par !== undefined) dd.maq_sem_par = r(Math.max(0, dd.maq_sem_par - v));
+      const pj = para.pendencias.findIndex(p => p.status === "MAQUININHA SEM PAR NO PDV" && String(p.ref).includes(`aut. ${a.aut}`));
+      if(pj >= 0) para.pendencias.splice(pj, 1);
+    } else {
+      (dd.lanc ||= []).push({h:a.hora, c:a.cupom, cx:a.caixa, f:`${a.forma} → ${NOMES[a.para]}`, v, s:"RECLASSIFICADO (sem par na máquina)", aj:true});
+      if(dd.pdv_sem_par !== undefined) dd.pdv_sem_par = r(dd.pdv_sem_par + v);
+    }
+  }
+  function r(x){ return Math.round(x*100)/100; }
+}
+
+async function ligaBanco(){
+  if(!window.claude?.use) return;
+  try{
+    dbRef = await claude.use("db");
+    userRef = await claude.use("user");
+    if(userRef){ podeEscrever = await userRef.can("data.write"); meuId = await userRef.id(); }
+  }catch(e){ dbRef = null; }
+  if(!dbRef){ render(); return; }
+  dbRef.collection("ajustes").onSnapshot(snap => {
+    AJ = {};
+    snap.docs.forEach(d => { if(d.exists) AJ[d.id] = d.data(); });
+    aplicaAjustes(); render();
+  }, err => { console.warn("ajustes:", err); });
+}
+
+async function salvaAjuste(a, botao){
+  if(!dbRef) return;
+  botao.disabled = true;
+  try{
+    await dbRef.collection("ajustes").doc(idAjuste(a)).set(a);
+  }catch(e){
+    botao.disabled = false;
+    const erro = botao.closest(".form-aj")?.querySelector(".erro");
+    if(erro) erro.textContent = e?.code === "invalid_argument" ? "Você não tem permissão para gravar ajustes neste painel." : `Não foi possível gravar (${e?.code || "erro"}). Tente de novo.`;
+  }
+}
+async function desfazAjuste(id, botao){
+  if(!dbRef) return;
+  botao.disabled = true;
+  try{ await dbRef.collection("ajustes").doc(id).delete(); }catch(e){ botao.disabled = false; }
+}
+
+function formAjuste(p, l){
+  const alvo = p.para || (tab === "pix" ? "credito" : "pix");
+  const opts = Object.entries(NOMES).filter(([k]) => k !== tab).map(([k,v]) => `<option value="${k}" ${k===alvo?"selected":""}>${v}</option>`).join("");
+  return `<div class="form-aj" hidden>
+    <label>Transferir para<select data-f="para">${opts}</select></label>
+    <label>Justificativa<textarea data-f="just">Baixa incorreta no PDV: cupom ${esc(p.cupom)} lançado como ${esc(p.forma)}${p.aut?`, venda passou na máquina como ${NOMES[p.para]} (aut. ${esc(p.aut)}, terminal ${esc(String(p.detalhe).match(/terminal (\S+)/)?.[1]||"")})`:""}.</textarea></label>
+    <div class="acoes"><button type="button" class="btn primario" data-act="confirmar">Confirmar reclassificação</button><button type="button" class="btn" data-act="cancelar">Cancelar</button><span class="erro"></span></div>
+  </div>`;
+}
+
+async function nomeDe(id){
+  if(!userRef || !id) return "";
+  try{ const ps = await userRef.profiles([id]); return ps?.[id]?.name || ""; }catch(e){ return ""; }
+}
+
+function ligaAjustes(){
+  const l = D.lojas.find(x => x.nome===sel); if(!l) return;
+  const m = M(l);
+  document.querySelectorAll("#pend li").forEach(li => {
+    const i = +li.dataset.i, p = m.pendencias[i]; if(!p) return;
+    const abrir = li.querySelector('[data-act="abrir"]'), form = li.querySelector(".form-aj");
+    if(abrir && form){
+      abrir.addEventListener("click", () => { form.hidden = !form.hidden; });
+      form.querySelector('[data-act="cancelar"]').addEventListener("click", () => { form.hidden = true; });
+      form.querySelector('[data-act="confirmar"]').addEventListener("click", ev => {
+        const para = form.querySelector('[data-f="para"]').value, just = form.querySelector('[data-f="just"]').value.trim();
+        if(!just){ form.querySelector(".erro").textContent = "Escreva a justificativa."; return; }
+        const a = {loja:l.nome, de:tab, para, data:p.data, cupom:p.cupom, caixa:p.caixa, hora:p.hora, forma:p.forma, valor:p.valor,
+                   justificativa:just, criado_em:new Date().toISOString(), por:meuId || null};
+        if(p.aut && para === p.para){ a.aut = p.aut; a.data_maq = p.data_maq; }
+        salvaAjuste(a, ev.currentTarget);
+      });
+    }
+    const desf = li.querySelector('[data-act="desfazer"]');
+    if(desf) desf.addEventListener("click", ev => desfazAjuste(desf.dataset.id, ev.currentTarget));
+    const quem = li.querySelector("[data-por]");
+    if(quem) nomeDe(quem.dataset.por).then(n => { if(n) quem.textContent = ` por ${n}`; });
+  });
+}
+
+function render(){ tabs(); kpis(); lojas(); detalhe(); ligaDias(); ligaAjustes(); }
+
 
 document.getElementById("stamp").innerHTML = `<span>Período <b>${dBR(D.de)} a ${dBR(D.ate)}/${D.ate.slice(0,4)}</b></span><span>Extrato lido até <b>${D.extrato_ate?dBR(D.extrato_ate):"—"}</b></span><span>Atualizado em ${D.gerado_em}</span>`;
 document.getElementById("rodape").textContent = `Gerado em ${D.gerado_em} · scripts/gera_painel.py`;
 try{ sel = localStorage.getItem("loja"); const t = localStorage.getItem("tab"); if(TABS[t]) tab = t; }catch(e){}
 if(!D.lojas.some(l=>l.nome===sel)) sel = (D.lojas.find(l=>l.mod.pix.tem_maq) || D.lojas[0] || {}).nome || null;
 render();
+ligaBanco();
 </script>
