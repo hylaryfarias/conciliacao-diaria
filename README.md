@@ -48,6 +48,9 @@ como **"aguarda extrato"**, nunca como divergência.
   divisão de formas diferente nos dois lados. O painel marca "conciliado por total da comanda".
 - **Conta dividida** (motor, automático): cupom sem par procura (b) um grupo de 2 a 4 PIX, todos em até 3 h, cuja soma bate o cupom; (c) o inverso, um PIX que
   paga 2 a 4 cupons fechados em até 3 h. Janela larga demais nos grupos gera par falso.
+- **Sobras dos dois lados se compensam** (Hylary): baixa no PDV sem par e venda na máquina sem par
+  são pagamento parcial de comanda. O painel abre o dia só pelo líquido |PDV sem par − máquina sem par|
+  e mostra as duas listas em amarelo, para consulta.
 - **Até R$ 1,00 é conciliado** (Hylary): último passo do casamento aceita diferença de até R$ 1,00
   entre PDV e máquina na janela; no painel, dia e loja só ficam vermelhos se o aberto passar de R$ 1,00.
 - **PIX só existe pela máquina** (QR code/TEF). PIX do PDV sem par na máquina → procurar cartão

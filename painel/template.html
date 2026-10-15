@@ -110,7 +110,7 @@ tr.lanc>td{padding:0 0 10px;background:var(--bg-soft);white-space:normal;text-al
 table.lanc-t{min-width:0;width:100%;font-size:12.5px}
 table.lanc-t th{padding:5px 7px;font-size:10px;border-bottom-color:var(--rule)} table.lanc-t td{padding:5px 7px;border-bottom:1px solid var(--rule)}
 table.lanc-t tr:last-child td{border-bottom:0}
-table.lanc-t td.st{font-size:11px;font-weight:600;white-space:nowrap} td.st[data-s="ok"]{color:var(--ok)} td.st[data-s="erro"]{color:var(--erro)} td.st[data-s="pdv"]{color:var(--ink-muted)}
+table.lanc-t td.st{font-size:11px;font-weight:600;white-space:nowrap} td.st[data-s="ok"]{color:var(--ok)} td.st[data-s="erro"]{color:var(--erro)} td.st[data-s="pdv"]{color:var(--ink-muted)} td.st[data-s="pendente"]{color:var(--pendente)}
 table.lanc-t td.mono{font-size:11.5px;color:var(--ink-soft)}
 .lanc-vazio{padding:10px 12px;font-size:13px;color:var(--ink-muted)}
 td.neg{color:var(--erro)}
@@ -184,6 +184,7 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
       <div class="regra"><b>Data do PDV é dia de movimento</b>Cupom antes das 06:00 pertence ao dia seguinte do calendário. Confirmado em 299 de 301 caixas-dia.</div>
       <div class="regra"><b>Hora do PDV é a do fechamento</b>Pode vir até 80 minutos depois do pagamento. Serve só para desempatar valores iguais.</div>
       <div class="regra"><b>POS não é integrado</b>Terminais APT… dependem de digitação: a venda pode entrar no dia seguinte ou com a forma errada. A TEF (TFI…) bate hora a hora.</div>
+      <div class="regra"><b>Sobras dos dois lados se compensam</b>Baixa no PDV sem par e venda na máquina sem par são a mesma coisa: pagamento parcial de comanda. O dia fica em aberto só pelo líquido entre os dois lados; as duas listas ficam em amarelo, para consulta.</div>
       <div class="regra"><b>Comanda bate, forma não</b>Mesa dividida: cada cliente paga de um jeito e o caixa baixa com outra divisão. O motor soma o que sobrou sem par na comanda e procura na máquina, em qualquer forma, 1 a 4 vendas com a mesma soma. Resolve a comanda; o Δ por forma fica diferente de zero de propósito.</div>
       <div class="regra"><b>Serviço não baixado é divergência</b>Quando a máquina cobra o cupom + 10% e o PDV fecha sem o item da taxa, o cliente pagou a mais do que o PDV diz. A sobra fica em "em aberto" e na lista de pendências, com cupom, hora e terminal, para apurar na loja.</div>
       <div class="regra"><b>Reclassificação fica registrada</b>Quando a baixa no PDV saiu com a forma errada, o lançamento pode ser transferido aqui para a forma certa, com justificativa, autor e hora. Como o caixa fechado não aceita correção no PDV, esse ajuste é o registro oficial da conciliação e fica guardado com o painel.</div>
@@ -202,7 +203,8 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
 const D0 = /*DADOS*/;
 let D = JSON.parse(JSON.stringify(D0));
 const TOL = 1.004;  // até R$ 1,00 para mais ou para menos é conciliado
-const aberto = d => (d.pdv_sem_par ?? 0) + (d.maq_sem_par ?? 0) + (d.nao_caiu ?? 0) + (d.servico ?? 0);
+const aberto = d => Math.abs((d.pdv_sem_par ?? 0) - (d.maq_sem_par ?? 0)) + (d.nao_caiu ?? 0) + (d.servico ?? 0);   // sobras dos dois lados se compensam (comanda parcial)
+const parcial = d => Math.min(d.pdv_sem_par ?? 0, d.maq_sem_par ?? 0);
 const brl = n => (n ?? 0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const dBR = s => s ? s.slice(8,10)+"/"+s.slice(5,7) : "";
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -216,7 +218,7 @@ const sum = (arr, f) => arr.reduce((a,x) => a + Math.round((f(x) ?? 0)*100), 0) 
 function statusLoja(l){
   const m = M(l);
   if(!m.tem_maq) return {s:"aguarda", t:"aguarda relatório"};
-  const diverg = m.dias.some(d => aberto(d) > TOL) || m.pendencias.some(p => !p.ajuste && !p.comanda && p.valor > TOL && /SEM PAR|FORMA|NÃO CAIU|BANCO SEM|SERVIÇO/.test(p.status));
+  const diverg = m.dias.some(d => aberto(d) > TOL) || m.pendencias.some(p => !p.ajuste && !p.comanda && p.valor > TOL && /FORMA|NÃO CAIU|BANCO SEM|SERVIÇO/.test(p.status));
   if(diverg) return {s:"erro", t:"divergência"};
   if(tab !== "pix") return {s:"ok", t:"PDV = máquina"};
   if(!m.tem_banco) return {s:"pendente", t:"sem extrato"};
@@ -246,8 +248,9 @@ function kpis(){
   const pdvConc = sum(conc, l => sum(M(l).dias, d => d.pdv));
   const maq = sum(conc, l => sum(M(l).dias, d => d.maq));
   const st = todas.map(statusLoja);
-  const semPar = sum(conc, l => sum(M(l).dias, d => (d.pdv_sem_par ?? 0) + (d.maq_sem_par ?? 0) + (d.nao_caiu ?? 0) + (d.servico ?? 0)));
+  const semPar = sum(conc, l => sum(M(l).dias, d => aberto(d)));
   const servicoTot = sum(conc, l => sum(M(l).dias, d => d.servico));
+  const parcialTot = sum(conc, l => sum(M(l).dias, d => parcial(d)));
   const k = [
     ["Lojas fechadas", `${st.filter(x=>x.s==="ok").length} de ${todas.length}`, `${st.filter(x=>x.s==="aguarda").length} aguardam relatório da maquininha`, st.filter(x=>x.s==="ok").length===todas.length?"ok":""],
     [`${TABS[tab]} no PDV`, brl(pdvTot), `${brl(pdvConc)} nas lojas já cruzadas`, ""],
@@ -264,7 +267,7 @@ function kpis(){
     k.push(["Taxa MDR", brl(mdr), maq>0?`${(mdr/maq*100).toFixed(2).replace(".",",")}% do bruto`:"", ""]);
     k.push(["Líquido a receber", brl(liq), "bruto − MDR · banco na etapa 2", ""]);
   }
-  k.push(["Em aberto", brl(semPar), servicoTot>0.004 ? `inclui ${brl(servicoTot)} de serviço não baixado` : "sem par em alguma ponta", semPar>0?"erro":"ok"]);
+  k.push(["Em aberto", brl(semPar), `líquido do dia${servicoTot>0.004 ? ` · inclui ${brl(servicoTot)} de serviço não baixado` : ""}${parcialTot>0.004 ? ` · ${brl(parcialTot)} de comanda parcial compensada` : ""}`, semPar>TOL?"erro":"ok"]);
   document.getElementById("kpis").innerHTML = k.map(([l,v,s,t]) => `<div class="kpi" data-tone="${t}"><div class="lbl">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join("");
 }
 
@@ -289,8 +292,8 @@ const EXPL = {
   "PROVÁVEL FORMA ERRADA": "O PDV registrou PIX, mas a máquina tem um cartão de mesmo valor sem lançamento no PDV. O caixa provavelmente escolheu a forma de pagamento errada. Confirmar com a loja e corrigir no PDV.",
   "SERVIÇO NÃO BAIXADO": "A máquina cobrou o cupom mais 10% de serviço e o PDV foi fechado sem o item da taxa. O cliente pagou a mais do que o PDV registra, e essa sobra na forma de pagamento não tem lançamento. Apurar com a loja quem operou o caixa nesse horário.",
   "CONCILIADO POR TOTAL DA COMANDA": "Mesa dividida: a comanda fechou com o mesmo total nos dois lados, mas os clientes pagaram com outra divisão de formas. Linha a linha não bate; a comanda bate.",
-  "SEM PAR NA MAQUININHA": "Há lançamento no PDV sem venda correspondente na máquina. Verificar se a venda foi lançada com a forma errada, em outro dia, ou se a máquina está em outro EC.",
-  "MAQUININHA SEM PAR NO PDV": "A máquina registrou a venda e o PDV não tem lançamento de mesmo valor em até 36 horas. Venda sem cupom ou lançada com outra forma.",
+  "SEM PAR NA MAQUININHA": "Comanda parcial: baixa no PDV que não bate sozinha com nenhuma venda da máquina. Ela se compensa com as vendas da máquina sem baixa do mesmo dia; o dia só fica em aberto pelo líquido entre os dois lados.",
+  "MAQUININHA SEM PAR NO PDV": "Comanda parcial: venda na máquina que não bate sozinha com nenhuma baixa do PDV. Ela se compensa com as baixas sem par do mesmo dia; o dia só fica em aberto pelo líquido entre os dois lados.",
   "AGUARDA EXTRATO": "A venda é posterior à última data lida do extrato. Não é divergência: rodar de novo quando o painel de extratos capturar o dia.",
   "NÃO CAIU NO BANCO": "O extrato cobre a data prevista e o crédito não apareceu. Abrir caso com a Sicredi.",
   "SEM PAR NO BANCO": "PIX lançado no PDV sem crédito de mesmo valor no extrato. Sem o relatório da maquininha ainda não dá para dizer se foi forma errada no caixa ou PIX que não caiu. Resolve quando o Histórico de vendas da loja entrar.",
@@ -302,8 +305,9 @@ function detalhe(){
   if(!l){ el.innerHTML = `<h2>Detalhe da loja</h2><p class="vazio">Escolha uma loja ao lado.</p>`; return; }
   const m = M(l), st = statusLoja(l);
   const pdv = sum(m.dias,d=>d.pdv), maq = sum(m.dias,d=>d.maq), banco = sum(m.dias,d=>d.banco), ag = sum(m.dias,d=>d.aguarda);
-  const aberto = sum(m.dias, d => (d.pdv_sem_par ?? 0) + (d.maq_sem_par ?? 0) + (d.nao_caiu ?? 0) + (d.servico ?? 0));
-  const nCasos = m.pendencias.filter(p=>p.status!=="AGUARDA EXTRATO" && !p.ajuste && !p.comanda && p.valor > TOL).length;
+  const aberto = sum(m.dias, d => Math.abs((d.pdv_sem_par ?? 0) - (d.maq_sem_par ?? 0)) + (d.nao_caiu ?? 0) + (d.servico ?? 0));
+  const nCasos = m.pendencias.filter(p=>p.status!=="AGUARDA EXTRATO" && !p.ajuste && !p.comanda && p.valor > TOL && !/SEM PAR/.test(p.status)).length;
+  const nParcial = m.pendencias.filter(p=>/SEM PAR/.test(p.status) && !p.comanda).length;
   let html = `<div class="det-head"><h3>${esc(l.nome)} · ${TABS[tab]}</h3><span class="meta">${l.ec?`EC ${l.ec} · `:""}${dBR(D.de)} a ${dBR(D.ate)} · <span class="chip" data-s="${st.s}">${st.t}</span></span></div>`;
   if(!m.tem_maq){
     const semBanco = sum(m.dias, d => d.sem_banco);
@@ -316,7 +320,7 @@ function detalhe(){
       <div class="ponta"><div class="lbl">PDV</div><div class="val">${brl(pdv)}</div><div class="sub">${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)} lançamentos</div></div>
       <div class="ponta" data-tone="${Math.abs(pdv-maq)>0.004?"erro":"ok"}"><div class="lbl">Maquininha</div><div class="val">${brl(maq)}</div><div class="sub">Δ PDV − máquina ${brl(Math.round((pdv-maq)*100)/100)}</div></div>
       ${bancoPonta}
-      <div class="ponta" data-tone="${aberto>0.004?"erro":"ok"}"><div class="lbl">Em aberto</div><div class="val">${brl(aberto)}</div><div class="sub">${nCasos} caso${nCasos===1?"":"s"}</div></div>
+      <div class="ponta" data-tone="${aberto>TOL?"erro":"ok"}"><div class="lbl">Em aberto</div><div class="val">${brl(aberto)}</div><div class="sub">${nCasos} caso${nCasos===1?"":"s"}${nParcial?` · ${nParcial} de comanda parcial`:""}</div></div>
     </div>`;
   }
   html += tabela(m);
@@ -324,7 +328,7 @@ function detalhe(){
     const podeAjustar = !!dbRef && podeEscrever !== false;
     html += `<h2>Pendências · ${m.pendencias.length}</h2><ul class="pend" id="pend">` + m.pendencias.map((p,i) => {
       const key = Object.keys(EXPL).find(k => p.status.startsWith(k)) || "";
-      const s = p.ajuste ? "ajuste" : (p.comanda || p.valor <= TOL) ? "ok" : /AGUARDA/.test(p.status) ? "pendente" : "erro";
+      const s = p.ajuste ? "ajuste" : (p.comanda || p.valor <= TOL) ? "ok" : (/AGUARDA/.test(p.status) || /SEM PAR/.test(p.status)) ? "pendente" : "erro";
       let acoes = "";
       if(p.ajuste){
         const a = p.ajuste, dt = a.criado_em ? new Date(a.criado_em).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
@@ -338,7 +342,7 @@ function detalhe(){
         acoes = `<div class="ajuste-nota"><small>Para reclassificar, abra o painel conectado ao claude.ai.</small></div>`;
       }
       return `<li data-s="${s}" data-i="${i}"><span class="stripe"></span><div><div class="top"><b>${brl(p.valor)} · ${dBR(p.data)}</b><span>etapa ${p.etapa} · ${esc(p.ref)}</span></div>
-        <div class="msg">${esc(p.status)}${p.detalhe?`<small>${esc(p.detalhe)}</small>`:""}</div>${key && !p.ajuste?`<div class="expl">${EXPL[key]}</div>`:""}${acoes}</div></li>`;
+        <div class="msg">${esc(p.status === "SEM PAR NA MAQUININHA" ? "COMANDA PARCIAL · baixa no PDV sem par" : p.status === "MAQUININHA SEM PAR NO PDV" ? "COMANDA PARCIAL · venda na máquina sem par" : p.status)}${p.detalhe?`<small>${esc(p.detalhe)}</small>`:""}</div>${key && !p.ajuste?`<div class="expl">${EXPL[key]}</div>`:""}${acoes}</div></li>`;
     }).join("") + `</ul>`;
   }
   el.innerHTML = html;
@@ -365,7 +369,7 @@ function lancamentos(d){
   const pix = tab === "pix", temMaq = d.maq !== undefined;
   const L = d.lanc || [];
   if(!L.length) return `<div class="lanc-vazio">Nenhum lançamento de ${TABS[tab]} neste dia.</div>`;
-  const st = r => r.aj ? ["ajuste", r.s.toLowerCase()] : r.s.startsWith("CONCILIADO") ? ["ok", r.s==="CONCILIADO" ? "conciliado" : r.s.toLowerCase().replace("conciliado ","")] : r.s.startsWith("SERVIÇO") ? ["erro", "serviço não baixado"] : r.s==="PDV" ? ["pdv","só PDV"] : ["erro", r.s.toLowerCase().replace("provável forma errada:","forma errada ·")];
+  const st = r => r.aj ? ["ajuste", r.s.toLowerCase()] : /^(SEM PAR|MAQUININHA SEM PAR)/.test(r.s) ? ["pendente", "comanda parcial"] : r.s.startsWith("CONCILIADO") ? ["ok", r.s==="CONCILIADO" ? "conciliado" : r.s.toLowerCase().replace("conciliado ","")] : r.s.startsWith("SERVIÇO") ? ["erro", "serviço não baixado"] : r.s==="PDV" ? ["pdv","só PDV"] : ["erro", r.s.toLowerCase().replace("provável forma errada:","forma errada ·")];
   const head = temMaq
     ? `<th>Hora PDV</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th><th>Situação</th><th>Hora máq</th>${pix?"":"<th>Bandeira</th>"}<th>Terminal</th><th>Autorização</th>${pix?"<th>Crédito</th><th>Pagador</th>":"<th>MDR</th>"}`
     : `<th>Hora</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th>`;
