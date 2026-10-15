@@ -142,7 +142,7 @@ def casa_banco(v: pd.DataFrame, ex: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
     usados: set = set()
     out = []
     for _, a in v.iterrows():
-        c = ex[(ex["cent"] == a["cent"]) & (ex["Data"] >= a["Data"]) & (~ex.index.isin(usados))]
+        c = ex[(ex["Loja"] == a["Filial"]) & (ex["cent"] == a["cent"]) & (ex["Data"] >= a["Data"]) & (~ex.index.isin(usados))]
         if len(c):
             j = c["Data"].idxmin()
             usados.add(j)
