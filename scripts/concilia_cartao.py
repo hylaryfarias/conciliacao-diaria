@@ -61,7 +61,7 @@ def casa(maq: pd.DataFrame, pdv: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
             usados_p.add(j)
             a = sobra.loc[j]
             res.loc[i, ["Status", "Dia PDV", "Hora PDV", "Cupom", "Caixa", "Forma PDV", "Dif. hora (min)", "Serviço (R$)"]] = [
-                f"CONCILIADO (+{TAXA_SERVICO:.0%} serviço · PDV R$ {a['cent']/100:.2f})", a["Data"], a["dt_pdv"].strftime("%H:%M"),
+                f"SERVIÇO NÃO BAIXADO · máquina cobrou R$ {m['cent']/100:.2f} (+{TAXA_SERVICO:.0%}), PDV fechou com R$ {a['cent']/100:.2f}", a["Data"], a["dt_pdv"].strftime("%H:%M"),
                 a["Cupom"], a["Caixa"], a["Desc. pagam."], round((a["dt_pdv"] - pd.Timestamp(f"{m['Data']} {m['Hora maq']}")).total_seconds() / 60),
                 (m["cent"] - a["cent"]) / 100]
         sobra = sobra[~sobra.index.isin(usados_p)]
@@ -93,13 +93,14 @@ def roda(mod: str, bruto: pd.DataFrame, portais: list[str], lojas: dict) -> None
                            "Maquininha (qtd)": len(m), "Maquininha bruto (R$)": m["cent"].sum() / 100,
                            "MDR (R$)": round(m["Valor da taxa (MDR)"].sum(), 2), "Líquido (R$)": round(m["Valor líquido"].sum(), 2),
                            "Casado (R$)": r[r["Status"].str.startswith("CONCILIADO")]["cent"].sum() / 100,
-                           "Serviço 10% (R$)": round(float(r["Serviço (R$)"].sum()), 2) if "Serviço (R$)" in r.columns else 0.0,
-                           "Maquininha sem par (R$)": r[~r["Status"].str.startswith("CONCILIADO")]["cent"].sum() / 100,
+                           "Serviço não baixado (R$)": round(float(r["Serviço (R$)"].sum()), 2) if "Serviço (R$)" in r.columns else 0.0,
+                           "Maquininha sem par (R$)": r[~r["Status"].str.startswith("CONCILIADO") & ~r["Status"].str.startswith("SERVIÇO")]["cent"].sum() / 100,
                            "PDV sem par (R$)": sobra[sobra["Data"] == dia]["cent"].sum() / 100,
                            "Δ PDV − maquininha (R$)": (q["cent"].sum() - m["cent"].sum()) / 100})
         n_ok = int(res["Status"].str.startswith("CONCILIADO").sum()) if len(res) else 0
+        n_sv = int(res["Status"].str.startswith("SERVIÇO").sum()) if len(res) else 0
         print(f"{cfg['rotulo']:8} {filial} {d0:%d/%m}–{d1:%d/%m}: maquininha {len(maq)} R$ {maq['cent'].sum()/100:,.2f} | "
-              f"PDV {len(p)} R$ {p['cent'].sum()/100:,.2f} | casados {n_ok} | maq sem par {len(maq)-n_ok} | PDV sem par {len(sobra)}")
+              f"PDV {len(p)} R$ {p['cent'].sum()/100:,.2f} | casados {n_ok} | serviço não baixado {n_sv} | maq sem par {len(maq)-n_ok-n_sv} | PDV sem par {len(sobra)}")
     res = pd.concat(todas, ignore_index=True); resumo = pd.DataFrame(resumo); sobra = pd.concat(sobras, ignore_index=True)
     out = RAIZ / "saida" / f"concilia_{mod}_{resumo['Data'].min():%Y-%m-%d}_a_{resumo['Data'].max():%Y-%m-%d}.xlsx"
     cols = ["Filial", "EC", "Data", "Hora maq", "Bandeira", "Canal", "Valor Bruto", "MDR", "Líquido", "Terminal", "Autorização",
@@ -108,7 +109,8 @@ def roda(mod: str, bruto: pd.DataFrame, portais: list[str], lojas: dict) -> None
     with pd.ExcelWriter(out) as xw:
         resumo.to_excel(xw, sheet_name="Resumo loja x dia", index=False)
         res[[c for c in cols if c in res.columns]].to_excel(xw, sheet_name="Maquininha x PDV", index=False)
-        res[~res["Status"].str.startswith("CONCILIADO")][[c for c in cols if c in res.columns]].to_excel(xw, sheet_name="Maquininha sem par", index=False)
+        res[~res["Status"].str.startswith("CONCILIADO") & ~res["Status"].str.startswith("SERVIÇO")][[c for c in cols if c in res.columns]].to_excel(xw, sheet_name="Maquininha sem par", index=False)
+        res[res["Status"].str.startswith("SERVIÇO")][[c for c in cols if c in res.columns]].to_excel(xw, sheet_name="Serviço não baixado", index=False)
         sobra[[c for c in cols_p if c in sobra.columns]].to_excel(xw, sheet_name="PDV sem par", index=False)
     print(f"gravado em {out}")
 

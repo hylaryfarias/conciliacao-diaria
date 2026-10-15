@@ -184,6 +184,7 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
       <div class="regra"><b>Data do PDV é dia de movimento</b>Cupom antes das 06:00 pertence ao dia seguinte do calendário. Confirmado em 299 de 301 caixas-dia.</div>
       <div class="regra"><b>Hora do PDV é a do fechamento</b>Pode vir até 80 minutos depois do pagamento. Serve só para desempatar valores iguais.</div>
       <div class="regra"><b>POS não é integrado</b>Terminais APT… dependem de digitação: a venda pode entrar no dia seguinte ou com a forma errada. A TEF (TFI…) bate hora a hora.</div>
+      <div class="regra"><b>Serviço não baixado é divergência</b>Quando a máquina cobra o cupom + 10% e o PDV fecha sem o item da taxa, o cliente pagou a mais do que o PDV diz. A sobra fica em "em aberto" e na lista de pendências, com cupom, hora e terminal, para apurar na loja.</div>
       <div class="regra"><b>Reclassificação fica registrada</b>Quando a baixa no PDV saiu com a forma errada, o lançamento pode ser transferido aqui para a forma certa, com justificativa, autor e hora. Como o caixa fechado não aceita correção no PDV, esse ajuste é o registro oficial da conciliação e fica guardado com o painel.</div>
       <div class="regra"><b>Aguardar não é divergir</b>Venda depois da última data do extrato fica como "aguarda extrato", fora do Δ e fora da contagem de casos.</div>
     </div>
@@ -211,7 +212,7 @@ const sum = (arr, f) => arr.reduce((a,x) => a + Math.round((f(x) ?? 0)*100), 0) 
 function statusLoja(l){
   const m = M(l);
   if(!m.tem_maq) return {s:"aguarda", t:"aguarda relatório"};
-  const diverg = m.dias.some(d => Math.abs(d.delta ?? 0) > 0.004 || (d.nao_caiu ?? 0) > 0.004) || m.pendencias.some(p => !p.ajuste && /SEM PAR|FORMA|NÃO CAIU|BANCO SEM/.test(p.status));
+  const diverg = m.dias.some(d => Math.abs(d.delta ?? 0) > 0.004 || (d.nao_caiu ?? 0) > 0.004 || (d.servico ?? 0) > 0.004) || m.pendencias.some(p => !p.ajuste && /SEM PAR|FORMA|NÃO CAIU|BANCO SEM|SERVIÇO/.test(p.status));
   if(diverg) return {s:"erro", t:"divergência"};
   if(tab !== "pix") return {s:"ok", t:"PDV = máquina"};
   if(!m.tem_banco) return {s:"pendente", t:"sem extrato"};
@@ -241,7 +242,8 @@ function kpis(){
   const pdvConc = sum(conc, l => sum(M(l).dias, d => d.pdv));
   const maq = sum(conc, l => sum(M(l).dias, d => d.maq));
   const st = todas.map(statusLoja);
-  const semPar = sum(conc, l => sum(M(l).dias, d => (d.pdv_sem_par ?? 0) + (d.maq_sem_par ?? 0) + (d.nao_caiu ?? 0)));
+  const semPar = sum(conc, l => sum(M(l).dias, d => (d.pdv_sem_par ?? 0) + (d.maq_sem_par ?? 0) + (d.nao_caiu ?? 0) + (d.servico ?? 0)));
+  const servicoTot = sum(conc, l => sum(M(l).dias, d => d.servico));
   const k = [
     ["Lojas fechadas", `${st.filter(x=>x.s==="ok").length} de ${todas.length}`, `${st.filter(x=>x.s==="aguarda").length} aguardam relatório da maquininha`, st.filter(x=>x.s==="ok").length===todas.length?"ok":""],
     [`${TABS[tab]} no PDV`, brl(pdvTot), `${brl(pdvConc)} nas lojas já cruzadas`, ""],
@@ -258,7 +260,7 @@ function kpis(){
     k.push(["Taxa MDR", brl(mdr), maq>0?`${(mdr/maq*100).toFixed(2).replace(".",",")}% do bruto`:"", ""]);
     k.push(["Líquido a receber", brl(liq), "bruto − MDR · banco na etapa 2", ""]);
   }
-  k.push(["Em aberto", brl(semPar), "sem par em alguma ponta", semPar>0?"erro":"ok"]);
+  k.push(["Em aberto", brl(semPar), servicoTot>0.004 ? `inclui ${brl(servicoTot)} de serviço não baixado` : "sem par em alguma ponta", semPar>0?"erro":"ok"]);
   document.getElementById("kpis").innerHTML = k.map(([l,v,s,t]) => `<div class="kpi" data-tone="${t}"><div class="lbl">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join("");
 }
 
@@ -274,13 +276,14 @@ function lojas(){
 
 function tone(d){
   if(d.maq===undefined) return "aguarda";
-  if(Math.abs(d.delta ?? 0)>0.004 || (d.nao_caiu ?? 0)>0.004) return "erro";
+  if(Math.abs(d.delta ?? 0)>0.004 || (d.nao_caiu ?? 0)>0.004 || (d.servico ?? 0)>0.004) return "erro";
   if(tab !== "pix") return "ok";
   if(d.banco===undefined || (d.aguarda ?? 0)>0.004) return "pendente";
   return "ok";
 }
 const EXPL = {
   "PROVÁVEL FORMA ERRADA": "O PDV registrou PIX, mas a máquina tem um cartão de mesmo valor sem lançamento no PDV. O caixa provavelmente escolheu a forma de pagamento errada. Confirmar com a loja e corrigir no PDV.",
+  "SERVIÇO NÃO BAIXADO": "A máquina cobrou o cupom mais 10% de serviço e o PDV foi fechado sem o item da taxa. O cliente pagou a mais do que o PDV registra, e essa sobra na forma de pagamento não tem lançamento. Apurar com a loja quem operou o caixa nesse horário.",
   "SEM PAR NA MAQUININHA": "Há lançamento no PDV sem venda correspondente na máquina. Verificar se a venda foi lançada com a forma errada, em outro dia, ou se a máquina está em outro EC.",
   "MAQUININHA SEM PAR NO PDV": "A máquina registrou a venda e o PDV não tem lançamento de mesmo valor em até 36 horas. Venda sem cupom ou lançada com outra forma.",
   "AGUARDA EXTRATO": "A venda é posterior à última data lida do extrato. Não é divergência: rodar de novo quando o painel de extratos capturar o dia.",
@@ -294,7 +297,7 @@ function detalhe(){
   if(!l){ el.innerHTML = `<h2>Detalhe da loja</h2><p class="vazio">Escolha uma loja ao lado.</p>`; return; }
   const m = M(l), st = statusLoja(l);
   const pdv = sum(m.dias,d=>d.pdv), maq = sum(m.dias,d=>d.maq), banco = sum(m.dias,d=>d.banco), ag = sum(m.dias,d=>d.aguarda);
-  const aberto = sum(m.dias, d => (d.pdv_sem_par ?? 0) + (d.maq_sem_par ?? 0) + (d.nao_caiu ?? 0));
+  const aberto = sum(m.dias, d => (d.pdv_sem_par ?? 0) + (d.maq_sem_par ?? 0) + (d.nao_caiu ?? 0) + (d.servico ?? 0));
   const nCasos = m.pendencias.filter(p=>p.status!=="AGUARDA EXTRATO" && !p.ajuste).length;
   let html = `<div class="det-head"><h3>${esc(l.nome)} · ${TABS[tab]}</h3><span class="meta">${l.ec?`EC ${l.ec} · `:""}${dBR(D.de)} a ${dBR(D.ate)} · <span class="chip" data-s="${st.s}">${st.t}</span></span></div>`;
   if(!m.tem_maq){
@@ -322,6 +325,8 @@ function detalhe(){
         const a = p.ajuste, dt = a.criado_em ? new Date(a.criado_em).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
         acoes = `<div class="ajuste-nota"><b>Justificativa:</b> ${esc(a.justificativa)}<br><small>registrado em ${dt}<span data-por="${esc(a.por||"")}"></span></small></div>` +
                 (podeAjustar ? `<div class="acoes"><button type="button" class="btn" data-act="desfazer" data-id="${esc(idAjuste(a))}">Desfazer</button></div>` : "");
+      } else if(p.servico !== undefined){
+        acoes = `<div class="ajuste-nota"><b>Sobra na máquina:</b> ${brl(p.servico)}</div>`;
       } else if(p.cupom && podeAjustar){
         acoes = `<div class="acoes"><button type="button" class="btn primario" data-act="abrir">Transferir para ${p.para ? NOMES[p.para] : "outra forma"}…</button></div>` + formAjuste(p, l);
       } else if(p.cupom && !dbRef){
@@ -355,7 +360,7 @@ function lancamentos(d){
   const pix = tab === "pix", temMaq = d.maq !== undefined;
   const L = d.lanc || [];
   if(!L.length) return `<div class="lanc-vazio">Nenhum lançamento de ${TABS[tab]} neste dia.</div>`;
-  const st = r => r.aj ? ["ajuste", r.s.toLowerCase()] : r.s.startsWith("CONCILIADO") ? ["ok", r.s==="CONCILIADO" ? "conciliado" : r.s.toLowerCase().replace("conciliado ","")] : r.s==="PDV" ? ["pdv","só PDV"] : ["erro", r.s.toLowerCase().replace("provável forma errada:","forma errada ·")];
+  const st = r => r.aj ? ["ajuste", r.s.toLowerCase()] : r.s.startsWith("CONCILIADO") ? ["ok", r.s==="CONCILIADO" ? "conciliado" : r.s.toLowerCase().replace("conciliado ","")] : r.s.startsWith("SERVIÇO") ? ["erro", "serviço não baixado"] : r.s==="PDV" ? ["pdv","só PDV"] : ["erro", r.s.toLowerCase().replace("provável forma errada:","forma errada ·")];
   const head = temMaq
     ? `<th>Hora PDV</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th><th>Situação</th><th>Hora máq</th>${pix?"":"<th>Bandeira</th>"}<th>Terminal</th><th>Autorização</th>${pix?"<th>Crédito</th><th>Pagador</th>":"<th>MDR</th>"}`
     : `<th>Hora</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th>`;

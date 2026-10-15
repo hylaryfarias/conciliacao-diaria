@@ -114,7 +114,7 @@ def casa_servico(res: pd.DataFrame, sobra: pd.DataFrame) -> tuple[pd.DataFrame, 
         usados.add(j)
         m = sobra.loc[j]
         res.loc[i, ["Status", "Hora maq", "Dia maq", "Autorização", "Terminal", "Comprovante", "Canal", "Dif. hora (min)", "Serviço (R$)"]] = [
-            f"CONCILIADO (+{TAXA_SERVICO:.0%} serviço · máquina R$ {m['cent']/100:.2f})", m["dt"].strftime("%H:%M:%S"), m["Data"],
+            f"SERVIÇO NÃO BAIXADO · máquina cobrou R$ {m['cent']/100:.2f} (+{TAXA_SERVICO:.0%}), PDV fechou sem a taxa", m["dt"].strftime("%H:%M:%S"), m["Data"],
             str(m["Cód. de autorização"]), str(m["Número do terminal"]), str(m["Comprovante de venda"]), str(m["Canal"]),
             round((a["dt_pdv"] - m["dt"]).total_seconds() / 60), (m["cent"] - a["cent"]) / 100]
     return res, sobra[~sobra.index.isin(usados)]
@@ -238,7 +238,7 @@ def main() -> None:
         for dia, g in res.groupby("Data"):
             conc = g[g["Status"].str.startswith("CONCILIADO")]["cent"].sum()
             servico = g["Serviço (R$)"].sum() if "Serviço (R$)" in g.columns else 0.0
-            sem_par = g[~g["Status"].str.startswith("CONCILIADO")]["cent"].sum()
+            sem_par = g[~g["Status"].str.startswith("CONCILIADO") & ~g["Status"].str.startswith("SERVIÇO")]["cent"].sum()
             maq_dia = ok[ok["Data"] == dia]["cent"].sum()
             sobra_dia = sobra[sobra["Data"] == dia]["cent"].sum()
             resumo.append({
@@ -246,7 +246,7 @@ def main() -> None:
                 "PIX PDV (qtd)": len(g), "PIX PDV (R$)": g["cent"].sum() / 100,
                 "PIX maquininha (qtd)": int((ok["Data"] == dia).sum()), "PIX maquininha (R$)": maq_dia / 100,
                 "Conciliado (R$)": conc / 100,
-                "Serviço 10% (R$)": round(float(servico), 2),
+                "Serviço não baixado (R$)": round(float(servico), 2),
                 "PDV sem par (R$)": sem_par / 100,
                 "Maquininha sem par (R$)": sobra_dia / 100,
                 "Δ PDV − maquininha (R$)": (g["cent"].sum() - maq_dia) / 100,
@@ -260,7 +260,7 @@ def main() -> None:
                            "Δ PDV − maquininha (R$)": -maq_dia / 100})
         print(f"{filial} (EC {ec}) {d0:%d/%m}–{d1:%d/%m}: PDV {len(p)} PIX R$ {p['cent'].sum()/100:,.2f} | "
               f"maquininha {len(ok)} PIX R$ {ok['cent'].sum()/100:,.2f} | "
-              f"sem par PDV {int((~res['Status'].str.startswith('CONCILIADO')).sum())} | serviço {int(res['Status'].str.contains('serviço').sum())} | grupos {int(res['Status'].str.contains('grupo').sum())} | sem par maq {len(sobra)} | recusados {len(rec)}")
+              f"sem par PDV {int((~res['Status'].str.startswith('CONCILIADO') & ~res['Status'].str.startswith('SERVIÇO')).sum())} | serviço não baixado {int(res['Status'].str.startswith('SERVIÇO').sum())} | grupos {int(res['Status'].str.contains('grupo').sum())} | sem par maq {len(sobra)} | recusados {len(rec)}")
 
     res = pd.concat(todas, ignore_index=True)
     resumo = pd.DataFrame(resumo).sort_values(["Filial", "Data"])
@@ -278,6 +278,8 @@ def main() -> None:
         res[[c for c in col_pdv if c in res.columns]].to_excel(xw, sheet_name="PDV x maquininha", index=False)
         res[~res["Status"].str.startswith("CONCILIADO")][[c for c in col_pdv if c in res.columns]].to_excel(
             xw, sheet_name="PDV sem par", index=False)
+        res[res["Status"].str.startswith("SERVIÇO")][[c for c in col_pdv if c in res.columns]].to_excel(
+            xw, sheet_name="Serviço não baixado", index=False)
         sobra[[c for c in col_maq if c in sobra.columns]].to_excel(xw, sheet_name="Maquininha sem par", index=False)
         rec[[c for c in col_maq if c in rec.columns]].to_excel(xw, sheet_name="Recusados-cancelados", index=False)
     print(f"\ngravado em {out}")

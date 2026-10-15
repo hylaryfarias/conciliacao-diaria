@@ -69,6 +69,7 @@ def main() -> None:
     e1 = le("concilia_pix_2*.xlsx", "Resumo loja x dia"); e1p = le("concilia_pix_2*.xlsx", "PDV sem par"); e1m = le("concilia_pix_2*.xlsx", "Maquininha sem par")
     e2 = le("concilia_pix_banco_*.xlsx", "Resumo loja x dia", "Venda"); e2p = le("concilia_pix_banco_*.xlsx", "Pendências"); e2s = le("concilia_pix_banco_*.xlsx", "Banco sem venda")
     cart = {m: (le(f"concilia_{m}_2*.xlsx", "Resumo loja x dia"), le(f"concilia_{m}_2*.xlsx", "Maquininha sem par"), le(f"concilia_{m}_2*.xlsx", "PDV sem par")) for m in ("credito", "debito")}
+    csv_ = {m: le(f"concilia_{m}_2*.xlsx", "Serviço não baixado") for m in ("credito", "debito")}
     l1 = le("concilia_pix_2*.xlsx", "PDV x maquininha")              # linhas PIX, lado PDV
     lb = le("concilia_pix_banco_*.xlsx", "Venda x banco")             # linhas PIX, lado banco
     lc = {m: le(f"concilia_{m}_2*.xlsx", "Maquininha x PDV") for m in ("credito", "debito")}
@@ -76,6 +77,7 @@ def main() -> None:
     no_per = lambda df: df[(df["Data"] >= de) & (df["Data"] <= ate)] if len(df) else df
     e1p, e1m, e2p, e2s = no_per(e1p), no_per(e1m), no_per(e2p), no_per(e2s)
     cart = {m: (r_, no_per(sm_), no_per(sp_)) for m, (r_, sm_, sp_) in cart.items()}
+    csv_ = {m: no_per(x) for m, x in csv_.items()}
     banco_por_aut = {}
     if len(lb):
         for _, q in lb[lb["Status"] == "CONCILIADO"].iterrows():
@@ -124,7 +126,7 @@ def main() -> None:
         rows = []
         for _, x in L[(L["Filial"] == filial) & (pd.to_datetime(L["Data"]).dt.date == d)].sort_values("Hora maq").iterrows():
             r = {"s": str(x["Status"]), "v": r2(x["Valor Bruto"]), "hm": hh(x["Hora maq"]), "b": str(x["Bandeira"]), "t": str(x["Terminal"]), "a": str(x["Autorização"]), "mdr": r2(x["MDR"])}
-            if str(x["Status"]).startswith("CONCILIADO"):
+            if str(x["Status"]).startswith(("CONCILIADO", "SERVIÇO")):
                 r.update(h=hh(x["Hora PDV"]), c=str(x["Cupom"]), cx=str(x["Caixa"]), f=str(x["Forma PDV"]))
                 if pd.notna(x["Dia PDV"]) and pd.to_datetime(x["Dia PDV"]).date() != d:
                     r["dp"] = pd.to_datetime(x["Dia PDV"]).date().isoformat()
@@ -146,7 +148,7 @@ def main() -> None:
             row["pdv_qtd"] = int(x["qtd"]) if x is not None else 0; row["pdv"] = r2(x["cent"] / 100) if x is not None else 0.0
             y = sel(e1, filial, d)
             if y is not None:
-                row.update(maq_qtd=int(y["PIX maquininha (qtd)"]), maq=r2(y["PIX maquininha (R$)"]), conc=r2(y["Conciliado (R$)"]), servico=r2(y.get("Serviço 10% (R$)", 0)),
+                row.update(maq_qtd=int(y["PIX maquininha (qtd)"]), maq=r2(y["PIX maquininha (R$)"]), conc=r2(y["Conciliado (R$)"]), servico=r2(y.get("Serviço não baixado (R$)", 0)),
                            pdv_sem_par=r2(y["PDV sem par (R$)"]), maq_sem_par=r2(y["Maquininha sem par (R$)"]), delta=r2(y["Δ PDV − maquininha (R$)"]))
             z = sel(e2, filial, d, "Venda")
             if z is not None:
@@ -160,6 +162,8 @@ def main() -> None:
                 item = {"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Vl. pagamento"]), "ref": f"cupom {q['Cupom']} · {q['Hora']} · {q['Caixa']}",
                         "status": str(q["Status"]), "detalhe": f"terminal {q['Terminal']} · aut. {q['Autorização']} · comprovante {q['Comprovante']}" if pd.notna(q.get("Terminal")) else "",
                         "cupom": str(q["Cupom"]), "caixa": str(q["Caixa"]), "hora": str(q["Hora"])[:5], "forma": str(q["Desc. pagam."])}
+                if str(q["Status"]).startswith("SERVIÇO"):
+                    item["servico"] = r2(q.get("Serviço (R$)", 0))
                 mm = re.search(r"FORMA ERRADA: (Crédito|Débito) .* em (\d\d)/(\d\d)", str(q["Status"]))
                 if mm:
                     item.update(aut=str(q["Autorização"]), para="credito" if mm.group(1) == "Crédito" else "debito",
@@ -186,7 +190,7 @@ def main() -> None:
                 y = sel(res, filial, d)
                 if y is not None:
                     row.update(maq_qtd=int(y["Maquininha (qtd)"]), maq=r2(y["Maquininha bruto (R$)"]), mdr=r2(y["MDR (R$)"]), liquido=r2(y["Líquido (R$)"]),
-                               conc=r2(y["Casado (R$)"]), pdv_sem_par=r2(y["PDV sem par (R$)"]), maq_sem_par=r2(y["Maquininha sem par (R$)"]), delta=r2(y["Δ PDV − maquininha (R$)"]))
+                               conc=r2(y["Casado (R$)"]), servico=r2(y.get("Serviço não baixado (R$)", 0)), pdv_sem_par=r2(y["PDV sem par (R$)"]), maq_sem_par=r2(y["Maquininha sem par (R$)"]), delta=r2(y["Δ PDV − maquininha (R$)"]))
                 row["lanc"] = lanc_cartao(filial, m, d)
                 dias.append(row)
             if len(sem_m):
@@ -195,6 +199,11 @@ def main() -> None:
             if len(sem_p):
                 for _, q in sem_p[sem_p["Filial"] == filial].iterrows():
                     pend.append({"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Vl. pagamento"]), "ref": f"cupom {q['Cupom']} · {q['Hora']} · {q['Caixa']}", "status": "SEM PAR NA MAQUININHA", "detalhe": ""})
+            sv = csv_[m]
+            if len(sv):
+                for _, q in sv[sv["Filial"] == filial].iterrows():
+                    pend.append({"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Valor Bruto"]), "ref": f"cupom {q['Cupom']} · {q['Hora PDV']} · {q['Caixa']}", "status": str(q["Status"]),
+                                 "detalhe": f"{q['Bandeira']} · terminal {q['Terminal']} · aut. {q['Autorização']} · máquina {q['Hora maq']}", "servico": r2(q["Serviço (R$)"])})
             mods[m] = {"tem_maq": any("maq" in r for r in dias), "tem_banco": False, "dias": dias, "pendencias": sorted(pend, key=lambda q: q["data"])}
 
         lojas.append({"nome": filial, "marca": marca(filial), "ec": ec_de.get(filial), "mod": mods})
