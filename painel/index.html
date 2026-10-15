@@ -21,18 +21,8 @@
   --display:"Instrument Sans",system-ui,sans-serif;
   --radius:10px;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#0e0c0a; --bg-soft:#1c1814; --card:#17130f; --ink:#f0e9dd; --ink-soft:#c8bfb2; --ink-muted:#8a8178;
-  --rule:rgba(240,233,221,.13); --rule-strong:rgba(240,233,221,.28); --holding:#241a40; --gestao:#7d95d8;
-  --ok:#8fc27f; --ok-soft:rgba(143,194,127,.14); --aviso:#e6b93a; --aviso-soft:rgba(230,185,58,.16);
-  --erro:#e8666b; --erro-soft:rgba(232,102,107,.14); --pendente:#f08a4e; --pendente-soft:rgba(240,138,78,.16);
-  --isaias:#f0e9dd; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#0e0c0a; --bg-soft:#1c1814; --card:#17130f; --ink:#f0e9dd; --ink-soft:#c8bfb2; --ink-muted:#8a8178;
-  --rule:rgba(240,233,221,.13); --rule-strong:rgba(240,233,221,.28); --holding:#241a40; --gestao:#7d95d8;
-  --ok:#8fc27f; --ok-soft:rgba(143,194,127,.14); --aviso:#e6b93a; --aviso-soft:rgba(230,185,58,.16);
-  --erro:#e8666b; --erro-soft:rgba(232,102,107,.14); --pendente:#f08a4e; --pendente-soft:rgba(240,138,78,.16);
-  --isaias:#f0e9dd; color-scheme:dark}
+/* Fundo claro fixo, pedido da Hylary: o painel não segue o tema escuro do visualizador. */
+:root{color-scheme:light}
 
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45;margin:0;
