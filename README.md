@@ -19,3 +19,23 @@ por cupom. Formas de pagamento do PDV tratadas como PIX de maquininha:
 - `entrada/` arquivos recebidos (PDV, portal Sicredi, extrato)
 - `scripts/` leitores e motor de cruzamento
 - `saida/` resultados de cada rodada
+
+## Etapa 2 · PIX: maquininha × extrato
+
+```bash
+python3 scripts/concilia_pix_banco.py entrada/<extrato>.xlsx entrada/<pdv_cupons>.xlsx entrada/<portal_loja>.xlsx ...
+```
+
+Regra medida (ROBS, 01–13/10/2026, 54 de 54): PIX cai **D0 em dia útil**; sábado, domingo e
+feriado caem no **próximo dia útil**. Sem taxa. Venda após a última data do extrato fica
+como **"aguarda extrato"**, nunca como divergência.
+
+## Regras aprendidas no dado
+
+- **Data do PDV é dia de movimento.** Cupom antes das 06:00 pertence ao dia seguinte do calendário
+  (299 de 301 caixas-dia). A maquininha e o banco usam data calendário.
+- **Hora do PDV é a do fechamento do cupom**, até ~80 min depois do pagamento na máquina. Só desempata.
+- **Máquinas POS (terminais APT…) não são integradas**: o caixa digita a venda, às vezes no dia
+  seguinte e às vezes com a forma errada. A TEF (terminal TFI…) bate hora a hora.
+- **PIX só existe pela máquina** (QR code/TEF). PIX do PDV sem par na máquina → procurar cartão
+  órfão de mesmo valor em D ou D−1 (o motor já faz e marca "PROVÁVEL FORMA ERRADA").
