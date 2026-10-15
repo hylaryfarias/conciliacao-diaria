@@ -84,14 +84,16 @@ def main() -> None:
         if sorted(g["Forma"]) == sorted(mm["Forma"]) and len(g) == len(mm):
             continue
         usados_m.update(achado)
-        resolvidos.append(dict(Filial=fil, Cupom=cup, Data=g["Data"].min(), Hora=dtc.strftime("%H:%M"), Caixa=g["Caixa"].iloc[0], Total=alvo / 100,
+        tipo = "FORMA ERRADA" if (len(g) == 1 and len(mm) == 1) else "COMANDA"
+        resolvidos.append(dict(Tipo=tipo, Filial=fil, Cupom=cup, Data=g["Data"].min(), Hora=dtc.strftime("%H:%M"), Caixa=g["Caixa"].iloc[0], Total=alvo / 100,
                                FormasPDV=" + ".join(f"{r.Forma} {r.cent/100:.2f}" for r in g.itertuples()),
                                FormasMaq=" + ".join(f"{r.Forma} {r.cent/100:.2f} ({r.dt:%H:%M})" for r in mm.itertuples()),
                                Autorizacoes=" + ".join(mm["Aut"]), n_pdv=len(g), n_maq=len(mm)))
         for r in g.itertuples():
-            linhas.append(dict(Lado="PDV", Filial=fil, Cupom=cup, Forma=r.Forma, Data=r.Data, Hora=r.dt.strftime("%H:%M"), Valor=r.cent / 100, Ref=r.Cupom))
+            linhas.append(dict(Tipo=tipo, Lado="PDV", Filial=fil, Cupom=cup, Forma=r.Forma, Data=r.Data, Hora=r.dt.strftime("%H:%M"), Valor=r.cent / 100, Ref=r.Cupom, Caixa=r.Caixa, ForPDV=r.ForPDV,
+                               FormaMaq=mm["Forma"].iloc[0], DataMaq=mm["dt"].iloc[0].date(), HoraMaq=mm["dt"].iloc[0].strftime("%H:%M"), AutMaq=mm["Aut"].iloc[0], TerminalMaq=mm["Terminal"].iloc[0], BandeiraMaq=mm["Bandeira"].iloc[0]))
         for r in mm.itertuples():
-            linhas.append(dict(Lado="Máquina", Filial=fil, Cupom=cup, Forma=r.Forma, Data=r.dt.date(), Hora=r.dt.strftime("%H:%M:%S"), Valor=r.cent / 100, Ref=r.Aut))
+            linhas.append(dict(Tipo=tipo, Lado="Máquina", Filial=fil, Cupom=cup, Forma=r.Forma, Data=r.dt.date(), Hora=r.dt.strftime("%H:%M:%S"), Valor=r.cent / 100, Ref=r.Aut))
     R = pd.DataFrame(resolvidos); L = pd.DataFrame(linhas)
     out = S / "concilia_cupom.xlsx"
     with pd.ExcelWriter(out) as xw:
@@ -99,7 +101,8 @@ def main() -> None:
         L.to_excel(xw, sheet_name="Linhas", index=False)
     print(f"cupons resolvidos por total: {len(R)} | linhas PDV: {int((L['Lado']=='PDV').sum()) if len(L) else 0} | linhas máquina: {int((L['Lado']=='Máquina').sum()) if len(L) else 0} | gravado em {out}")
     if len(R):
-        print(R.groupby("Filial").size().to_string())
+        print(R.Tipo.value_counts().to_dict())
+        print(R.groupby(["Filial", "Tipo"]).size().unstack(fill_value=0).to_string())
         print(R[["Filial", "Cupom", "Data", "Hora", "Total", "FormasPDV", "FormasMaq"]].head(12).to_string(index=False))
 
 

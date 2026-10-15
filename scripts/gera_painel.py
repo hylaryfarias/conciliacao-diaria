@@ -91,8 +91,13 @@ def main() -> None:
         cupL = cupL[(cupL["Data"] >= de) & (cupL["Data"] <= ate)]
         for _, q in cupR.iterrows():
             expl[(q["Filial"], str(q["Cupom"]))] = f"comanda {q['Cupom']} fechou {q['Total']:.2f}: PDV {q['FormasPDV']} · máquina {q['FormasMaq']}"
+        ferr = {}   # (filial, mod, data, cupom) -> dados da venda na máquina (forma errada 1:1)
         for _, q in cupL.iterrows():
             k = (q["Filial"], MODK[q["Forma"]], q["Data"])
+            if q["Tipo"] == "FORMA ERRADA":
+                if q["Lado"] == "PDV":
+                    ferr[(q["Filial"], MODK[q["Forma"]], q["Data"], str(q["Ref"]).replace(".0", ""))] = q
+                continue
             if q["Lado"] == "PDV":
                 resolv_pdv.setdefault(k, {})[str(q["Ref"]).replace(".0", "")] = (r2(q["Valor"]), str(q["Cupom"]))
             else:
@@ -100,6 +105,17 @@ def main() -> None:
 
     def aplica_comanda(filial, m, d, row, pend):
         """Marca linhas e pendências resolvidas pelo total da comanda; ajusta as somas do dia."""
+        # 1:1 de formas diferentes = baixa errada: vira "provável forma errada" com botão de transferir
+        for p in pend:
+            q = ferr.get((filial, m, d, str(p.get("cupom", ""))))
+            if q is not None and p["status"].startswith("SEM PAR") and p["data"] == d.isoformat():
+                dm = pd.to_datetime(q["DataMaq"]).date()
+                p["status"] = f"PROVÁVEL FORMA ERRADA: {q['FormaMaq']}{'' if q['BandeiraMaq'] == q['FormaMaq'] else ' ' + str(q['BandeiraMaq'])} na máquina em {dm:%d/%m} {q['HoraMaq']}"
+                p["detalhe"] = f"terminal {q['TerminalMaq']} · aut. {q['AutMaq']}"
+                p["aut"] = str(q["AutMaq"]); p["para"] = MODK[q["FormaMaq"]]; p["data_maq"] = dm.isoformat()
+                for r in row.get("lanc", []):
+                    if r.get("c") == p["cupom"] and str(r.get("s", "")).startswith("SEM PAR"):
+                        r["s"] = p["status"]; r["hm"] = q["HoraMaq"]; r["t"] = str(q["TerminalMaq"]); r["a"] = str(q["AutMaq"])
         rp = resolv_pdv.get((filial, m, d), {}); rm = resolv_maq.get((filial, m, d), {})
         if not rp and not rm:
             return pend
