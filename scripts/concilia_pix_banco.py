@@ -23,7 +23,7 @@ from python_calamine import CalamineWorkbook
 sys.path.insert(0, str(Path(__file__).parent))
 from concilia_pix import HORA_VIRADA, carrega_lojas  # noqa: E402
 from pdv_pix import ler_pdv, pix_do_pdv  # noqa: E402
-from portal_sicredi import ler_portal, pix_do_portal  # noqa: E402
+from portal_sicredi import ler_portal, ler_tef, pix_do_portal  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
 
@@ -53,7 +53,7 @@ def ler_extrato(caminho: str, filiais_pdv=()) -> pd.DataFrame:
     return ex.reset_index(drop=True)
 
 
-def vendas_pix(pdv_arq: str, portais: list[str], lojas: dict) -> pd.DataFrame:
+def vendas_pix(pdv_arq: str, portais: list[str], lojas: dict, tef: pd.DataFrame = pd.DataFrame()) -> pd.DataFrame:
     """Uma linha por PIX vendido. Fonte = maquininha onde houver relatório; senão PDV."""
     b = ler_pdv(pdv_arq)
     b["dt_pdv"] = pd.to_datetime(b["Data"].astype(str) + " " + b["Hora"].astype(str).str[:5])
@@ -69,6 +69,9 @@ def vendas_pix(pdv_arq: str, portais: list[str], lojas: dict) -> pd.DataFrame:
         m = pix_do_portal(df)
         m = m[m["Status"].str.upper().isin({"AUTORIZADA", "APROVADA"})]
         partes.append(m[["Data", "dt", "cent"]].assign(Filial=filial, Fonte="Maquininha", Ref="aut. " + m["Cód. de autorização"].astype(str)))
+        if len(tef):
+            t = tef[(tef["Filial"] == filial) & (tef["Data"] >= df["Data"].min()) & (tef["Data"] <= df["Data"].max()) & (tef["Status"].str.upper() == "APROVADA")]
+            partes.append(t[["Data", "dt", "cent"]].assign(Filial=filial, Fonte="Maquininha", Ref="TEF " + t["dt"].dt.strftime("%H:%M:%S")))
         # dias cobertos pelo portal saem do PDV para não contar duas vezes
         p = p[~((p["Filial"] == filial) & (p["Data"] >= df["Data"].min()) & (p["Data"] <= df["Data"].max()))]
     return pd.concat(partes + [p], ignore_index=True).sort_values(["Filial", "dt"]).reset_index(drop=True)
@@ -103,9 +106,12 @@ def main() -> None:
         i = args.index("--de"); de = pd.Timestamp(args[i + 1]).date(); del args[i:i + 2]
     if "--ate" in args:
         i = args.index("--ate"); ate = pd.Timestamp(args[i + 1]).date(); del args[i:i + 2]
+    tef = pd.DataFrame()
+    if "--tef" in args:
+        i = args.index("--tef"); tef = ler_tef(args[i + 1]); del args[i:i + 2]
     ex_arq, pdv_arq, portais = args[0], args[1], args[2:]
     lojas = carrega_lojas()
-    v = vendas_pix(pdv_arq, portais, lojas)
+    v = vendas_pix(pdv_arq, portais, lojas, tef)
     ex = ler_extrato(ex_arq, v["Filial"].unique())
     v = v[v["Filial"].isin(ex["Loja"].unique())]  # só lojas presentes no extrato
     if portais and de is None and ate is None:

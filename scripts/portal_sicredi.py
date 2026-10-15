@@ -41,3 +41,28 @@ def ler_portal(caminho: str) -> tuple[pd.DataFrame, dict]:
 def pix_do_portal(df: pd.DataFrame) -> pd.DataFrame:
     """PIX vem como Modalidade 'Via QRCODE' (Produto/Bandeira = PIX), status 'Autorizada'."""
     return df[df["Modalidade"].str.upper().str.contains("QRCODE|PIX")].copy()
+
+
+def ler_tef(caminho: str) -> pd.DataFrame:
+    """Relatório de PIX pela TEF (colunas Data, Hora, Valor, Status, Loja - Descrição).
+    Sai com as mesmas colunas que pix_do_portal, para entrar junto no casamento."""
+    wb = CalamineWorkbook.from_path(caminho)
+    rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
+    h = next(i for i, r in enumerate(rows) if "Método Pagamento" in r or "Loja - Descrição" in r)
+    df = pd.DataFrame(rows[h + 1 :], columns=rows[h])
+    df = df[df["Data"].astype(str).str.match(r"\d{2}/\d{2}/\d{4}")].copy()
+    df = df[df["Método Pagamento"].astype(str).str.lower().str.contains("pix")]
+    df["Valor Bruto"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
+    df["dt"] = pd.to_datetime(df["Data"] + " " + df["Hora"].astype(str).str.strip(), dayfirst=True)
+    df["Data"] = df["dt"].dt.date
+    df["cent"] = (df["Valor Bruto"] * 100).round().astype(int)
+    df["Filial"] = df["Loja - Descrição"].astype(str).str.strip()
+    df["Status"] = df["Status"].astype(str).str.strip()
+    df["Modalidade"] = "PIX TEF"
+    df["Canal"] = "TEF PIX"
+    df["Cód. de autorização"] = df["Código Pedido"].astype(str).replace("", "-") if "Código Pedido" in df.columns else "-"
+    df["Número do terminal"] = "TEF"
+    df["Comprovante de venda"] = "-"
+    df["Valor da taxa (MDR)"] = 0.0
+    df["Valor líquido"] = df["Valor Bruto"]
+    return df.reset_index(drop=True)

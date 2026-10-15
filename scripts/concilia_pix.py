@@ -2,7 +2,11 @@
 """Etapa 1 · PIX: cruza o relatório de cupons do PDV com o Histórico de vendas do portal Sicredi.
 
 Uso:
-    python3 scripts/concilia_pix.py <pdv_cupons.xlsx> <portal1.xlsx> [portal2.xlsx ...]
+    python3 scripts/concilia_pix.py <pdv_cupons.xlsx> <portal1.xlsx> [portal2.xlsx ...] [--tef pix_tef.xlsx]
+
+O PIX tem duas fontes na ponta da maquininha: o portal Sicredi ("Via QRCODE", POS) e o
+relatório de PIX pela TEF (--tef), que o portal não mostra. As duas entram juntas no casamento;
+a coluna Canal diz de onde veio cada uma.
 
 A loja de cada arquivo do portal é identificada pelo EC (Estabelecimento comercial) via
 `lojas.csv` (colunas: EC, Filial). Casamento: mesma loja, mesmo dia, mesmo valor em
@@ -20,6 +24,7 @@ valor, no mesmo dia ou no dia anterior, que também não tenha par no PDV. Se ac
 "PROVÁVEL FORMA ERRADA" — o caixa lançou cartão como PIX.
 """
 HORA_VIRADA = 6  # cupom antes dessa hora conta no dia calendário seguinte
+JANELA_ANTES_MIN, JANELA_DEPOIS_H = 30, 36  # PDV pode fechar o cupom antes/depois do PIX na máquina
 CARTAO_PDV = ("CARTAO CREDITO", "CARTAO DEBITO", "TEF - CREDITO", "TEF - DEBITO")
 import sys
 from pathlib import Path
@@ -28,7 +33,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
 from pdv_pix import ler_pdv, pix_do_pdv  # noqa: E402
-from portal_sicredi import ler_portal, pix_do_portal  # noqa: E402
+from portal_sicredi import ler_portal, ler_tef, pix_do_portal  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
 OK_STATUS = {"AUTORIZADA", "APROVADA"}
@@ -48,7 +53,9 @@ def casa(pdv: pd.DataFrame, maq: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
     linhas = []
     pdv = pdv.sort_values("dt_pdv")
     for _, a in pdv.iterrows():
-        cand = maq[(maq["cent"] == a["cent"]) & (maq["Data"] == a["Data"]) & (~maq.index.isin(usados))]
+        # mesmo valor; o cupom do PDV fecha de 30 min antes até 36 h depois do PIX na máquina
+        dif = (a["dt_pdv"] - maq["dt"]).dt.total_seconds() / 60
+        cand = maq[(maq["cent"] == a["cent"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~maq.index.isin(usados))]
         if len(cand) == 0:
             linhas.append({**a.to_dict(), "Status": "SEM PAR NA MAQUININHA"})
             continue
@@ -58,9 +65,11 @@ def casa(pdv: pd.DataFrame, maq: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
         linhas.append({
             **a.to_dict(),
             "Hora maq": m["dt"].strftime("%H:%M:%S"),
+            "Dia maq": m["Data"],
             "Autorização": m["Cód. de autorização"],
             "Terminal": m["Número do terminal"],
             "Comprovante": m["Comprovante de venda"],
+            "Canal": m["Canal"],
             "Dif. hora (min)": round((a["dt_pdv"] - m["dt"]).total_seconds() / 60),
             "Status": "CONCILIADO",
         })
@@ -102,7 +111,11 @@ def caca_forma_errada(res: pd.DataFrame, maq: pd.DataFrame, cartao_pdv: pd.DataF
 def main() -> None:
     if len(sys.argv) < 3:
         sys.exit(__doc__)
-    pdv_arq, portais = sys.argv[1], sys.argv[2:]
+    args = sys.argv[1:]
+    tef = pd.DataFrame()
+    if "--tef" in args:
+        i = args.index("--tef"); tef = ler_tef(args[i + 1]); del args[i:i + 2]
+    pdv_arq, portais = args[0], args[1:]
     lojas = carrega_lojas()
 
     bruto = ler_pdv(pdv_arq)
@@ -122,9 +135,12 @@ def main() -> None:
         if not filial:
             sys.exit(f"EC {ec} ({arq}) não está em lojas.csv — adicione a linha EC,Filial")
         maq = pix_do_portal(df)
+        d0, d1 = df["Data"].min(), df["Data"].max()
+        if len(tef):
+            t = tef[(tef["Filial"] == filial) & (tef["Data"] >= d0) & (tef["Data"] <= d1)]
+            maq = pd.concat([maq, t[[c for c in t.columns if c in maq.columns or c in ("dt", "Data", "cent", "Canal")]]], ignore_index=True)
         ok = maq[maq["Status"].str.upper().isin(OK_STATUS)]
         rec = maq[~maq["Status"].str.upper().isin(OK_STATUS)]
-        d0, d1 = df["Data"].min(), df["Data"].max()
         p = pdv_all[(pdv_all["Filial"] == filial) & (pdv_all["Data"] >= d0) & (pdv_all["Data"] <= d1)]
 
         res, sobra = casa(p, ok)
@@ -165,7 +181,7 @@ def main() -> None:
     rec = pd.concat(recusados, ignore_index=True)
 
     col_pdv = ["Filial", "EC", "Data", "Dia movimento", "Hora", "Cupom", "Caixa", "Desc. pagam.", "Vl. pagamento",
-               "Status", "Hora maq", "Dif. hora (min)", "Autorização", "Terminal", "Comprovante"]
+               "Status", "Hora maq", "Dia maq", "Dif. hora (min)", "Autorização", "Terminal", "Comprovante", "Canal"]
     col_maq = ["Filial", "EC", "Data", "dt", "Cód. de autorização", "Valor Bruto", "Status",
                "Número do terminal", "Comprovante de venda", "Canal"]
     d0, d1 = resumo["Data"].min(), resumo["Data"].max()

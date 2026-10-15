@@ -72,6 +72,10 @@ def main() -> None:
     l1 = le("concilia_pix_2*.xlsx", "PDV x maquininha")              # linhas PIX, lado PDV
     lb = le("concilia_pix_banco_*.xlsx", "Venda x banco")             # linhas PIX, lado banco
     lc = {m: le(f"concilia_{m}_2*.xlsx", "Maquininha x PDV") for m in ("credito", "debito")}
+    # pendências só do período do painel
+    no_per = lambda df: df[(df["Data"] >= de) & (df["Data"] <= ate)] if len(df) else df
+    e1p, e1m, e2p, e2s = no_per(e1p), no_per(e1m), no_per(e2p), no_per(e2s)
+    cart = {m: (r_, no_per(sm_), no_per(sp_)) for m, (r_, sm_, sp_) in cart.items()}
     banco_por_aut = {}
     if len(lb):
         for _, q in lb[lb["Status"] == "CONCILIADO"].iterrows():
@@ -110,14 +114,15 @@ def main() -> None:
         if len(e1m):
             for _, x in e1m[(e1m["Filial"] == filial) & (e1m["Data"] == d)].iterrows():
                 rows.append({"s": "MAQUININHA SEM PAR NO PDV", "v": r2(x["Valor Bruto"]), "hm": hh(x["dt"]), "t": str(x["Número do terminal"]), "a": str(x["Cód. de autorização"])})
+        rows.sort(key=lambda r: r.get("h") or r.get("hm") or "")
         return rows
 
     def lanc_cartao(filial, m, d):
         L = lc[m]
-        if not len(L) or not len(L[(L["Filial"] == filial) & (L["Data"] == d)]):
+        if not len(L) or not len(L[(L["Filial"] == filial) & (pd.to_datetime(L["Data"]).dt.date == d)]):
             return lanc_pdv(filial, m, d)
         rows = []
-        for _, x in L[(L["Filial"] == filial) & (L["Data"] == d)].sort_values("Hora maq").iterrows():
+        for _, x in L[(L["Filial"] == filial) & (pd.to_datetime(L["Data"]).dt.date == d)].sort_values("Hora maq").iterrows():
             r = {"s": str(x["Status"]), "v": r2(x["Valor Bruto"]), "hm": hh(x["Hora maq"]), "b": str(x["Bandeira"]), "t": str(x["Terminal"]), "a": str(x["Autorização"]), "mdr": r2(x["MDR"])}
             if str(x["Status"]) == "CONCILIADO":
                 r.update(h=hh(x["Hora PDV"]), c=str(x["Cupom"]), cx=str(x["Caixa"]), f=str(x["Forma PDV"]))
