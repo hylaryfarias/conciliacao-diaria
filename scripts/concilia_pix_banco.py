@@ -2,7 +2,9 @@
 """Etapa 2 · PIX: cruza os PIX da maquininha (e do PDV, onde o portal não cobre) com o extrato.
 
 Uso:
-    python3 scripts/concilia_pix_banco.py <extrato.xlsx> <pdv_cupons.xlsx> [portal1.xlsx ...]
+    python3 scripts/concilia_pix_banco.py <extrato.xlsx> <pdv_cupons.xlsx> [portal1.xlsx ...] [--de AAAA-MM-DD] [--ate AAAA-MM-DD]
+
+Sem --de/--ate, o período é o coberto pelos relatórios do portal (quando houver).
 
 Extrato: export do painel de extratos (colunas Data, Descrição, Valor, Loja, Ag./Conta ...).
 Entram só as linhas "RECEBIMENTO PIX". Regra medida no ROBS (01–13/10/2026, 54 de 54):
@@ -81,11 +83,25 @@ def casa_banco(v: pd.DataFrame, ex: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
 def main() -> None:
     if len(sys.argv) < 3:
         sys.exit(__doc__)
-    ex_arq, pdv_arq, portais = sys.argv[1], sys.argv[2], sys.argv[3:]
+    args = sys.argv[1:]
+    de = ate = None
+    if "--de" in args:
+        i = args.index("--de"); de = pd.Timestamp(args[i + 1]).date(); del args[i:i + 2]
+    if "--ate" in args:
+        i = args.index("--ate"); ate = pd.Timestamp(args[i + 1]).date(); del args[i:i + 2]
+    ex_arq, pdv_arq, portais = args[0], args[1], args[2:]
     ex = ler_extrato(ex_arq)
     lojas = carrega_lojas()
     v = vendas_pix(pdv_arq, portais, lojas)
     v = v[v["Filial"].isin(ex["Loja"].unique())]  # só lojas presentes no extrato
+    if portais and de is None and ate is None:
+        v = v[v["Fonte"] == "Maquininha"]        # período = o que o portal cobre
+    if de:
+        v = v[v["Data"] >= de]
+    if ate:
+        v = v[v["Data"] <= ate]
+    d0, d1 = v["Data"].min(), v["Data"].max()
+    ex = ex[ex["Data"] >= d0]                    # créditos anteriores ao período não entram
     res, sobra = casa_banco(v, ex)
 
     resumo = []
@@ -99,7 +115,6 @@ def main() -> None:
             "Não caiu (R$)": g[g["Status"] == "NÃO CAIU NO BANCO"]["cent"].sum() / 100,
         })
     resumo = pd.DataFrame(resumo)
-    d0, d1 = ex["Data"].min(), ex["Data"].max()
     out = RAIZ / "saida" / f"concilia_pix_banco_{d0:%Y-%m-%d}_a_{d1:%Y-%m-%d}.xlsx"
     res["Valor"] = res["cent"] / 100
     cols = ["Filial", "Data", "dt", "Fonte", "Ref", "Valor", "Status", "Crédito", "Dias", "Pagador"]
@@ -109,7 +124,7 @@ def main() -> None:
         res[res["Status"] != "CONCILIADO"][[c for c in cols if c in res.columns]].to_excel(xw, sheet_name="Pendências", index=False)
         sobra[["Loja", "Data", "Descrição", "Valor"]].to_excel(xw, sheet_name="Banco sem venda", index=False)
     n = res["Status"].value_counts()
-    print(f"Extrato {d0:%d/%m}–{d1:%d/%m}: {len(ex)} PIX R$ {ex['cent'].sum()/100:,.2f} | vendas PIX {len(res)} | "
+    print(f"Vendas {d0:%d/%m}–{d1:%d/%m} · extrato até {ex['Data'].max():%d/%m}: {len(ex)} PIX R$ {ex['cent'].sum()/100:,.2f} | vendas PIX {len(res)} | "
           f"conciliado {n.get('CONCILIADO',0)} | aguarda extrato {n.get('AGUARDA EXTRATO',0)} | "
           f"não caiu {n.get('NÃO CAIU NO BANCO',0)} | banco sem venda {len(sobra)}")
     print(f"gravado em {out}\n")

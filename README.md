@@ -26,7 +26,7 @@ por cupom. Formas de pagamento do PDV tratadas como PIX de maquininha:
 python3 scripts/concilia_pix_banco.py entrada/<extrato>.xlsx entrada/<pdv_cupons>.xlsx entrada/<portal_loja>.xlsx ...
 ```
 
-Regra medida (ROBS, 01–13/10/2026, 54 de 54): PIX cai **D0 em dia útil**; sábado, domingo e
+Período de fechamento = o coberto pelo portal (ou --de/--ate). Regra medida (ROBS, 54 de 54): PIX cai **D0 em dia útil**; sábado, domingo e
 feriado caem no **próximo dia útil**. Sem taxa. Venda após a última data do extrato fica
 como **"aguarda extrato"**, nunca como divergência.
 
