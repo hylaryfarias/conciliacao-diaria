@@ -124,7 +124,7 @@ def main() -> None:
         rows = []
         for _, x in L[(L["Filial"] == filial) & (pd.to_datetime(L["Data"]).dt.date == d)].sort_values("Hora maq").iterrows():
             r = {"s": str(x["Status"]), "v": r2(x["Valor Bruto"]), "hm": hh(x["Hora maq"]), "b": str(x["Bandeira"]), "t": str(x["Terminal"]), "a": str(x["Autorização"]), "mdr": r2(x["MDR"])}
-            if str(x["Status"]) == "CONCILIADO":
+            if str(x["Status"]).startswith("CONCILIADO"):
                 r.update(h=hh(x["Hora PDV"]), c=str(x["Cupom"]), cx=str(x["Caixa"]), f=str(x["Forma PDV"]))
                 if pd.notna(x["Dia PDV"]) and pd.to_datetime(x["Dia PDV"]).date() != d:
                     r["dp"] = pd.to_datetime(x["Dia PDV"]).date().isoformat()
