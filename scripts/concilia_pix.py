@@ -11,7 +11,16 @@ bem depois do pagamento na máquina, por isso a hora só desempata — não bloq
 
 Só contam PIX autorizados/aprovados na maquininha. Recusado e cancelado ficam fora e
 são listados à parte. PIX sem taxa: valor previsto = bruto.
+
+Data do PDV é o DIA DE MOVIMENTO: cupom de madrugada (antes de 06:00) pertence ao dia
+seguinte do calendário, que é o que a maquininha usa. Verificado em 299 de 301 caixas-dia.
+
+PIX do PDV sem par na maquininha: procura um débito/crédito aprovado na máquina, de mesmo
+valor, no mesmo dia ou no dia anterior, que também não tenha par no PDV. Se achar, marca
+"PROVÁVEL FORMA ERRADA" — o caixa lançou cartão como PIX.
 """
+HORA_VIRADA = 6  # cupom antes dessa hora conta no dia calendário seguinte
+CARTAO_PDV = ("CARTAO CREDITO", "CARTAO DEBITO", "TEF - CREDITO", "TEF - DEBITO")
 import sys
 from pathlib import Path
 
@@ -59,16 +68,51 @@ def casa(pdv: pd.DataFrame, maq: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
     return pd.DataFrame(linhas), sobra
 
 
+def caca_forma_errada(res: pd.DataFrame, maq: pd.DataFrame, cartao_pdv: pd.DataFrame) -> pd.DataFrame:
+    """Para cada PIX do PDV sem par, procura cartão aprovado na máquina (D ou D-1), mesmo valor,
+    que também não tenha par no PDV. Órfão com órfão de mesmo valor = provável forma errada."""
+    if "Status" not in res.columns or (res["Status"] == "CONCILIADO").all():
+        return res
+    cart_m = maq[maq["Modalidade"].isin(["Crédito", "Débito"]) & (maq["Status"].str.upper() == "APROVADA")]
+    usados: set = set()
+    for _, x in cart_m.sort_values("dt").iterrows():
+        dif = (cartao_pdv["dt_pdv"] - x["dt"]).dt.total_seconds() / 60
+        c = cartao_pdv[(cartao_pdv["cent"] == x["cent"]) & (dif >= -30) & (dif <= 36 * 60)
+                       & (~cartao_pdv.index.isin(usados))]
+        if len(c):
+            usados.add((c["dt_pdv"] - x["dt"]).abs().idxmin())
+    orfaos = cart_m[~cart_m.index.isin(usados)].copy()  # cartão na máquina sem lançamento no PDV
+    usados_m: set = set()
+    for i, a in res[res["Status"] != "CONCILIADO"].iterrows():
+        dias = {a["Data"], a["Data"] - pd.Timedelta(days=1)}
+        c = orfaos[(orfaos["cent"] == a["cent"]) & (orfaos["Data"].isin(dias)) & (~orfaos.index.isin(usados_m))]
+        if len(c) == 0:
+            continue
+        j = (c["dt"] - a["dt_pdv"]).abs().idxmin()
+        usados_m.add(j)
+        m = orfaos.loc[j]
+        res.loc[i, ["Status", "Hora maq", "Autorização", "Terminal", "Comprovante", "Dif. hora (min)"]] = [
+            f"PROVÁVEL FORMA ERRADA: {m['Modalidade']} {m['Bandeira']} na máquina em {m['dt']:%d/%m %H:%M}",
+            m["dt"].strftime("%H:%M:%S"), m["Cód. de autorização"], m["Número do terminal"],
+            m["Comprovante de venda"], round((a["dt_pdv"] - m["dt"]).total_seconds() / 60),
+        ]
+    return res
+
+
 def main() -> None:
     if len(sys.argv) < 3:
         sys.exit(__doc__)
     pdv_arq, portais = sys.argv[1], sys.argv[2:]
     lojas = carrega_lojas()
 
-    pdv_all = pix_do_pdv(ler_pdv(pdv_arq))
-    pdv_all["dt_pdv"] = pd.to_datetime(
-        pdv_all["Data"].astype(str) + " " + pdv_all["Hora"].astype(str).str[:5]
-    )
+    bruto = ler_pdv(pdv_arq)
+    bruto["dt_pdv"] = pd.to_datetime(bruto["Data"].astype(str) + " " + bruto["Hora"].astype(str).str[:5])
+    madrugada = bruto["dt_pdv"].dt.hour < HORA_VIRADA
+    bruto.loc[madrugada, "dt_pdv"] += pd.Timedelta(days=1)
+    bruto["Dia movimento"] = bruto["Data"]
+    bruto["Data"] = bruto["dt_pdv"].dt.date          # data calendário, igual à da maquininha
+    pdv_all = pix_do_pdv(bruto)
+    cartao_pdv = bruto[bruto["Desc. pagam."].str.upper().isin(CARTAO_PDV)].copy()
 
     todas, sobras, recusados, resumo = [], [], [], []
     for arq in portais:
@@ -85,6 +129,7 @@ def main() -> None:
 
         res, sobra = casa(p, ok)
         res["EC"] = ec
+        res = caca_forma_errada(res, df, cartao_pdv[cartao_pdv["Filial"] == filial])
         sobra["Filial"] = filial
         rec = rec.assign(Filial=filial)
         todas.append(res); sobras.append(sobra); recusados.append(rec)
@@ -119,7 +164,7 @@ def main() -> None:
     sobra = pd.concat(sobras, ignore_index=True)
     rec = pd.concat(recusados, ignore_index=True)
 
-    col_pdv = ["Filial", "EC", "Data", "Hora", "Cupom", "Caixa", "Desc. pagam.", "Vl. pagamento",
+    col_pdv = ["Filial", "EC", "Data", "Dia movimento", "Hora", "Cupom", "Caixa", "Desc. pagam.", "Vl. pagamento",
                "Status", "Hora maq", "Dif. hora (min)", "Autorização", "Terminal", "Comprovante"]
     col_maq = ["Filial", "EC", "Data", "dt", "Cód. de autorização", "Valor Bruto", "Status",
                "Número do terminal", "Comprovante de venda", "Canal"]

@@ -33,6 +33,7 @@ def ler_pdv(caminho: str) -> pd.DataFrame:
 def pix_do_pdv(df: pd.DataFrame) -> pd.DataFrame:
     pix = df[df["Desc. pagam."].str.upper().isin(FORMAS_PIX)].copy()
     cols = ["Filial", "Caixa", "Data", "Hora", "Cupom", "Desc. pagam.", "Vl. pagamento", "cent", "Chave"]
+    cols += [c for c in ("dt_pdv", "Dia movimento") if c in pix.columns]
     return pix[cols].sort_values(["Filial", "Data", "Hora", "Cupom"]).reset_index(drop=True)
 
 
