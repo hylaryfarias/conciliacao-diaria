@@ -42,6 +42,10 @@ como **"aguarda extrato"**, nunca como divergência.
   sai do caixa sem registro. O motor casa os dois lados (status "SERVIÇO NÃO BAIXADO"), soma na
   coluna "Serviço não baixado" e o painel conta como em aberto. 74 casos em 01–14/10, 71 deles
   no caixa PDV 02 da ISAIAS 01, à noite.
+- **Comanda bate, forma não** (`scripts/concilia_cupom.py`, roda depois das três formas): soma o
+  que sobrou sem par em cada cupom e procura na máquina, em qualquer modalidade, 1 a 4 vendas
+  com a mesma soma (36 h antes a 30 min depois do cupom, até 3 h entre si). Mesa dividida com
+  divisão de formas diferente nos dois lados. O painel marca "conciliado por total da comanda".
 - **Conta dividida** (motor, automático): cupom sem par procura (b) um grupo de 2 a 4 PIX, todos em até 3 h, cuja soma bate o cupom; (c) o inverso, um PIX que
   paga 2 a 4 cupons fechados em até 3 h. Janela larga demais nos grupos gera par falso.
 - **PIX só existe pela máquina** (QR code/TEF). PIX do PDV sem par na máquina → procurar cartão

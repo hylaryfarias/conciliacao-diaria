@@ -83,6 +83,47 @@ def main() -> None:
         for _, q in lb[lb["Status"] == "CONCILIADO"].iterrows():
             banco_por_aut[str(q["Ref"]).replace("aut. ", "")] = (str(q["Crédito"]), str(q["Pagador"]))
     ec_de = {v: k for k, v in carrega_lojas().items()}
+    MODK = {"PIX": "pix", "Crédito": "credito", "Débito": "debito"}
+    cupL = le("concilia_cupom.xlsx", "Linhas")
+    cupR = le("concilia_cupom.xlsx", "Cupons resolvidos")
+    resolv_pdv, resolv_maq, expl = {}, {}, {}
+    if len(cupL):
+        cupL = cupL[(cupL["Data"] >= de) & (cupL["Data"] <= ate)]
+        for _, q in cupR.iterrows():
+            expl[(q["Filial"], str(q["Cupom"]))] = f"comanda {q['Cupom']} fechou {q['Total']:.2f}: PDV {q['FormasPDV']} · máquina {q['FormasMaq']}"
+        for _, q in cupL.iterrows():
+            k = (q["Filial"], MODK[q["Forma"]], q["Data"])
+            if q["Lado"] == "PDV":
+                resolv_pdv.setdefault(k, {})[str(q["Ref"]).replace(".0", "")] = (r2(q["Valor"]), str(q["Cupom"]))
+            else:
+                resolv_maq.setdefault(k, {})[str(q["Ref"])] = (r2(q["Valor"]), str(q["Cupom"]))
+
+    def aplica_comanda(filial, m, d, row, pend):
+        """Marca linhas e pendências resolvidas pelo total da comanda; ajusta as somas do dia."""
+        rp = resolv_pdv.get((filial, m, d), {}); rm = resolv_maq.get((filial, m, d), {})
+        if not rp and not rm:
+            return pend
+        for r in row.get("lanc", []):
+            if r.get("c") in rp and not str(r.get("s", "")).startswith("CONCILIADO"):
+                r["s"] = "CONCILIADO POR TOTAL DA COMANDA"; r["cm"] = expl.get((filial, rp[r["c"]][1]), "")
+            if r.get("a") in rm and str(r.get("s", "")).startswith("MAQUININHA SEM PAR"):
+                r["s"] = "CONCILIADO POR TOTAL DA COMANDA"; r["c"] = rm[r["a"]][1]; r["cm"] = expl.get((filial, rm[r["a"]][1]), "")
+        if "pdv_sem_par" in row:
+            row["pdv_sem_par"] = r2(max(0, row["pdv_sem_par"] - sum(v for v, _ in rp.values())))
+        if "maq_sem_par" in row:
+            row["maq_sem_par"] = r2(max(0, row["maq_sem_par"] - sum(v for v, _ in rm.values())))
+        row["comanda"] = r2(sum(v for v, _ in rp.values()))
+        novo = []
+        for p in pend:
+            if p["data"] != d.isoformat():
+                novo.append(p); continue
+            if p.get("cupom") in rp and p["status"].startswith("SEM PAR"):
+                p = {**p, "status": "CONCILIADO POR TOTAL DA COMANDA", "detalhe": expl.get((filial, rp[p["cupom"]][1]), ""), "comanda": True}
+            elif p["status"].startswith("MAQUININHA SEM PAR") and any(f"aut. {a}" in str(p["ref"]) for a in rm):
+                continue
+            novo.append(p)
+        return novo
+
     extrato_ate = None
     if len(e2):
         creds = pd.to_datetime(e2["Crédito em"].dropna().astype(str).str.split(", ").explode()).dt.date
@@ -178,6 +219,8 @@ def main() -> None:
         if len(e2s):
             for _, q in e2s[e2s["Loja"] == filial].iterrows():
                 pend.append({"etapa": 2, "data": q["Data"].isoformat(), "valor": r2(q["Valor"]), "ref": str(q["Descrição"]), "status": "BANCO SEM VENDA", "detalhe": ""})
+        for row in dias:
+            pend = aplica_comanda(filial, "pix", pd.Timestamp(row["data"]).date(), row, pend)
         mods["pix"] = {"tem_maq": any("maq" in r for r in dias), "tem_banco": any("banco" in r for r in dias), "dias": dias, "pendencias": sorted(pend, key=lambda q: (q["etapa"], q["data"]))}
 
         # ---- cartão
@@ -198,12 +241,15 @@ def main() -> None:
                     pend.append({"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Valor Bruto"]), "ref": f"{q['Hora maq']} · {q['Bandeira']} · terminal {q['Terminal']} · aut. {q['Autorização']}", "status": "MAQUININHA SEM PAR NO PDV", "detalhe": ""})
             if len(sem_p):
                 for _, q in sem_p[sem_p["Filial"] == filial].iterrows():
-                    pend.append({"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Vl. pagamento"]), "ref": f"cupom {q['Cupom']} · {q['Hora']} · {q['Caixa']}", "status": "SEM PAR NA MAQUININHA", "detalhe": ""})
+                    pend.append({"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Vl. pagamento"]), "ref": f"cupom {q['Cupom']} · {q['Hora']} · {q['Caixa']}", "status": "SEM PAR NA MAQUININHA", "detalhe": "",
+                                 "cupom": str(q["Cupom"]), "caixa": str(q["Caixa"]), "hora": str(q["Hora"])[:5], "forma": str(q["Desc. pagam."])})
             sv = csv_[m]
             if len(sv):
                 for _, q in sv[sv["Filial"] == filial].iterrows():
                     pend.append({"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Valor Bruto"]), "ref": f"cupom {q['Cupom']} · {q['Hora PDV']} · {q['Caixa']}", "status": str(q["Status"]),
                                  "detalhe": f"{q['Bandeira']} · terminal {q['Terminal']} · aut. {q['Autorização']} · máquina {q['Hora maq']}", "servico": r2(q["Serviço (R$)"])})
+            for row in dias:
+                pend = aplica_comanda(filial, m, pd.Timestamp(row["data"]).date(), row, pend)
             mods[m] = {"tem_maq": any("maq" in r for r in dias), "tem_banco": False, "dias": dias, "pendencias": sorted(pend, key=lambda q: q["data"])}
 
         lojas.append({"nome": filial, "marca": marca(filial), "ec": ec_de.get(filial), "mod": mods})

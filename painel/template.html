@@ -133,7 +133,7 @@ td.neg{color:var(--erro)}
 .form-aj select,.form-aj textarea{font:inherit;font-size:13.5px;padding:7px 9px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);max-width:100%}
 .form-aj textarea{min-height:56px;resize:vertical}
 .form-aj .erro{color:var(--erro);font-size:12.5px}
-.pend li[data-s="ajuste"] .stripe{background:var(--gestao)}
+.pend li[data-s="ajuste"] .stripe{background:var(--gestao)} .pend li[data-s="ok"] .stripe{background:var(--ok)}
 .ajuste-nota{font-size:13px;color:var(--ink-soft);margin-top:4px} .ajuste-nota b{color:var(--ink)}
 td.st[data-s="ajuste"]{color:var(--gestao)}
 .pend .expl{font-size:13px;color:var(--ink-soft);margin-top:6px;max-width:70ch}
@@ -184,6 +184,7 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
       <div class="regra"><b>Data do PDV é dia de movimento</b>Cupom antes das 06:00 pertence ao dia seguinte do calendário. Confirmado em 299 de 301 caixas-dia.</div>
       <div class="regra"><b>Hora do PDV é a do fechamento</b>Pode vir até 80 minutos depois do pagamento. Serve só para desempatar valores iguais.</div>
       <div class="regra"><b>POS não é integrado</b>Terminais APT… dependem de digitação: a venda pode entrar no dia seguinte ou com a forma errada. A TEF (TFI…) bate hora a hora.</div>
+      <div class="regra"><b>Comanda bate, forma não</b>Mesa dividida: cada cliente paga de um jeito e o caixa baixa com outra divisão. O motor soma o que sobrou sem par na comanda e procura na máquina, em qualquer forma, 1 a 4 vendas com a mesma soma. Resolve a comanda; o Δ por forma fica diferente de zero de propósito.</div>
       <div class="regra"><b>Serviço não baixado é divergência</b>Quando a máquina cobra o cupom + 10% e o PDV fecha sem o item da taxa, o cliente pagou a mais do que o PDV diz. A sobra fica em "em aberto" e na lista de pendências, com cupom, hora e terminal, para apurar na loja.</div>
       <div class="regra"><b>Reclassificação fica registrada</b>Quando a baixa no PDV saiu com a forma errada, o lançamento pode ser transferido aqui para a forma certa, com justificativa, autor e hora. Como o caixa fechado não aceita correção no PDV, esse ajuste é o registro oficial da conciliação e fica guardado com o painel.</div>
       <div class="regra"><b>Aguardar não é divergir</b>Venda depois da última data do extrato fica como "aguarda extrato", fora do Δ e fora da contagem de casos.</div>
@@ -212,7 +213,7 @@ const sum = (arr, f) => arr.reduce((a,x) => a + Math.round((f(x) ?? 0)*100), 0) 
 function statusLoja(l){
   const m = M(l);
   if(!m.tem_maq) return {s:"aguarda", t:"aguarda relatório"};
-  const diverg = m.dias.some(d => Math.abs(d.delta ?? 0) > 0.004 || (d.nao_caiu ?? 0) > 0.004 || (d.servico ?? 0) > 0.004) || m.pendencias.some(p => !p.ajuste && /SEM PAR|FORMA|NÃO CAIU|BANCO SEM|SERVIÇO/.test(p.status));
+  const diverg = m.dias.some(d => (d.pdv_sem_par ?? 0) > 0.004 || (d.maq_sem_par ?? 0) > 0.004 || (d.nao_caiu ?? 0) > 0.004 || (d.servico ?? 0) > 0.004) || m.pendencias.some(p => !p.ajuste && !p.comanda && /SEM PAR|FORMA|NÃO CAIU|BANCO SEM|SERVIÇO/.test(p.status));
   if(diverg) return {s:"erro", t:"divergência"};
   if(tab !== "pix") return {s:"ok", t:"PDV = máquina"};
   if(!m.tem_banco) return {s:"pendente", t:"sem extrato"};
@@ -276,7 +277,7 @@ function lojas(){
 
 function tone(d){
   if(d.maq===undefined) return "aguarda";
-  if(Math.abs(d.delta ?? 0)>0.004 || (d.nao_caiu ?? 0)>0.004 || (d.servico ?? 0)>0.004) return "erro";
+  if((d.pdv_sem_par ?? 0)>0.004 || (d.maq_sem_par ?? 0)>0.004 || (d.nao_caiu ?? 0)>0.004 || (d.servico ?? 0)>0.004) return "erro";
   if(tab !== "pix") return "ok";
   if(d.banco===undefined || (d.aguarda ?? 0)>0.004) return "pendente";
   return "ok";
@@ -284,6 +285,7 @@ function tone(d){
 const EXPL = {
   "PROVÁVEL FORMA ERRADA": "O PDV registrou PIX, mas a máquina tem um cartão de mesmo valor sem lançamento no PDV. O caixa provavelmente escolheu a forma de pagamento errada. Confirmar com a loja e corrigir no PDV.",
   "SERVIÇO NÃO BAIXADO": "A máquina cobrou o cupom mais 10% de serviço e o PDV foi fechado sem o item da taxa. O cliente pagou a mais do que o PDV registra, e essa sobra na forma de pagamento não tem lançamento. Apurar com a loja quem operou o caixa nesse horário.",
+  "CONCILIADO POR TOTAL DA COMANDA": "Mesa dividida: a comanda fechou com o mesmo total nos dois lados, mas os clientes pagaram com outra divisão de formas. Linha a linha não bate; a comanda bate.",
   "SEM PAR NA MAQUININHA": "Há lançamento no PDV sem venda correspondente na máquina. Verificar se a venda foi lançada com a forma errada, em outro dia, ou se a máquina está em outro EC.",
   "MAQUININHA SEM PAR NO PDV": "A máquina registrou a venda e o PDV não tem lançamento de mesmo valor em até 36 horas. Venda sem cupom ou lançada com outra forma.",
   "AGUARDA EXTRATO": "A venda é posterior à última data lida do extrato. Não é divergência: rodar de novo quando o painel de extratos capturar o dia.",
@@ -298,7 +300,7 @@ function detalhe(){
   const m = M(l), st = statusLoja(l);
   const pdv = sum(m.dias,d=>d.pdv), maq = sum(m.dias,d=>d.maq), banco = sum(m.dias,d=>d.banco), ag = sum(m.dias,d=>d.aguarda);
   const aberto = sum(m.dias, d => (d.pdv_sem_par ?? 0) + (d.maq_sem_par ?? 0) + (d.nao_caiu ?? 0) + (d.servico ?? 0));
-  const nCasos = m.pendencias.filter(p=>p.status!=="AGUARDA EXTRATO" && !p.ajuste).length;
+  const nCasos = m.pendencias.filter(p=>p.status!=="AGUARDA EXTRATO" && !p.ajuste && !p.comanda).length;
   let html = `<div class="det-head"><h3>${esc(l.nome)} · ${TABS[tab]}</h3><span class="meta">${l.ec?`EC ${l.ec} · `:""}${dBR(D.de)} a ${dBR(D.ate)} · <span class="chip" data-s="${st.s}">${st.t}</span></span></div>`;
   if(!m.tem_maq){
     const semBanco = sum(m.dias, d => d.sem_banco);
@@ -319,7 +321,7 @@ function detalhe(){
     const podeAjustar = !!dbRef && podeEscrever !== false;
     html += `<h2>Pendências · ${m.pendencias.length}</h2><ul class="pend" id="pend">` + m.pendencias.map((p,i) => {
       const key = Object.keys(EXPL).find(k => p.status.startsWith(k)) || "";
-      const s = p.ajuste ? "ajuste" : /AGUARDA/.test(p.status) ? "pendente" : "erro";
+      const s = p.ajuste ? "ajuste" : p.comanda ? "ok" : /AGUARDA/.test(p.status) ? "pendente" : "erro";
       let acoes = "";
       if(p.ajuste){
         const a = p.ajuste, dt = a.criado_em ? new Date(a.criado_em).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
@@ -368,7 +370,7 @@ function lancamentos(d){
     const [s,txt] = st(r);
     const cx = (r.cx||"").replace(/^\d+ - /,"");
     if(!temMaq) return `<tr><td>${r.h||""}</td><td>${esc(r.c||"")}</td><td class="mono">${esc(cx)}</td><td>${esc(r.f||"")}</td><td>${brl(r.v)}</td></tr>`;
-    return `<tr><td>${r.h||"—"}${r.dp?`<small style="color:var(--pendente)"> ${dBR(r.dp)}</small>`:""}</td><td>${esc(r.c||"—")}</td><td class="mono">${esc(cx)||"—"}</td><td>${esc(r.f||"—")}</td><td>${brl(r.v)}</td><td class="st" data-s="${s}">${esc(txt)}</td>
+    return `<tr title="${esc(r.cm||"")}"><td>${r.h||"—"}${r.dp?`<small style="color:var(--pendente)"> ${dBR(r.dp)}</small>`:""}</td><td>${esc(r.c||"—")}</td><td class="mono">${esc(cx)||"—"}</td><td>${esc(r.f||"—")}</td><td>${brl(r.v)}</td><td class="st" data-s="${s}">${esc(txt)}</td>
       <td>${r.hm||"—"}</td>${pix?"":`<td>${esc(r.b||"—")}</td>`}<td class="mono">${esc(r.t||"—")}</td><td class="mono">${esc(r.a||"—")}</td>${pix?`<td>${r.cr?dBR(r.cr):"—"}</td><td class="mono">${esc(r.pg||"—")}</td>`:`<td>${r.mdr!==undefined?brl(r.mdr):"—"}</td>`}</tr>`;
   }).join("");
   return `<div class="lanc-wrap"><table class="lanc-t"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
