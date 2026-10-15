@@ -187,6 +187,7 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
       <div class="regra"><b>Comanda bate, forma não</b>Mesa dividida: cada cliente paga de um jeito e o caixa baixa com outra divisão. O motor soma o que sobrou sem par na comanda e procura na máquina, em qualquer forma, 1 a 4 vendas com a mesma soma. Resolve a comanda; o Δ por forma fica diferente de zero de propósito.</div>
       <div class="regra"><b>Serviço não baixado é divergência</b>Quando a máquina cobra o cupom + 10% e o PDV fecha sem o item da taxa, o cliente pagou a mais do que o PDV diz. A sobra fica em "em aberto" e na lista de pendências, com cupom, hora e terminal, para apurar na loja.</div>
       <div class="regra"><b>Reclassificação fica registrada</b>Quando a baixa no PDV saiu com a forma errada, o lançamento pode ser transferido aqui para a forma certa, com justificativa, autor e hora. Como o caixa fechado não aceita correção no PDV, esse ajuste é o registro oficial da conciliação e fica guardado com o painel.</div>
+      <div class="regra"><b>Até R$ 1,00 é conciliado</b>Diferença de até R$ 1,00 para mais ou para menos entre o PDV e a máquina fecha, no lançamento e no dia. Acima disso é divergência.</div>
       <div class="regra"><b>Aguardar não é divergir</b>Venda depois da última data do extrato fica como "aguarda extrato", fora do Δ e fora da contagem de casos.</div>
     </div>
   </section>
@@ -200,6 +201,8 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
 <script>
 const D0 = /*DADOS*/;
 let D = JSON.parse(JSON.stringify(D0));
+const TOL = 1.004;  // até R$ 1,00 para mais ou para menos é conciliado
+const aberto = d => (d.pdv_sem_par ?? 0) + (d.maq_sem_par ?? 0) + (d.nao_caiu ?? 0) + (d.servico ?? 0);
 const brl = n => (n ?? 0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const dBR = s => s ? s.slice(8,10)+"/"+s.slice(5,7) : "";
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -213,7 +216,7 @@ const sum = (arr, f) => arr.reduce((a,x) => a + Math.round((f(x) ?? 0)*100), 0) 
 function statusLoja(l){
   const m = M(l);
   if(!m.tem_maq) return {s:"aguarda", t:"aguarda relatório"};
-  const diverg = m.dias.some(d => (d.pdv_sem_par ?? 0) > 0.004 || (d.maq_sem_par ?? 0) > 0.004 || (d.nao_caiu ?? 0) > 0.004 || (d.servico ?? 0) > 0.004) || m.pendencias.some(p => !p.ajuste && !p.comanda && /SEM PAR|FORMA|NÃO CAIU|BANCO SEM|SERVIÇO/.test(p.status));
+  const diverg = m.dias.some(d => aberto(d) > TOL) || m.pendencias.some(p => !p.ajuste && !p.comanda && p.valor > TOL && /SEM PAR|FORMA|NÃO CAIU|BANCO SEM|SERVIÇO/.test(p.status));
   if(diverg) return {s:"erro", t:"divergência"};
   if(tab !== "pix") return {s:"ok", t:"PDV = máquina"};
   if(!m.tem_banco) return {s:"pendente", t:"sem extrato"};
@@ -277,7 +280,7 @@ function lojas(){
 
 function tone(d){
   if(d.maq===undefined) return "aguarda";
-  if((d.pdv_sem_par ?? 0)>0.004 || (d.maq_sem_par ?? 0)>0.004 || (d.nao_caiu ?? 0)>0.004 || (d.servico ?? 0)>0.004) return "erro";
+  if(aberto(d) > TOL) return "erro";
   if(tab !== "pix") return "ok";
   if(d.banco===undefined || (d.aguarda ?? 0)>0.004) return "pendente";
   return "ok";
@@ -300,7 +303,7 @@ function detalhe(){
   const m = M(l), st = statusLoja(l);
   const pdv = sum(m.dias,d=>d.pdv), maq = sum(m.dias,d=>d.maq), banco = sum(m.dias,d=>d.banco), ag = sum(m.dias,d=>d.aguarda);
   const aberto = sum(m.dias, d => (d.pdv_sem_par ?? 0) + (d.maq_sem_par ?? 0) + (d.nao_caiu ?? 0) + (d.servico ?? 0));
-  const nCasos = m.pendencias.filter(p=>p.status!=="AGUARDA EXTRATO" && !p.ajuste && !p.comanda).length;
+  const nCasos = m.pendencias.filter(p=>p.status!=="AGUARDA EXTRATO" && !p.ajuste && !p.comanda && p.valor > TOL).length;
   let html = `<div class="det-head"><h3>${esc(l.nome)} · ${TABS[tab]}</h3><span class="meta">${l.ec?`EC ${l.ec} · `:""}${dBR(D.de)} a ${dBR(D.ate)} · <span class="chip" data-s="${st.s}">${st.t}</span></span></div>`;
   if(!m.tem_maq){
     const semBanco = sum(m.dias, d => d.sem_banco);
@@ -321,7 +324,7 @@ function detalhe(){
     const podeAjustar = !!dbRef && podeEscrever !== false;
     html += `<h2>Pendências · ${m.pendencias.length}</h2><ul class="pend" id="pend">` + m.pendencias.map((p,i) => {
       const key = Object.keys(EXPL).find(k => p.status.startsWith(k)) || "";
-      const s = p.ajuste ? "ajuste" : p.comanda ? "ok" : /AGUARDA/.test(p.status) ? "pendente" : "erro";
+      const s = p.ajuste ? "ajuste" : (p.comanda || p.valor <= TOL) ? "ok" : /AGUARDA/.test(p.status) ? "pendente" : "erro";
       let acoes = "";
       if(p.ajuste){
         const a = p.ajuste, dt = a.criado_em ? new Date(a.criado_em).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";

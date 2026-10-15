@@ -26,6 +26,7 @@ valor, no mesmo dia ou no dia anterior, que também não tenha par no PDV. Se ac
 HORA_VIRADA = 6  # cupom antes dessa hora conta no dia calendário seguinte
 JANELA_ANTES_MIN, JANELA_DEPOIS_H = 30, 36  # PDV pode fechar o cupom antes/depois do PIX na máquina
 GRUPO_MAX, GRUPO_CAND, GRUPO_ESPALHA_H = 4, 24, 3  # conta dividida: até 4 por grupo, todos em até 3 h
+TOLERANCIA_CENT = 100  # até R$ 1,00 de diferença, para mais ou para menos, fecha (Hylary)
 TAXA_SERVICO = 0.10  # restaurante: a máquina cobra o cupom + 10% de serviço, o PDV registra só o cupom
 CARTAO_PDV = ("CARTAO CREDITO", "CARTAO DEBITO", "TEF - CREDITO", "TEF - DEBITO")
 import sys
@@ -115,6 +116,26 @@ def casa_servico(res: pd.DataFrame, sobra: pd.DataFrame) -> tuple[pd.DataFrame, 
         m = sobra.loc[j]
         res.loc[i, ["Status", "Hora maq", "Dia maq", "Autorização", "Terminal", "Comprovante", "Canal", "Dif. hora (min)", "Serviço (R$)"]] = [
             f"SERVIÇO NÃO BAIXADO · máquina cobrou R$ {m['cent']/100:.2f} (+{TAXA_SERVICO:.0%}), PDV fechou sem a taxa", m["dt"].strftime("%H:%M:%S"), m["Data"],
+            str(m["Cód. de autorização"]), str(m["Número do terminal"]), str(m["Comprovante de venda"]), str(m["Canal"]),
+            round((a["dt_pdv"] - m["dt"]).total_seconds() / 60), (m["cent"] - a["cent"]) / 100]
+    return res, sobra[~sobra.index.isin(usados)]
+
+
+def casa_tolerancia(res: pd.DataFrame, sobra: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Último passo: cupom sem par × venda sem par com diferença de até TOLERANCIA_CENT, na janela."""
+    if not len(res) or not len(sobra):
+        return res, sobra
+    usados: set = set()
+    for i, a in res[res["Status"] == "SEM PAR NA MAQUININHA"].iterrows():
+        dif = (a["dt_pdv"] - sobra["dt"]).dt.total_seconds() / 60
+        c = sobra[((sobra["cent"] - a["cent"]).abs() <= TOLERANCIA_CENT) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados))]
+        if len(c) == 0:
+            continue
+        j = ((c["cent"] - a["cent"]).abs() * 1e6 + (c["dt"] - a["dt_pdv"]).abs().dt.total_seconds()).idxmin()
+        usados.add(j)
+        m = sobra.loc[j]
+        res.loc[i, ["Status", "Hora maq", "Dia maq", "Autorização", "Terminal", "Comprovante", "Canal", "Dif. hora (min)", "Dif. valor (R$)"]] = [
+            f"CONCILIADO (dif. R$ {(m['cent'] - a['cent'])/100:+.2f})", m["dt"].strftime("%H:%M:%S"), m["Data"],
             str(m["Cód. de autorização"]), str(m["Número do terminal"]), str(m["Comprovante de venda"]), str(m["Canal"]),
             round((a["dt_pdv"] - m["dt"]).total_seconds() / 60), (m["cent"] - a["cent"]) / 100]
     return res, sobra[~sobra.index.isin(usados)]
@@ -229,6 +250,7 @@ def main() -> None:
         res, sobra = casa(p, ok)
         res, sobra = casa_servico(res, sobra)
         res, sobra = casa_grupos(res, sobra)
+        res, sobra = casa_tolerancia(res, sobra)
         res["EC"] = ec
         res = caca_forma_errada(res, df, cartao_pdv[cartao_pdv["Filial"] == filial])
         sobra["Filial"] = filial
@@ -247,6 +269,7 @@ def main() -> None:
                 "PIX maquininha (qtd)": int((ok["Data"] == dia).sum()), "PIX maquininha (R$)": maq_dia / 100,
                 "Conciliado (R$)": conc / 100,
                 "Serviço não baixado (R$)": round(float(servico), 2),
+                "Diferença tolerada (R$)": round(float(g["Dif. valor (R$)"].sum()), 2) if "Dif. valor (R$)" in g.columns else 0.0,
                 "PDV sem par (R$)": sem_par / 100,
                 "Maquininha sem par (R$)": sobra_dia / 100,
                 "Δ PDV − maquininha (R$)": (g["cent"].sum() - maq_dia) / 100,
@@ -268,7 +291,7 @@ def main() -> None:
     rec = pd.concat(recusados, ignore_index=True)
 
     col_pdv = ["Filial", "EC", "Data", "Dia movimento", "Hora", "Cupom", "Caixa", "Desc. pagam.", "Vl. pagamento",
-               "Status", "Hora maq", "Dia maq", "Dif. hora (min)", "Autorização", "Terminal", "Comprovante", "Canal", "Serviço (R$)"]
+               "Status", "Hora maq", "Dia maq", "Dif. hora (min)", "Autorização", "Terminal", "Comprovante", "Canal", "Serviço (R$)", "Dif. valor (R$)"]
     col_maq = ["Filial", "EC", "Data", "dt", "Cód. de autorização", "Valor Bruto", "Status",
                "Número do terminal", "Comprovante de venda", "Canal"]
     d0, d1 = resumo["Data"].min(), resumo["Data"].max()

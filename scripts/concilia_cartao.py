@@ -16,7 +16,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-from concilia_pix import HORA_VIRADA, TAXA_SERVICO, carrega_lojas  # noqa: E402
+from concilia_pix import HORA_VIRADA, TAXA_SERVICO, TOLERANCIA_CENT, carrega_lojas  # noqa: E402
 from pdv_pix import ler_pdv  # noqa: E402
 from portal_sicredi import ler_portal  # noqa: E402
 
@@ -48,6 +48,10 @@ def casa(maq: pd.DataFrame, pdv: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
                        "Cupom": a["Cupom"], "Caixa": a["Caixa"], "Forma PDV": a["Desc. pagam."],
                        "Dif. hora (min)": round((a["dt_pdv"] - m["dt"]).total_seconds() / 60)})
     res = pd.DataFrame(linhas)
+    for c in ("Dia PDV", "Hora PDV", "Cupom", "Caixa", "Forma PDV", "Dif. hora (min)", "Serviço (R$)", "Dif. valor (R$)"):
+        if c not in res.columns:
+            res[c] = None
+    res["Dia PDV"] = res["Dia PDV"].astype(object)
     sobra = pdv[~pdv.index.isin(usados)].copy()
     # cupom + 10% de serviço: máquina sem par = cupom sem par × 1,10, mesma janela
     if len(res) and len(sobra):
@@ -65,6 +69,22 @@ def casa(maq: pd.DataFrame, pdv: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
                 a["Cupom"], a["Caixa"], a["Desc. pagam."], round((a["dt_pdv"] - pd.Timestamp(f"{m['Data']} {m['Hora maq']}")).total_seconds() / 60),
                 (m["cent"] - a["cent"]) / 100]
         sobra = sobra[~sobra.index.isin(usados_p)]
+    # tolerância: até R$ 1,00 de diferença fecha
+    if len(res) and len(sobra):
+        usados_t: set = set()
+        for i, m in res[res["Status"] == "MAQUININHA SEM PAR NO PDV"].iterrows():
+            tm = pd.Timestamp(f"{m['Data']} {m['Hora maq']}")
+            dif = (sobra["dt_pdv"] - tm).dt.total_seconds() / 60
+            c = sobra[((sobra["cent"] - m["cent"]).abs() <= TOLERANCIA_CENT) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados_t))]
+            if len(c) == 0:
+                continue
+            j = ((c["cent"] - m["cent"]).abs() * 1e6 + (c["dt_pdv"] - tm).abs().dt.total_seconds()).idxmin()
+            usados_t.add(j)
+            a = sobra.loc[j]
+            res.loc[i, ["Status", "Dia PDV", "Hora PDV", "Cupom", "Caixa", "Forma PDV", "Dif. hora (min)", "Dif. valor (R$)"]] = [
+                f"CONCILIADO (dif. R$ {(m['cent'] - a['cent'])/100:+.2f})", a["Data"], a["dt_pdv"].strftime("%H:%M"), a["Cupom"], a["Caixa"], a["Desc. pagam."],
+                round((a["dt_pdv"] - tm).total_seconds() / 60), (m["cent"] - a["cent"]) / 100]
+        sobra = sobra[~sobra.index.isin(usados_t)]
     return res, sobra
 
 
@@ -94,6 +114,7 @@ def roda(mod: str, bruto: pd.DataFrame, portais: list[str], lojas: dict) -> None
                            "MDR (R$)": round(m["Valor da taxa (MDR)"].sum(), 2), "Líquido (R$)": round(m["Valor líquido"].sum(), 2),
                            "Casado (R$)": r[r["Status"].str.startswith("CONCILIADO")]["cent"].sum() / 100,
                            "Serviço não baixado (R$)": round(float(r["Serviço (R$)"].sum()), 2) if "Serviço (R$)" in r.columns else 0.0,
+                           "Diferença tolerada (R$)": round(float(r["Dif. valor (R$)"].sum()), 2) if "Dif. valor (R$)" in r.columns else 0.0,
                            "Maquininha sem par (R$)": r[~r["Status"].str.startswith("CONCILIADO") & ~r["Status"].str.startswith("SERVIÇO")]["cent"].sum() / 100,
                            "PDV sem par (R$)": sobra[sobra["Data"] == dia]["cent"].sum() / 100,
                            "Δ PDV − maquininha (R$)": (q["cent"].sum() - m["cent"].sum()) / 100})
@@ -104,7 +125,7 @@ def roda(mod: str, bruto: pd.DataFrame, portais: list[str], lojas: dict) -> None
     res = pd.concat(todas, ignore_index=True); resumo = pd.DataFrame(resumo); sobra = pd.concat(sobras, ignore_index=True)
     out = RAIZ / "saida" / f"concilia_{mod}_{resumo['Data'].min():%Y-%m-%d}_a_{resumo['Data'].max():%Y-%m-%d}.xlsx"
     cols = ["Filial", "EC", "Data", "Hora maq", "Bandeira", "Canal", "Valor Bruto", "MDR", "Líquido", "Terminal", "Autorização",
-            "Status", "Dia PDV", "Hora PDV", "Cupom", "Caixa", "Forma PDV", "Dif. hora (min)", "Serviço (R$)"]
+            "Status", "Dia PDV", "Hora PDV", "Cupom", "Caixa", "Forma PDV", "Dif. hora (min)", "Serviço (R$)", "Dif. valor (R$)"]
     cols_p = ["Filial", "EC", "Data", "Dia movimento", "Hora", "Cupom", "Caixa", "Desc. pagam.", "Vl. pagamento"]
     with pd.ExcelWriter(out) as xw:
         resumo.to_excel(xw, sheet_name="Resumo loja x dia", index=False)
