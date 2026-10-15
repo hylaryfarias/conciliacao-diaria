@@ -39,3 +39,13 @@ como **"aguarda extrato"**, nunca como divergência.
   seguinte e às vezes com a forma errada. A TEF (terminal TFI…) bate hora a hora.
 - **PIX só existe pela máquina** (QR code/TEF). PIX do PDV sem par na máquina → procurar cartão
   órfão de mesmo valor em D ou D−1 (o motor já faz e marca "PROVÁVEL FORMA ERRADA").
+
+## Painel
+
+```bash
+python3 scripts/gera_painel.py entrada/<pdv_cupons>.xlsx --de 2026-10-08 --ate 2026-10-14
+```
+
+Lê as planilhas de `saida/` e grava `painel/index.html` (template em `painel/template.html`,
+cores e tipografia do Manual de Identidade Visual · Grupo Ragga). Publicado em
+https://claude.ai/artifact/8hmLnVrM6CiE3omwzP7oms — republicar a cada rodada.
