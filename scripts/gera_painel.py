@@ -234,7 +234,19 @@ def main() -> None:
                 pend.append({"etapa": 2, "data": q["Data"].isoformat(), "valor": r2(q["Valor"]), "ref": f"{q['Ref']} · {str(q['dt'])[11:16]}", "status": str(q["Status"]), "detalhe": ""})
         if len(e2s):
             for _, q in e2s[e2s["Loja"] == filial].iterrows():
-                pend.append({"etapa": 2, "data": q["Data"].isoformat(), "valor": r2(q["Valor"]), "ref": str(q["Descrição"]), "status": "BANCO SEM VENDA", "detalhe": ""})
+                item = {"etapa": 2, "data": q["Data"].isoformat(), "valor": r2(q["Valor"]), "ref": str(q["Descrição"]), "status": str(q.get("Classificação", "BANCO SEM VENDA")), "detalhe": str(q.get("Evidência", "")), "banco": True}
+                cp = str(q.get("Cupom PDV", "")).replace(".0", "")
+                if cp and cp != "nan":
+                    item["cupom_pago"] = cp
+                    for pp in pend:
+                        if pp.get("cupom") == cp and pp["status"].startswith("SEM PAR"):
+                            pp["status"] = "CONCILIADO COM O BANCO · máquina não registrou"; pp["detalhe"] = f"PIX de R$ {r2(q['Valor']):.2f} entrou na conta em {q['Data']:%d/%m} ({str(q['Descrição'])[16:]})"; pp["comanda"] = True
+                    for row in dias:
+                        for r in row.get("lanc", []):
+                            if r.get("c") == cp and str(r.get("s", "")).startswith("SEM PAR"):
+                                r["s"] = "CONCILIADO COM O BANCO"; r["cr"] = q["Data"].isoformat(); r["pg"] = str(q["Descrição"])[16:]
+                                row["pdv_sem_par"] = r2(max(0, row.get("pdv_sem_par", 0) - r["v"]))
+                pend.append(item)
         for row in dias:
             pend = aplica_comanda(filial, "pix", pd.Timestamp(row["data"]).date(), row, pend)
         mods["pix"] = {"tem_maq": any("maq" in r for r in dias), "tem_banco": any("banco" in r for r in dias), "dias": dias, "pendencias": sorted(pend, key=lambda q: (q["etapa"], q["data"]))}

@@ -14,6 +14,7 @@ Casamento: mesma loja, mesmo valor, crédito na data da venda ou na primeira dat
 posterior em que há crédito. Venda posterior à última data do extrato = "AGUARDA EXTRATO",
 que não é divergência.
 """
+import glob
 import sys
 from pathlib import Path
 
@@ -53,13 +54,72 @@ def ler_extrato(caminho: str, filiais_pdv=()) -> pd.DataFrame:
     return ex.reset_index(drop=True)
 
 
+def ler_devolucoes(caminho: str, filiais_pdv=()) -> pd.DataFrame:
+    """DEVOLUCAO PIX: a loja devolveu um PIX ao cliente (pagamento em duplicidade, em geral)."""
+    wb = CalamineWorkbook.from_path(caminho)
+    rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
+    h = next(i for i, r in enumerate(rows) if "Descrição" in r)
+    ex = pd.DataFrame(rows[h + 1 :], columns=rows[h])
+    ex = ex[ex["Descrição"].astype(str).str.upper().str.startswith("DEVOLUCAO PIX")].copy()
+    ex["Valor"] = pd.to_numeric(ex["Valor"], errors="coerce").fillna(0)
+    ex["cent"] = (ex["Valor"].abs() * 100).round().astype(int)
+    ex["Data"] = pd.to_datetime(ex["Data"]).dt.date
+    ex["doc"] = ex["Descrição"].str.extract(r"DEVOLUCAO PIX (\d+)")[0]
+    mapa = {chave_loja(f): f for f in filiais_pdv}
+    ex["Loja"] = ex["Loja"].map(lambda x: mapa.get(chave_loja(x), str(x)))
+    return ex.reset_index(drop=True)
+
+
+def pdv_sem_par_pix() -> pd.DataFrame:
+    """Baixas PIX do PDV que ficaram sem par na máquina (etapa 1), para casar direto com o banco."""
+    fs = sorted(glob.glob(str(RAIZ / "saida" / "concilia_pix_2*.xlsx")))
+    if not fs:
+        return pd.DataFrame()
+    df = pd.concat([pd.read_excel(f, sheet_name="PDV sem par") for f in fs], ignore_index=True)
+    df = df[df["Status"].astype(str).str.startswith("SEM PAR")].copy()
+    df["Data"] = pd.to_datetime(df["Data"]).dt.date
+    df["cent"] = (pd.to_numeric(df["Vl. pagamento"]) * 100).round().astype(int)
+    return df
+
+
+def classifica_sobra(sobra: pd.DataFrame, vendas: pd.DataFrame, devol: pd.DataFrame) -> pd.DataFrame:
+    """Crédito sem venda própria: duplicidade (há venda de mesmo valor na loja, já paga por outro crédito),
+    devolvido (há DEVOLUCAO PIX do mesmo pagador e valor) ou outra natureza."""
+    sobra = sobra.copy()
+    sobra["doc"] = sobra["Descrição"].str.extract(r"RECEBIMENTO PIX (\d+)")[0]
+    sp = pdv_sem_par_pix()
+    usados_sp: set = set()
+    cls, evid, cupons = [], [], []
+    for _, x in sobra.iterrows():
+        d = x["Data"]
+        dias = {d - pd.Timedelta(days=k) for k in range(0, 4)}
+        v = vendas[(vendas["Filial"] == x["Loja"]) & (vendas["cent"] == x["cent"]) & (vendas["Data"].isin(dias))]
+        dv = devol[(devol["Loja"] == x["Loja"]) & (devol["cent"] == x["cent"]) & (devol["doc"] == x["doc"]) & (devol["Data"] >= d)]
+        c = sp[(sp["Filial"] == x["Loja"]) & (sp["cent"] == x["cent"]) & (sp["Data"].isin(dias)) & (~sp.index.isin(usados_sp))] if len(sp) else sp
+        if len(dv):
+            cls.append("PIX EM DUPLICIDADE · DEVOLVIDO"); evid.append(f"devolvido em {dv['Data'].iloc[0]:%d/%m} ao mesmo pagador")
+        elif len(c):
+            j = c.index[0]; usados_sp.add(j); r = sp.loc[j]
+            cls.append("PIX PAGO · MÁQUINA NÃO REGISTROU"); evid.append(f"baixa PIX no PDV: cupom {r['Cupom']} de {r['Data']:%d/%m} {str(r['Hora'])[:5]} ({r['Caixa']}), sem aprovação na máquina"); cupons.append(str(r["Cupom"]))
+        elif len(v):
+            r = v.iloc[0]
+            cls.append("PIX EM DUPLICIDADE · A DEVOLVER"); evid.append(f"venda de mesmo valor em {r['Data']:%d/%m} {r['dt']:%H:%M} ({r['Fonte']}, {r['Ref']}) já paga por outro crédito")
+        else:
+            cls.append("OUTRA NATUREZA"); evid.append("sem venda de mesmo valor na loja em 4 dias; pagador " + ("CNPJ" if len(str(x["doc"])) == 14 else "CPF"))
+        if cls[-1] != "PIX PAGO · MÁQUINA NÃO REGISTROU":
+            cupons.append("")
+    sobra["Classificação"] = cls; sobra["Evidência"] = evid; sobra["Cupom PDV"] = cupons
+    return sobra
+
+
 def vendas_pix(pdv_arq: str, portais: list[str], lojas: dict, tef: pd.DataFrame = pd.DataFrame()) -> pd.DataFrame:
     """Uma linha por PIX vendido. Fonte = maquininha onde houver relatório; senão PDV."""
     b = ler_pdv(pdv_arq)
     b["dt_pdv"] = pd.to_datetime(b["Data"].astype(str) + " " + b["Hora"].astype(str).str[:5])
     b.loc[b["dt_pdv"].dt.hour < HORA_VIRADA, "dt_pdv"] += pd.Timedelta(days=1)
+    b["Dia movimento"] = b["Data"]
     b["Data"] = b["dt_pdv"].dt.date
-    p = pix_do_pdv(b).rename(columns={"dt_pdv": "dt"})[["Filial", "Data", "dt", "Cupom", "cent"]].assign(Fonte="PDV", Ref=lambda x: "cupom " + x["Cupom"].astype(str))
+    p = pix_do_pdv(b).rename(columns={"dt_pdv": "dt"})[["Filial", "Data", "Dia movimento", "dt", "Cupom", "cent"]].assign(Fonte="PDV", Ref=lambda x: "cupom " + x["Cupom"].astype(str))
     partes = []
     for arq in portais:
         df, meta = ler_portal(arq)
@@ -117,12 +177,13 @@ def main() -> None:
     if portais and de is None and ate is None:
         v = v[v["Fonte"] == "Maquininha"]        # período = o que o portal cobre
     if de:
-        v = v[v["Data"] >= de]
+        v = v[(v["Data"] >= de) | (v["Fonte"].eq("PDV") & (v["Dia movimento"] >= de))]
     if ate:
-        v = v[v["Data"] <= ate]
+        v = v[(v["Data"] <= ate) | (v["Fonte"].eq("PDV") & (v["Dia movimento"] <= ate))]
     d0, d1 = v["Data"].min(), v["Data"].max()
     ex = ex[(ex["Data"] >= d0) & (ex["Loja"].isin(v["Filial"].unique()))]   # só o período e as lojas com venda
     res, sobra = casa_banco(v, ex)
+    sobra = classifica_sobra(sobra, v, ler_devolucoes(ex_arq, v["Filial"].unique()))
 
     resumo = []
     for (f, d), g in res.groupby(["Filial", "Data"]):
@@ -143,11 +204,11 @@ def main() -> None:
         resumo.to_excel(xw, sheet_name="Resumo loja x dia", index=False)
         res[[c for c in cols if c in res.columns]].to_excel(xw, sheet_name="Venda x banco", index=False)
         res[res["Status"] != "CONCILIADO"][[c for c in cols if c in res.columns]].to_excel(xw, sheet_name="Pendências", index=False)
-        sobra[["Loja", "Data", "Descrição", "Valor"]].sort_values(["Loja", "Data"]).to_excel(xw, sheet_name="Banco sem venda", index=False)
+        sobra[["Loja", "Data", "Descrição", "Valor", "Classificação", "Evidência", "Cupom PDV"]].sort_values(["Loja", "Data"]).to_excel(xw, sheet_name="Banco sem venda", index=False)
     n = res["Status"].value_counts()
     print(f"Vendas {d0:%d/%m}–{d1:%d/%m} · extrato até {ex['Data'].max():%d/%m}: {len(ex)} PIX R$ {ex['cent'].sum()/100:,.2f} | vendas PIX {len(res)} | "
           f"conciliado {n.get('CONCILIADO',0)} | aguarda extrato {n.get('AGUARDA EXTRATO',0)} | "
-          f"não caiu {n.get('NÃO CAIU NO BANCO',0)} | PDV sem par no banco {int(res['Status'].str.startswith('SEM PAR NO BANCO').sum())} | banco sem venda {len(sobra)}")
+          f"não caiu {n.get('NÃO CAIU NO BANCO',0)} | PDV sem par no banco {int(res['Status'].str.startswith('SEM PAR NO BANCO').sum())} | banco sem venda {len(sobra)} {sobra['Classificação'].value_counts().to_dict() if len(sobra) else ''}")
     print(f"gravado em {out}\n")
     print(resumo.to_string(index=False))
 

@@ -48,6 +48,12 @@ como **"aguarda extrato"**, nunca como divergência.
   divisão de formas diferente nos dois lados. O painel marca "conciliado por total da comanda".
 - **Conta dividida** (motor, automático): cupom sem par procura (b) um grupo de 2 a 4 PIX, todos em até 3 h, cuja soma bate o cupom; (c) o inverso, um PIX que
   paga 2 a 4 cupons fechados em até 3 h. Janela larga demais nos grupos gera par falso.
+- **PIX a mais no banco não trava a venda.** Crédito "Vendas no Pix" sem venda própria é classificado:
+  (a) PIX PAGO · MÁQUINA NÃO REGISTROU — há baixa PIX no PDV sem par na máquina com o mesmo valor:
+  a máquina recusou/cancelou, o PIX entrou, o cupom fecha contra o banco; (b) PIX EM DUPLICIDADE —
+  o valor já foi pago por outro crédito: cliente pagou duas vezes, devolver (ou DEVOLVIDO quando há
+  DEVOLUCAO PIX do mesmo pagador no extrato); (c) OUTRA NATUREZA — sem venda de mesmo valor.
+  Janela das vendas do PDV passa a ser por dia de movimento (madrugada do último dia entra).
 - **Sobras dos dois lados se compensam** (Hylary): baixa no PDV sem par e venda na máquina sem par
   são pagamento parcial de comanda. O painel abre o dia só pelo líquido |PDV sem par − máquina sem par|
   e mostra as duas listas em amarelo, para consulta.
