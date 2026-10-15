@@ -40,6 +40,16 @@ como **"aguarda extrato"**, nunca como divergência.
 - **PIX só existe pela máquina** (QR code/TEF). PIX do PDV sem par na máquina → procurar cartão
   órfão de mesmo valor em D ou D−1 (o motor já faz e marca "PROVÁVEL FORMA ERRADA").
 
+## Crédito e débito · etapa 1
+
+```bash
+python3 scripts/concilia_cartao.py entrada/<pdv_cupons>.xlsx entrada/<portal_loja>.xlsx ...
+```
+
+Gera `saida/concilia_credito_*.xlsx` e `saida/concilia_debito_*.xlsx`: PDV × maquininha pelo
+valor bruto, cupom a cupom (PDV pode lançar de 30 min antes a 36 h depois da máquina). A ponta
+do banco (D+1 útil, MDR, antecipação) é a etapa 2, ainda não iniciada.
+
 ## Painel
 
 ```bash
