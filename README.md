@@ -37,6 +37,10 @@ como **"aguarda extrato"**, nunca como divergência.
 - **Hora do PDV é a do fechamento do cupom**, até ~80 min depois do pagamento na máquina. Só desempata.
 - **Máquinas POS (terminais APT…) não são integradas**: o caixa digita a venda, às vezes no dia
   seguinte e às vezes com a forma errada. A TEF (terminal TFI…) bate hora a hora.
+- **Conta dividida e taxa de serviço** (motor, automático): cupom sem par procura (a) um PIX de
+  valor × 1,10 na janela, que é o cupom + 10% de serviço cobrado na máquina (ISAIAS 01);
+  (b) um grupo de 2 a 4 PIX, todos em até 3 h, cuja soma bate o cupom; (c) o inverso, um PIX que
+  paga 2 a 4 cupons fechados em até 3 h. Janela larga demais nos grupos gera par falso.
 - **PIX só existe pela máquina** (QR code/TEF). PIX do PDV sem par na máquina → procurar cartão
   órfão de mesmo valor em D ou D−1 (o motor já faz e marca "PROVÁVEL FORMA ERRADA").
 

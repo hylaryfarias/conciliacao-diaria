@@ -146,7 +146,7 @@ def main() -> None:
             row["pdv_qtd"] = int(x["qtd"]) if x is not None else 0; row["pdv"] = r2(x["cent"] / 100) if x is not None else 0.0
             y = sel(e1, filial, d)
             if y is not None:
-                row.update(maq_qtd=int(y["PIX maquininha (qtd)"]), maq=r2(y["PIX maquininha (R$)"]), conc=r2(y["Conciliado (R$)"]),
+                row.update(maq_qtd=int(y["PIX maquininha (qtd)"]), maq=r2(y["PIX maquininha (R$)"]), conc=r2(y["Conciliado (R$)"]), servico=r2(y.get("Serviço 10% (R$)", 0)),
                            pdv_sem_par=r2(y["PDV sem par (R$)"]), maq_sem_par=r2(y["Maquininha sem par (R$)"]), delta=r2(y["Δ PDV − maquininha (R$)"]))
             z = sel(e2, filial, d, "Venda")
             if z is not None:

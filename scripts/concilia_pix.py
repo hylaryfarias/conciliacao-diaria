@@ -25,8 +25,11 @@ valor, no mesmo dia ou no dia anterior, que também não tenha par no PDV. Se ac
 """
 HORA_VIRADA = 6  # cupom antes dessa hora conta no dia calendário seguinte
 JANELA_ANTES_MIN, JANELA_DEPOIS_H = 30, 36  # PDV pode fechar o cupom antes/depois do PIX na máquina
+GRUPO_MAX, GRUPO_CAND, GRUPO_ESPALHA_H = 4, 24, 3  # conta dividida: até 4 por grupo, todos em até 3 h
+TAXA_SERVICO = 0.10  # restaurante: a máquina cobra o cupom + 10% de serviço, o PDV registra só o cupom
 CARTAO_PDV = ("CARTAO CREDITO", "CARTAO DEBITO", "TEF - CREDITO", "TEF - DEBITO")
 import sys
+from itertools import combinations
 from pathlib import Path
 
 import pandas as pd
@@ -77,10 +80,90 @@ def casa(pdv: pd.DataFrame, maq: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
     return pd.DataFrame(linhas), sobra
 
 
+def _subconjunto(alvo: int, cand: pd.DataFrame, ref_dt) -> list | None:
+    """Menor grupo (2..GRUPO_MAX) de linhas de `cand` cuja soma em centavos é exatamente `alvo`.
+    Empate: o grupo mais próximo no tempo de ref_dt."""
+    cand = cand.copy()
+    cand["dist"] = (cand["dt"] - ref_dt).abs().dt.total_seconds()
+    cand = cand.sort_values("dist").head(GRUPO_CAND)
+    idx, cents, dist, dts = list(cand.index), list(cand["cent"]), list(cand["dist"]), list(cand["dt"])
+    for k in range(2, min(GRUPO_MAX, len(idx)) + 1):
+        melhor = None
+        for comb in combinations(range(len(idx)), k):
+            if sum(cents[i] for i in comb) == alvo and (max(dts[i] for i in comb) - min(dts[i] for i in comb)) <= pd.Timedelta(hours=GRUPO_ESPALHA_H):
+                d = sum(dist[i] for i in comb)
+                if melhor is None or d < melhor[0]:
+                    melhor = (d, [idx[i] for i in comb])
+        if melhor:
+            return melhor[1]
+    return None
+
+
+def casa_servico(res: pd.DataFrame, sobra: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Cupom sem par cujo valor × (1 + TAXA_SERVICO) bate exato com um PIX sem par na janela."""
+    if not len(res) or not len(sobra):
+        return res, sobra
+    usados: set = set()
+    for i, a in res[res["Status"] == "SEM PAR NA MAQUININHA"].iterrows():
+        alvo = int(round(a["cent"] * (1 + TAXA_SERVICO)))
+        dif = (a["dt_pdv"] - sobra["dt"]).dt.total_seconds() / 60
+        cand = sobra[(sobra["cent"] == alvo) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados))]
+        if len(cand) == 0:
+            continue
+        j = (cand["dt"] - a["dt_pdv"]).abs().idxmin()
+        usados.add(j)
+        m = sobra.loc[j]
+        res.loc[i, ["Status", "Hora maq", "Dia maq", "Autorização", "Terminal", "Comprovante", "Canal", "Dif. hora (min)", "Serviço (R$)"]] = [
+            f"CONCILIADO (+{TAXA_SERVICO:.0%} serviço · máquina R$ {m['cent']/100:.2f})", m["dt"].strftime("%H:%M:%S"), m["Data"],
+            str(m["Cód. de autorização"]), str(m["Número do terminal"]), str(m["Comprovante de venda"]), str(m["Canal"]),
+            round((a["dt_pdv"] - m["dt"]).total_seconds() / 60), (m["cent"] - a["cent"]) / 100]
+    return res, sobra[~sobra.index.isin(usados)]
+
+
+def casa_grupos(res: pd.DataFrame, sobra: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Conta dividida. 1:N — um cupom pago por vários PIX na máquina; N:1 — um PIX que paga vários cupons."""
+    if not len(res) or not len(sobra):
+        return res, sobra
+    usados: set = set()
+    pend = res[res["Status"] == "SEM PAR NA MAQUININHA"].sort_values("cent", ascending=False)
+    # 1 cupom : N PIX
+    for i, a in pend.iterrows():
+        dif = (a["dt_pdv"] - sobra["dt"]).dt.total_seconds() / 60
+        cand = sobra[(dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados)) & (sobra["cent"] < a["cent"])]
+        g = _subconjunto(int(a["cent"]), cand, a["dt_pdv"]) if len(cand) >= 2 else None
+        if not g:
+            continue
+        usados.update(g)
+        m = sobra.loc[g].sort_values("dt")
+        res.loc[i, ["Status", "Hora maq", "Dia maq", "Autorização", "Terminal", "Comprovante", "Canal", "Dif. hora (min)"]] = [
+            f"CONCILIADO (grupo 1:{len(g)})", m["dt"].iloc[0].strftime("%H:%M:%S"), m["Data"].iloc[0],
+            " + ".join(str(x) for x in m["Cód. de autorização"]), " + ".join(str(x) for x in m["Número do terminal"].unique()),
+            " + ".join(str(x) for x in m["Comprovante de venda"]), " + ".join(str(x) for x in m["Canal"].unique()),
+            round((a["dt_pdv"] - m["dt"].iloc[0]).total_seconds() / 60)]
+    sobra = sobra[~sobra.index.isin(usados)]
+    # N cupons : 1 PIX
+    usados_p: set = set()
+    usados_m: set = set()
+    pend = res[res["Status"] == "SEM PAR NA MAQUININHA"]
+    for j, m in sobra.sort_values("cent", ascending=False).iterrows():
+        dif = (pend["dt_pdv"] - m["dt"]).dt.total_seconds() / 60
+        cand = pend[(dif >= -JANELA_ANTES_MIN) & (dif <= GRUPO_ESPALHA_H * 60) & (~pend.index.isin(usados_p)) & (pend["cent"] < m["cent"])].rename(columns={"dt_pdv": "dt"})
+        g = _subconjunto(int(m["cent"]), cand, m["dt"]) if len(cand) >= 2 else None
+        if not g:
+            continue
+        usados_p.update(g); usados_m.add(j)
+        for i in g:
+            res.loc[i, ["Status", "Hora maq", "Dia maq", "Autorização", "Terminal", "Comprovante", "Canal", "Dif. hora (min)"]] = [
+                f"CONCILIADO (grupo {len(g)}:1 · PIX de R$ {m['cent']/100:.2f})", m["dt"].strftime("%H:%M:%S"), m["Data"],
+                str(m["Cód. de autorização"]), str(m["Número do terminal"]), str(m["Comprovante de venda"]), str(m["Canal"]),
+                round((res.loc[i, "dt_pdv"] - m["dt"]).total_seconds() / 60)]
+    return res, sobra[~sobra.index.isin(usados_m)]
+
+
 def caca_forma_errada(res: pd.DataFrame, maq: pd.DataFrame, cartao_pdv: pd.DataFrame) -> pd.DataFrame:
     """Para cada PIX do PDV sem par, procura cartão aprovado na máquina (D ou D-1), mesmo valor,
     que também não tenha par no PDV. Órfão com órfão de mesmo valor = provável forma errada."""
-    if "Status" not in res.columns or (res["Status"] == "CONCILIADO").all():
+    if "Status" not in res.columns or res["Status"].str.startswith("CONCILIADO").all():
         return res
     cart_m = maq[maq["Modalidade"].isin(["Crédito", "Débito"]) & (maq["Status"].str.upper() == "APROVADA")]
     usados: set = set()
@@ -92,7 +175,7 @@ def caca_forma_errada(res: pd.DataFrame, maq: pd.DataFrame, cartao_pdv: pd.DataF
             usados.add((c["dt_pdv"] - x["dt"]).abs().idxmin())
     orfaos = cart_m[~cart_m.index.isin(usados)].copy()  # cartão na máquina sem lançamento no PDV
     usados_m: set = set()
-    for i, a in res[res["Status"] != "CONCILIADO"].iterrows():
+    for i, a in res[res["Status"] == "SEM PAR NA MAQUININHA"].iterrows():
         dias = {a["Data"], a["Data"] - pd.Timedelta(days=1)}
         c = orfaos[(orfaos["cent"] == a["cent"]) & (orfaos["Data"].isin(dias)) & (~orfaos.index.isin(usados_m))]
         if len(c) == 0:
@@ -144,6 +227,8 @@ def main() -> None:
         p = pdv_all[(pdv_all["Filial"] == filial) & (pdv_all["Data"] >= d0) & (pdv_all["Data"] <= d1)]
 
         res, sobra = casa(p, ok)
+        res, sobra = casa_servico(res, sobra)
+        res, sobra = casa_grupos(res, sobra)
         res["EC"] = ec
         res = caca_forma_errada(res, df, cartao_pdv[cartao_pdv["Filial"] == filial])
         sobra["Filial"] = filial
@@ -151,8 +236,9 @@ def main() -> None:
         todas.append(res); sobras.append(sobra); recusados.append(rec)
 
         for dia, g in res.groupby("Data"):
-            conc = g[g["Status"] == "CONCILIADO"]["cent"].sum()
-            sem_par = g[g["Status"] != "CONCILIADO"]["cent"].sum()
+            conc = g[g["Status"].str.startswith("CONCILIADO")]["cent"].sum()
+            servico = g["Serviço (R$)"].sum() if "Serviço (R$)" in g.columns else 0.0
+            sem_par = g[~g["Status"].str.startswith("CONCILIADO")]["cent"].sum()
             maq_dia = ok[ok["Data"] == dia]["cent"].sum()
             sobra_dia = sobra[sobra["Data"] == dia]["cent"].sum()
             resumo.append({
@@ -160,6 +246,7 @@ def main() -> None:
                 "PIX PDV (qtd)": len(g), "PIX PDV (R$)": g["cent"].sum() / 100,
                 "PIX maquininha (qtd)": int((ok["Data"] == dia).sum()), "PIX maquininha (R$)": maq_dia / 100,
                 "Conciliado (R$)": conc / 100,
+                "Serviço 10% (R$)": round(float(servico), 2),
                 "PDV sem par (R$)": sem_par / 100,
                 "Maquininha sem par (R$)": sobra_dia / 100,
                 "Δ PDV − maquininha (R$)": (g["cent"].sum() - maq_dia) / 100,
@@ -173,7 +260,7 @@ def main() -> None:
                            "Δ PDV − maquininha (R$)": -maq_dia / 100})
         print(f"{filial} (EC {ec}) {d0:%d/%m}–{d1:%d/%m}: PDV {len(p)} PIX R$ {p['cent'].sum()/100:,.2f} | "
               f"maquininha {len(ok)} PIX R$ {ok['cent'].sum()/100:,.2f} | "
-              f"sem par PDV {int((res['Status']!='CONCILIADO').sum())} | sem par maq {len(sobra)} | recusados {len(rec)}")
+              f"sem par PDV {int((~res['Status'].str.startswith('CONCILIADO')).sum())} | serviço {int(res['Status'].str.contains('serviço').sum())} | grupos {int(res['Status'].str.contains('grupo').sum())} | sem par maq {len(sobra)} | recusados {len(rec)}")
 
     res = pd.concat(todas, ignore_index=True)
     resumo = pd.DataFrame(resumo).sort_values(["Filial", "Data"])
@@ -181,7 +268,7 @@ def main() -> None:
     rec = pd.concat(recusados, ignore_index=True)
 
     col_pdv = ["Filial", "EC", "Data", "Dia movimento", "Hora", "Cupom", "Caixa", "Desc. pagam.", "Vl. pagamento",
-               "Status", "Hora maq", "Dia maq", "Dif. hora (min)", "Autorização", "Terminal", "Comprovante", "Canal"]
+               "Status", "Hora maq", "Dia maq", "Dif. hora (min)", "Autorização", "Terminal", "Comprovante", "Canal", "Serviço (R$)"]
     col_maq = ["Filial", "EC", "Data", "dt", "Cód. de autorização", "Valor Bruto", "Status",
                "Número do terminal", "Comprovante de venda", "Canal"]
     d0, d1 = resumo["Data"].min(), resumo["Data"].max()
@@ -189,7 +276,7 @@ def main() -> None:
     with pd.ExcelWriter(out) as xw:
         resumo.to_excel(xw, sheet_name="Resumo loja x dia", index=False)
         res[[c for c in col_pdv if c in res.columns]].to_excel(xw, sheet_name="PDV x maquininha", index=False)
-        res[res["Status"] != "CONCILIADO"][[c for c in col_pdv if c in res.columns]].to_excel(
+        res[~res["Status"].str.startswith("CONCILIADO")][[c for c in col_pdv if c in res.columns]].to_excel(
             xw, sheet_name="PDV sem par", index=False)
         sobra[[c for c in col_maq if c in sobra.columns]].to_excel(xw, sheet_name="Maquininha sem par", index=False)
         rec[[c for c in col_maq if c in rec.columns]].to_excel(xw, sheet_name="Recusados-cancelados", index=False)
