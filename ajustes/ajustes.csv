@@ -1,0 +1,2 @@
+id,loja,de,para,data,cupom,caixa,hora,forma,valor,aut,data_maq,justificativa,criado_em
+ROBS_2026-10-12_59886_pix,ROBS,pix,credito,2026-10-12,59886,002 - RB01 - PDV 002,23:44,PIX MAQUININHA,59.50,340070,2026-10-11,"Baixa incorreta no PDV: cupom 59886 lançado como PIX MAQUININHA, venda passou na máquina como Crédito (aut. 340070, terminal APT9B81A).",2026-10-15T15:26:25Z
