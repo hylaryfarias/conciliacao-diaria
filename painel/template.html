@@ -99,6 +99,18 @@ tr.fim td{color:var(--ink-muted)} td.dia{font-weight:600} td.dia small{color:var
 td .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
 .dot[data-s="ok"]{background:var(--ok)} .dot[data-s="erro"]{background:var(--erro)} .dot[data-s="pendente"]{background:var(--pendente)} .dot[data-s="aguarda"]{background:var(--ink-muted);opacity:.5}
 tfoot td{font-weight:700;border-top:2px solid var(--rule-strong);border-bottom:0}
+td.dia button{font:inherit;font-weight:600;color:var(--gestao);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+td.dia button:focus-visible{outline:2px solid var(--gestao);outline-offset:2px;border-radius:3px}
+td.dia button::after{content:"▸";display:inline-block;margin-left:5px;font-size:10px;transition:transform .15s}
+tr[data-open="true"] td.dia button::after{transform:rotate(90deg)}
+tr.lanc>td{padding:0 0 10px;background:var(--bg-soft);white-space:normal;text-align:left}
+.lanc-wrap{overflow-x:auto;padding:8px 10px 2px}
+table.lanc-t{min-width:0;width:100%;font-size:12.5px}
+table.lanc-t th{padding:5px 7px;font-size:10px;border-bottom-color:var(--rule)} table.lanc-t td{padding:5px 7px;border-bottom:1px solid var(--rule)}
+table.lanc-t tr:last-child td{border-bottom:0}
+table.lanc-t td.st{font-size:11px;font-weight:600;white-space:nowrap} td.st[data-s="ok"]{color:var(--ok)} td.st[data-s="erro"]{color:var(--erro)} td.st[data-s="pdv"]{color:var(--ink-muted)}
+table.lanc-t td.mono{font-size:11.5px;color:var(--ink-soft)}
+.lanc-vazio{padding:10px 12px;font-size:13px;color:var(--ink-muted)}
 td.neg{color:var(--erro)}
 .vazio{padding:18px 16px 22px;color:var(--ink-soft);font-size:14px;max-width:62ch}
 .vazio b{color:var(--ink)}
@@ -240,7 +252,7 @@ function lojas(){
   document.getElementById("lojas-n").textContent = D.lojas.length;
   ul.innerHTML = lista.map(({l,st,tot}) => `<li><button class="loja" data-nome="${esc(l.nome)}" aria-pressed="${l.nome===sel}" style="--m:var(--${l.marca})">
     <span class="bar"></span><span class="nm">${esc(l.nome)}<small>${brl(tot)} em ${TABS[tab]} no PDV${l.ec?` · EC ${l.ec}`:""}</small></span><span class="chip" data-s="${st.s}">${st.t}</span></button></li>`).join("");
-  ul.querySelectorAll(".loja").forEach(b => b.addEventListener("click", () => { sel = b.dataset.nome; try{localStorage.setItem("loja",sel)}catch(e){} lojas(); detalhe(); }));
+  ul.querySelectorAll(".loja").forEach(b => b.addEventListener("click", () => { sel = b.dataset.nome; try{localStorage.setItem("loja",sel)}catch(e){} lojas(); detalhe(); ligaDias(); }));
 }
 
 function tone(d){
@@ -275,7 +287,7 @@ function detalhe(){
       : `<div class="ponta"><div class="lbl">Líquido previsto</div><div class="val">${brl(sum(m.dias,d=>d.liquido))}</div><div class="sub">MDR ${brl(sum(m.dias,d=>d.mdr))} · banco na etapa 2</div></div>`;
     html += `<div class="pontas">
       <div class="ponta"><div class="lbl">PDV</div><div class="val">${brl(pdv)}</div><div class="sub">${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)} lançamentos</div></div>
-      <div class="ponta" data-tone="${Math.abs(pdv-maq)>0.004?"erro":"ok"}"><div class="lbl">Maquininha</div><div class="val">${brl(maq)}</div><div class="sub">${m.dias.reduce((a,d)=>a+(d.maq_qtd??0),0)} aprovadas · Δ ${brl(Math.round((pdv-maq)*100)/100)}</div></div>
+      <div class="ponta" data-tone="${Math.abs(pdv-maq)>0.004?"erro":"ok"}"><div class="lbl">Maquininha</div><div class="val">${brl(maq)}</div><div class="sub">Δ PDV − máquina ${brl(Math.round((pdv-maq)*100)/100)}</div></div>
       ${bancoPonta}
       <div class="ponta" data-tone="${aberto>0.004?"erro":"ok"}"><div class="lbl">Em aberto</div><div class="val">${brl(aberto)}</div><div class="sub">${nCasos} caso${nCasos===1?"":"s"}</div></div>
     </div>`;
@@ -294,22 +306,54 @@ function detalhe(){
 function tabela(m){
   const pix = tab === "pix";
   const f = v => v===undefined ? `<span style="color:var(--ink-muted)">—</span>` : brl(v);
-  const rows = m.dias.map(d => {
+  const rows = m.dias.map((d,i) => {
     const t = tone(d), fds = d.dow==="sáb"||d.dow==="dom"||d.feriado;
     const fim = pix
       ? `<td>${f(d.banco)}</td><td>${d.credito ? d.credito.split(", ").map(dBR).join(", ") : (d.aguarda>0.004?`<span style="color:var(--pendente)">aguarda</span>`:"—")}</td>`
       : `<td>${f(d.mdr)}</td><td>${f(d.liquido)}</td>`;
-    return `<tr class="${fds?"fim":""}"><td class="dia"><span class="dot" data-s="${t}"></span>${dBR(d.data)}<small>${d.dow}${d.feriado?" · feriado":""}</small></td>
-      <td>${d.pdv_qtd}</td><td>${brl(d.pdv)}</td><td>${d.maq_qtd??"—"}</td><td>${f(d.maq)}</td>
+    return `<tr class="${fds?"fim":""}" data-i="${i}" data-open="false"><td class="dia"><span class="dot" data-s="${t}"></span><button type="button" data-i="${i}" aria-expanded="false">${dBR(d.data)}</button><small>${d.dow}${d.feriado?" · feriado":""}</small></td>
+      <td>${d.pdv_qtd}</td><td>${brl(d.pdv)}</td><td>${f(d.maq)}</td>
       <td class="${Math.abs(d.delta??0)>0.004?"neg":""}">${d.delta===undefined?"—":brl(d.delta)}</td>${fim}</tr>`;
   }).join("");
   const T = g => brl(sum(m.dias,g));
   const fimH = pix ? `<th>Banco R$</th><th>Crédito em</th>` : `<th>MDR R$</th><th>Líquido R$</th>`;
   const fimT = pix ? `<td>${m.tem_banco?T(d=>d.banco):"—"}</td><td></td>` : `<td>${m.tem_maq?T(d=>d.mdr):"—"}</td><td>${m.tem_maq?T(d=>d.liquido):"—"}</td>`;
-  return `<div class="tablewrap"><table><thead><tr><th>Dia</th><th>PDV qtd</th><th>PDV R$</th><th>Maq qtd</th><th>Maq ${pix?"":"bruto "}R$</th><th>Δ PDV−Maq</th>${fimH}</tr></thead>
-    <tbody>${rows}</tbody><tfoot><tr><td>Total</td><td>${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)}</td><td>${T(d=>d.pdv)}</td><td>${m.tem_maq?m.dias.reduce((a,d)=>a+(d.maq_qtd??0),0):"—"}</td><td>${m.tem_maq?T(d=>d.maq):"—"}</td><td class="${Math.abs(sum(m.dias,d=>d.delta))>0.004?"neg":""}">${m.tem_maq?T(d=>d.delta):"—"}</td>${fimT}</tr></tfoot></table></div>`;
+  return `<div class="tablewrap"><table id="tab-dias"><thead><tr><th>Dia</th><th>PDV qtd</th><th>PDV R$</th><th>Maq ${pix?"":"bruto "}R$</th><th>Δ PDV−Maq</th>${fimH}</tr></thead>
+    <tbody>${rows}</tbody><tfoot><tr><td>Total</td><td>${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)}</td><td>${T(d=>d.pdv)}</td><td>${m.tem_maq?T(d=>d.maq):"—"}</td><td class="${Math.abs(sum(m.dias,d=>d.delta))>0.004?"neg":""}">${m.tem_maq?T(d=>d.delta):"—"}</td>${fimT}</tr></tfoot></table></div>`;
 }
-function render(){ tabs(); kpis(); lojas(); detalhe(); }
+function lancamentos(d){
+  const pix = tab === "pix", temMaq = d.maq !== undefined;
+  const L = d.lanc || [];
+  if(!L.length) return `<div class="lanc-vazio">Nenhum lançamento de ${TABS[tab]} neste dia.</div>`;
+  const st = r => r.s==="CONCILIADO" ? ["ok","conciliado"] : r.s==="PDV" ? ["pdv","só PDV"] : ["erro", r.s.toLowerCase().replace("provável forma errada:","forma errada ·")];
+  const head = temMaq
+    ? `<th>Hora PDV</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th><th>Situação</th><th>Hora máq</th>${pix?"":"<th>Bandeira</th>"}<th>Terminal</th><th>Autorização</th>${pix?"<th>Crédito</th><th>Pagador</th>":"<th>MDR</th>"}`
+    : `<th>Hora</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th>`;
+  const rows = L.map(r => {
+    const [s,txt] = st(r);
+    const cx = (r.cx||"").replace(/^\d+ - /,"");
+    if(!temMaq) return `<tr><td>${r.h||""}</td><td>${esc(r.c||"")}</td><td class="mono">${esc(cx)}</td><td>${esc(r.f||"")}</td><td>${brl(r.v)}</td></tr>`;
+    return `<tr><td>${r.h||"—"}${r.dp?`<small style="color:var(--pendente)"> ${dBR(r.dp)}</small>`:""}</td><td>${esc(r.c||"—")}</td><td class="mono">${esc(cx)||"—"}</td><td>${esc(r.f||"—")}</td><td>${brl(r.v)}</td><td class="st" data-s="${s}">${esc(txt)}</td>
+      <td>${r.hm||"—"}</td>${pix?"":`<td>${esc(r.b||"—")}</td>`}<td class="mono">${esc(r.t||"—")}</td><td class="mono">${esc(r.a||"—")}</td>${pix?`<td>${r.cr?dBR(r.cr):"—"}</td><td class="mono">${esc(r.pg||"—")}</td>`:`<td>${r.mdr!==undefined?brl(r.mdr):"—"}</td>`}</tr>`;
+  }).join("");
+  return `<div class="lanc-wrap"><table class="lanc-t"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+let abertos = new Set();
+function ligaDias(){
+  const l = D.lojas.find(x => x.nome===sel); if(!l) return;
+  const m = M(l);
+  document.querySelectorAll("#tab-dias td.dia button").forEach(b => b.addEventListener("click", () => {
+    const i = +b.dataset.i, tr = b.closest("tr"), key = `${sel}|${tab}|${i}`;
+    const next = tr.nextElementSibling;
+    if(next && next.classList.contains("lanc")){ next.remove(); tr.dataset.open="false"; b.setAttribute("aria-expanded","false"); abertos.delete(key); return; }
+    const row = document.createElement("tr"); row.className = "lanc";
+    row.innerHTML = `<td colspan="${tr.children.length}">${lancamentos(m.dias[i])}</td>`;
+    tr.after(row); tr.dataset.open="true"; b.setAttribute("aria-expanded","true"); abertos.add(key);
+  }));
+  // reabre o que estava aberto antes de re-renderizar
+  document.querySelectorAll("#tab-dias td.dia button").forEach(b => { if(abertos.has(`${sel}|${tab}|${b.dataset.i}`)) b.click(); });
+}
+function render(){ tabs(); kpis(); lojas(); detalhe(); ligaDias(); }
 
 document.getElementById("stamp").innerHTML = `<span>Período <b>${dBR(D.de)} a ${dBR(D.ate)}/${D.ate.slice(0,4)}</b></span><span>Extrato lido até <b>${D.extrato_ate?dBR(D.extrato_ate):"—"}</b></span><span>Atualizado em ${D.gerado_em}</span>`;
 document.getElementById("rodape").textContent = `Gerado em ${D.gerado_em} · scripts/gera_painel.py`;

@@ -68,6 +68,13 @@ def main() -> None:
     e1 = le("concilia_pix_2*.xlsx", "Resumo loja x dia"); e1p = le("concilia_pix_2*.xlsx", "PDV sem par"); e1m = le("concilia_pix_2*.xlsx", "Maquininha sem par")
     e2 = le("concilia_pix_banco_*.xlsx", "Resumo loja x dia", "Venda"); e2p = le("concilia_pix_banco_*.xlsx", "Pendências"); e2s = le("concilia_pix_banco_*.xlsx", "Banco sem venda")
     cart = {m: (le(f"concilia_{m}_2*.xlsx", "Resumo loja x dia"), le(f"concilia_{m}_2*.xlsx", "Maquininha sem par"), le(f"concilia_{m}_2*.xlsx", "PDV sem par")) for m in ("credito", "debito")}
+    l1 = le("concilia_pix_2*.xlsx", "PDV x maquininha")              # linhas PIX, lado PDV
+    lb = le("concilia_pix_banco_*.xlsx", "Venda x banco")             # linhas PIX, lado banco
+    lc = {m: le(f"concilia_{m}_2*.xlsx", "Maquininha x PDV") for m in ("credito", "debito")}
+    banco_por_aut = {}
+    if len(lb):
+        for _, q in lb[lb["Status"] == "CONCILIADO"].iterrows():
+            banco_por_aut[str(q["Ref"]).replace("aut. ", "")] = (str(q["Crédito"]), str(q["Pagador"]))
     ec_de = {v: k for k, v in carrega_lojas().items()}
     extrato_ate = None
     if len(e2):
@@ -79,6 +86,48 @@ def main() -> None:
             return None
         x = df[(df["Filial"] == filial) & (df[col] == d)]
         return x.iloc[0] if len(x) else None
+
+    def hh(x):
+        x = str(x)
+        return x[11:16] if len(x) > 10 and x[10] == " " else x[:5]
+
+    def lanc_pdv(filial, m, d):
+        q = b[(b["Filial"] == filial) & (b["Data"] == d) & (b["forma"].isin(FORMAS[m]))].sort_values("dt_pdv")
+        return [{"h": hh(x["dt_pdv"]), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Desc. pagam."]), "v": r2(x["cent"] / 100), "s": "PDV"} for _, x in q.iterrows()]
+
+    def lanc_pix(filial, d):
+        if not len(l1) or not len(l1[(l1["Filial"] == filial) & (l1["Data"] == d)]):
+            return lanc_pdv(filial, "pix", d)
+        rows = []
+        for _, x in l1[(l1["Filial"] == filial) & (l1["Data"] == d)].sort_values("Hora").iterrows():
+            r = {"h": hh(x["Hora"]), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Desc. pagam."]), "v": r2(x["Vl. pagamento"]), "s": str(x["Status"])}
+            if pd.notna(x.get("Hora maq")):
+                r.update(hm=hh(x["Hora maq"]), t=str(x["Terminal"]), a=str(x["Autorização"]))
+                if str(x["Status"]) == "CONCILIADO" and str(x["Autorização"]) in banco_por_aut:
+                    r["cr"], r["pg"] = banco_por_aut[str(x["Autorização"])]
+            rows.append(r)
+        if len(e1m):
+            for _, x in e1m[(e1m["Filial"] == filial) & (e1m["Data"] == d)].iterrows():
+                rows.append({"s": "MAQUININHA SEM PAR NO PDV", "v": r2(x["Valor Bruto"]), "hm": hh(x["dt"]), "t": str(x["Número do terminal"]), "a": str(x["Cód. de autorização"])})
+        return rows
+
+    def lanc_cartao(filial, m, d):
+        L = lc[m]
+        if not len(L) or not len(L[(L["Filial"] == filial) & (L["Data"] == d)]):
+            return lanc_pdv(filial, m, d)
+        rows = []
+        for _, x in L[(L["Filial"] == filial) & (L["Data"] == d)].sort_values("Hora maq").iterrows():
+            r = {"s": str(x["Status"]), "v": r2(x["Valor Bruto"]), "hm": hh(x["Hora maq"]), "b": str(x["Bandeira"]), "t": str(x["Terminal"]), "a": str(x["Autorização"]), "mdr": r2(x["MDR"])}
+            if str(x["Status"]) == "CONCILIADO":
+                r.update(h=hh(x["Hora PDV"]), c=str(x["Cupom"]), cx=str(x["Caixa"]), f=str(x["Forma PDV"]))
+                if pd.notna(x["Dia PDV"]) and pd.to_datetime(x["Dia PDV"]).date() != d:
+                    r["dp"] = pd.to_datetime(x["Dia PDV"]).date().isoformat()
+            rows.append(r)
+        sp = cart[m][2]
+        if len(sp):
+            for _, x in sp[(sp["Filial"] == filial) & (sp["Data"] == d)].iterrows():
+                rows.append({"s": "SEM PAR NA MAQUININHA", "h": hh(x["Hora"]), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Desc. pagam."]), "v": r2(x["Vl. pagamento"])})
+        return rows
 
     lojas = []
     for filial in sorted(b["Filial"].unique()):
@@ -97,6 +146,7 @@ def main() -> None:
             if z is not None:
                 row.update(banco=r2(z["Caiu no banco (R$)"]), credito=str(z["Crédito em"]) if pd.notna(z["Crédito em"]) else "",
                            aguarda=r2(z["Aguarda extrato (R$)"]), nao_caiu=r2(z["Não caiu (R$)"]))
+            row["lanc"] = lanc_pix(filial, d)
             dias.append(row)
         if len(e1p):
             for _, q in e1p[e1p["Filial"] == filial].iterrows():
@@ -124,6 +174,7 @@ def main() -> None:
                 if y is not None:
                     row.update(maq_qtd=int(y["Maquininha (qtd)"]), maq=r2(y["Maquininha bruto (R$)"]), mdr=r2(y["MDR (R$)"]), liquido=r2(y["Líquido (R$)"]),
                                conc=r2(y["Casado (R$)"]), pdv_sem_par=r2(y["PDV sem par (R$)"]), maq_sem_par=r2(y["Maquininha sem par (R$)"]), delta=r2(y["Δ PDV − maquininha (R$)"]))
+                row["lanc"] = lanc_cartao(filial, m, d)
                 dias.append(row)
             if len(sem_m):
                 for _, q in sem_m[sem_m["Filial"] == filial].iterrows():
