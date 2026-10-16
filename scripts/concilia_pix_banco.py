@@ -22,9 +22,20 @@ import pandas as pd
 from python_calamine import CalamineWorkbook
 
 sys.path.insert(0, str(Path(__file__).parent))
-from concilia_pix import HORA_VIRADA, carrega_lojas  # noqa: E402
+from concilia_pix import carrega_lojas  # noqa: E402
+from pdv_pix import HORA_VIRADA  # noqa: E402
+
+FERIADOS = {pd.Timestamp("2026-10-12").date()}
+
+
+def proximo_util(d):
+    """Dia previsto do crédito PIX: D0 em dia útil; sábado, domingo e feriado vão para o próximo dia útil."""
+    d = pd.Timestamp(d)
+    while d.weekday() >= 5 or d.date() in FERIADOS:
+        d += pd.Timedelta(days=1)
+    return d.date()
 from pdv_pix import ler_pdv, pix_do_pdv  # noqa: E402
-from portal_sicredi import ler_portal, ler_tef, pix_do_portal  # noqa: E402
+from portal_sicredi import ler_portais, ler_tef, pix_do_portal  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
 
@@ -118,14 +129,10 @@ def vendas_pix(pdv_arq: str, portais: list[str], lojas: dict, tef: pd.DataFrame 
     b["dt_pdv"] = pd.to_datetime(b["Data"].astype(str) + " " + b["Hora"].astype(str).str[:5])
     b.loc[b["dt_pdv"].dt.hour < HORA_VIRADA, "dt_pdv"] += pd.Timedelta(days=1)
     b["Dia movimento"] = b["Data"]
-    b["Data"] = b["dt_pdv"].dt.date
+    b["Data calendário"] = b["dt_pdv"].dt.date
     p = pix_do_pdv(b).rename(columns={"dt_pdv": "dt"})[["Filial", "Data", "Dia movimento", "dt", "Cupom", "cent"]].assign(Fonte="PDV", Ref=lambda x: "cupom " + x["Cupom"].astype(str))
     partes = []
-    for arq in portais:
-        df, meta = ler_portal(arq)
-        filial = lojas.get(meta["EC"])
-        if not filial:
-            sys.exit(f"EC {meta['EC']} ({arq}) não está em lojas.csv")
+    for (filial, ec), df in ler_portais(portais, lojas).items():
         m = pix_do_portal(df)
         m = m[m["Status"].str.upper().isin({"AUTORIZADA", "APROVADA"})]
         partes.append(m[["Data", "dt", "cent"]].assign(Filial=filial, Fonte="Maquininha", Ref="aut. " + m["Cód. de autorização"].astype(str)))
@@ -148,7 +155,7 @@ def casa_banco(v: pd.DataFrame, ex: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
             usados.add(j)
             out.append({**a.to_dict(), "Crédito": ex.loc[j, "Data"], "Pagador": ex.loc[j, "Pagador"],
                         "Dias": (ex.loc[j, "Data"] - a["Data"]).days, "Status": "CONCILIADO"})
-        elif a["Data"] > fim:
+        elif proximo_util(pd.Timestamp(a["dt"]).date()) > fim:     # previsão pela data calendário do pagamento
             out.append({**a.to_dict(), "Status": "AGUARDA EXTRATO"})
         elif a["Fonte"] == "PDV":
             out.append({**a.to_dict(), "Status": "SEM PAR NO BANCO · AGUARDA MAQUININHA"})

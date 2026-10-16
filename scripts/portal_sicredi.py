@@ -9,6 +9,8 @@ import re
 import pandas as pd
 from python_calamine import CalamineWorkbook
 
+from pdv_pix import dia_movimento
+
 NUM = ["Valor Bruto", "Valor da taxa (MDR)", "Valor líquido", "Valor cancelado"]
 
 
@@ -32,10 +34,26 @@ def ler_portal(caminho: str) -> tuple[pd.DataFrame, dict]:
     df["dt"] = pd.to_datetime(
         df["Data da venda"] + " " + df["Hora da venda"].astype(str).str.strip(), dayfirst=True
     )
-    df["Data"] = df["dt"].dt.date
+    df["Data calendário"] = df["dt"].dt.date
+    df["Data"] = dia_movimento(df["dt"])          # mesmo dia do PDV: a madrugada fica no dia anterior
     df["cent"] = (df["Valor Bruto"] * 100).round().astype(int)
     df["EC"] = df["Número do estabelecimento"].astype(str)
     return df.reset_index(drop=True), meta
+
+
+def ler_portais(arquivos, lojas: dict) -> dict:
+    """Lê vários Históricos de vendas e junta os de uma mesma loja (ex.: duas semanas) num só DataFrame.
+    Devolve {(filial, ec): df}, sem vendas repetidas quando os exports se sobrepõem."""
+    por_loja = {}
+    for arq in arquivos:
+        df, meta = ler_portal(arq)
+        ec = meta["EC"]
+        filial = lojas.get(ec)
+        if not filial:
+            raise SystemExit(f"EC {ec} ({arq}) não está em lojas.csv — adicione a linha EC,Filial")
+        por_loja.setdefault((filial, ec), []).append(df)
+    return {k: pd.concat(v, ignore_index=True).drop_duplicates(subset=["Cód. de autorização", "dt", "cent"]).sort_values("dt").reset_index(drop=True)
+            for k, v in sorted(por_loja.items())}
 
 
 def pix_do_portal(df: pd.DataFrame) -> pd.DataFrame:
@@ -54,7 +72,8 @@ def ler_tef(caminho: str) -> pd.DataFrame:
     df = df[df["Método Pagamento"].astype(str).str.lower().str.contains("pix")]
     df["Valor Bruto"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
     df["dt"] = pd.to_datetime(df["Data"] + " " + df["Hora"].astype(str).str.strip(), dayfirst=True)
-    df["Data"] = df["dt"].dt.date
+    df["Data calendário"] = df["dt"].dt.date
+    df["Data"] = dia_movimento(df["dt"])
     df["cent"] = (df["Valor Bruto"] * 100).round().astype(int)
     df["Filial"] = df["Loja - Descrição"].astype(str).str.strip()
     df["Status"] = df["Status"].astype(str).str.strip()

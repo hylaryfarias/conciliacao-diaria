@@ -18,6 +18,16 @@ from pathlib import Path
 
 import pandas as pd
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from pdv_pix import HORA_VIRADA  # noqa: E402
+
+
+def _dt(d, h):
+    """Datetime calendário a partir do dia de movimento + hora: antes da virada (10h) é o dia seguinte."""
+    t = pd.Timestamp(f"{pd.to_datetime(d).date()} {str(h)}")
+    return t + pd.Timedelta(days=1) if t.hour < HORA_VIRADA else t
+
 RAIZ = Path(__file__).resolve().parent.parent
 S = RAIZ / "saida"
 JANELA_ANTES_H, JANELA_DEPOIS_MIN, ESPALHA_H, MAX_G, MAX_CAND = 36, 30, 3, 4, 30
@@ -35,12 +45,12 @@ def main() -> None:
     px = px[px["Status"].astype(str).str.startswith("SEM PAR")]
     for _, x in px.iterrows():
         P.append(dict(Forma="PIX", Filial=x["Filial"], Cupom=str(x["Cupom"]), Caixa=x["Caixa"], Data=pd.to_datetime(x["Data"]).date(),
-                      dt=pd.Timestamp(f"{pd.to_datetime(x['Data']).date()} {str(x['Hora'])[:5]}"), cent=int(round(float(x["Vl. pagamento"]) * 100)), ForPDV=x["Desc. pagam."]))
+                      dt=_dt(x["Data"], str(x["Hora"])[:5]), cent=int(round(float(x["Vl. pagamento"]) * 100)), ForPDV=x["Desc. pagam."]))
     for mod, nome in (("credito", "Crédito"), ("debito", "Débito")):
         sp = le(f"concilia_{mod}_2*.xlsx", "PDV sem par")
         for _, x in sp.iterrows():
             P.append(dict(Forma=nome, Filial=x["Filial"], Cupom=str(x["Cupom"]), Caixa=x["Caixa"], Data=pd.to_datetime(x["Data"]).date(),
-                          dt=pd.Timestamp(f"{pd.to_datetime(x['Data']).date()} {str(x['Hora'])[:5]}"), cent=int(round(float(x["Vl. pagamento"]) * 100)), ForPDV=x["Desc. pagam."]))
+                          dt=_dt(x["Data"], str(x["Hora"])[:5]), cent=int(round(float(x["Vl. pagamento"]) * 100)), ForPDV=x["Desc. pagam."]))
     P = pd.DataFrame(P)
     # ---- máquina sem par (as três modalidades)
     M = []
@@ -50,7 +60,7 @@ def main() -> None:
     for mod, nome in (("credito", "Crédito"), ("debito", "Débito")):
         sm = le(f"concilia_{mod}_2*.xlsx", "Maquininha sem par")
         for _, x in sm.iterrows():
-            M.append(dict(Forma=nome, Filial=x["Filial"], dt=pd.Timestamp(f"{pd.to_datetime(x['Data']).date()} {str(x['Hora maq'])[:8]}"), cent=int(round(float(x["Valor Bruto"]) * 100)), Aut=str(x["Autorização"]), Terminal=str(x["Terminal"]), Bandeira=str(x["Bandeira"])))
+            M.append(dict(Forma=nome, Filial=x["Filial"], dt=_dt(x["Data"], str(x["Hora maq"])[:8]), cent=int(round(float(x["Valor Bruto"]) * 100)), Aut=str(x["Autorização"]), Terminal=str(x["Terminal"]), Bandeira=str(x["Bandeira"])))
     M = pd.DataFrame(M)
     print(f"PDV sem par: {len(P)} linhas em {P.groupby(['Filial','Cupom']).ngroups} cupons | máquina sem par: {len(M)}")
 

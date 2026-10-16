@@ -23,7 +23,6 @@ PIX do PDV sem par na maquininha: procura um débito/crédito aprovado na máqui
 valor, no mesmo dia ou no dia anterior, que também não tenha par no PDV. Se achar, marca
 "PROVÁVEL FORMA ERRADA" — o caixa lançou cartão como PIX.
 """
-HORA_VIRADA = 6  # cupom antes dessa hora conta no dia calendário seguinte
 JANELA_ANTES_MIN, JANELA_DEPOIS_H = 30, 36  # PDV pode fechar o cupom antes/depois do PIX na máquina
 GRUPO_MAX, GRUPO_CAND, GRUPO_ESPALHA_H = 4, 24, 3  # conta dividida: até 4 por grupo, todos em até 3 h
 TOLERANCIA_CENT = 100  # até R$ 1,00 de diferença, para mais ou para menos, fecha (Hylary)
@@ -36,8 +35,8 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-from pdv_pix import ler_pdv, pix_do_pdv  # noqa: E402
-from portal_sicredi import ler_portal, ler_tef, pix_do_portal  # noqa: E402
+from pdv_pix import HORA_VIRADA, ler_pdv, pix_do_pdv  # noqa: E402
+from portal_sicredi import ler_portais, ler_tef, pix_do_portal  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
 OK_STATUS = {"AUTORIZADA", "APROVADA"}
@@ -226,18 +225,13 @@ def main() -> None:
     bruto["dt_pdv"] = pd.to_datetime(bruto["Data"].astype(str) + " " + bruto["Hora"].astype(str).str[:5])
     madrugada = bruto["dt_pdv"].dt.hour < HORA_VIRADA
     bruto.loc[madrugada, "dt_pdv"] += pd.Timedelta(days=1)
-    bruto["Dia movimento"] = bruto["Data"]
-    bruto["Data"] = bruto["dt_pdv"].dt.date          # data calendário, igual à da maquininha
+    bruto["Dia movimento"] = bruto["Data"]           # o PDV já traz o dia de movimento; a maquininha foi convertida para o mesmo dia
+    bruto["Data calendário"] = bruto["dt_pdv"].dt.date
     pdv_all = pix_do_pdv(bruto)
     cartao_pdv = bruto[bruto["Desc. pagam."].str.upper().isin(CARTAO_PDV)].copy()
 
     todas, sobras, recusados, resumo = [], [], [], []
-    for arq in portais:
-        df, meta = ler_portal(arq)
-        ec = meta["EC"]
-        filial = lojas.get(ec)
-        if not filial:
-            sys.exit(f"EC {ec} ({arq}) não está em lojas.csv — adicione a linha EC,Filial")
+    for (filial, ec), df in ler_portais(portais, lojas).items():
         maq = pix_do_portal(df)
         d0, d1 = df["Data"].min(), df["Data"].max()
         if len(tef):

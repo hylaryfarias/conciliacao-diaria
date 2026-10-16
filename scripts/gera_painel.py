@@ -60,8 +60,7 @@ def main() -> None:
 
     b = ler_pdv(args[0])
     b["dt_pdv"] = pd.to_datetime(b["Data"].astype(str) + " " + b["Hora"].astype(str).str[:5])
-    b.loc[b["dt_pdv"].dt.hour < HORA_VIRADA, "dt_pdv"] += pd.Timedelta(days=1)
-    b["Data"] = b["dt_pdv"].dt.date
+    b.loc[b["dt_pdv"].dt.hour < HORA_VIRADA, "dt_pdv"] += pd.Timedelta(days=1)   # só para ordenar; "Data" segue sendo o dia de movimento do PDV
     b = b[(b["Data"] >= de) & (b["Data"] <= ate)]
     b["forma"] = b["Desc. pagam."].str.upper()
     pdv_dia = {m: b[b["forma"].isin(f)].groupby(["Filial", "Data"])["cent"].agg(qtd="count", cent="sum") for m, f in FORMAS.items()}

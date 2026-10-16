@@ -16,9 +16,10 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-from concilia_pix import HORA_VIRADA, TAXA_SERVICO, TOLERANCIA_CENT, carrega_lojas  # noqa: E402
+from concilia_pix import TAXA_SERVICO, TOLERANCIA_CENT, carrega_lojas  # noqa: E402
+from pdv_pix import HORA_VIRADA  # noqa: E402
 from pdv_pix import ler_pdv  # noqa: E402
-from portal_sicredi import ler_portal  # noqa: E402
+from portal_sicredi import ler_portais  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
 MODAL = {
@@ -37,7 +38,7 @@ def casa(maq: pd.DataFrame, pdv: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
         c = pdv[(pdv["cent"] == m["cent"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~pdv.index.isin(usados))]
         base = {"Data": m["Data"], "Hora maq": m["dt"].strftime("%H:%M:%S"), "Bandeira": m["Bandeira"], "Canal": m["Canal"],
                 "Valor Bruto": m["Valor Bruto"], "MDR": m["Valor da taxa (MDR)"], "Líquido": m["Valor líquido"],
-                "Terminal": m["Número do terminal"], "Autorização": m["Cód. de autorização"], "cent": m["cent"]}
+                "Terminal": m["Número do terminal"], "Autorização": m["Cód. de autorização"], "cent": m["cent"], "dt": m["dt"]}
         if len(c) == 0:
             linhas.append({**base, "Status": "MAQUININHA SEM PAR NO PDV"})
             continue
@@ -57,23 +58,23 @@ def casa(maq: pd.DataFrame, pdv: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
     if len(res) and len(sobra):
         usados_p: set = set()
         for i, m in res[res["Status"] != "CONCILIADO"].iterrows():
-            dif = (sobra["dt_pdv"] - pd.Timestamp(f"{m['Data']} {m['Hora maq']}")).dt.total_seconds() / 60
+            dif = (sobra["dt_pdv"] - m["dt"]).dt.total_seconds() / 60
             c = sobra[((sobra["cent"] * (1 + TAXA_SERVICO)).round() == m["cent"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados_p))]
             if len(c) == 0:
                 continue
-            j = (c["dt_pdv"] - pd.Timestamp(f"{m['Data']} {m['Hora maq']}")).abs().idxmin()
+            j = (c["dt_pdv"] - m["dt"]).abs().idxmin()
             usados_p.add(j)
             a = sobra.loc[j]
             res.loc[i, ["Status", "Dia PDV", "Hora PDV", "Cupom", "Caixa", "Forma PDV", "Dif. hora (min)", "Serviço (R$)"]] = [
                 f"SERVIÇO NÃO BAIXADO · máquina cobrou R$ {m['cent']/100:.2f} (+{TAXA_SERVICO:.0%}), PDV fechou com R$ {a['cent']/100:.2f}", a["Data"], a["dt_pdv"].strftime("%H:%M"),
-                a["Cupom"], a["Caixa"], a["Desc. pagam."], round((a["dt_pdv"] - pd.Timestamp(f"{m['Data']} {m['Hora maq']}")).total_seconds() / 60),
+                a["Cupom"], a["Caixa"], a["Desc. pagam."], round((a["dt_pdv"] - m["dt"]).total_seconds() / 60),
                 (m["cent"] - a["cent"]) / 100]
         sobra = sobra[~sobra.index.isin(usados_p)]
     # tolerância: até R$ 1,00 de diferença fecha
     if len(res) and len(sobra):
         usados_t: set = set()
         for i, m in res[res["Status"] == "MAQUININHA SEM PAR NO PDV"].iterrows():
-            tm = pd.Timestamp(f"{m['Data']} {m['Hora maq']}")
+            tm = m["dt"]
             dif = (sobra["dt_pdv"] - tm).dt.total_seconds() / 60
             c = sobra[((sobra["cent"] - m["cent"]).abs() <= TOLERANCIA_CENT) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados_t))]
             if len(c) == 0:
@@ -92,12 +93,7 @@ def roda(mod: str, bruto: pd.DataFrame, portais: list[str], lojas: dict) -> None
     cfg = MODAL[mod]
     pdv_all = bruto[bruto["Desc. pagam."].str.upper().isin(cfg["pdv"])].copy()
     todas, sobras, resumo = [], [], []
-    for arq in portais:
-        df, meta = ler_portal(arq)
-        ec = meta["EC"]
-        filial = lojas.get(ec)
-        if not filial:
-            sys.exit(f"EC {ec} ({arq}) não está em lojas.csv")
+    for (filial, ec), df in ler_portais(portais, lojas).items():
         maq = df[df["Modalidade"].str.startswith(cfg["maq"]) & (df["Status"].str.upper() == "APROVADA")]
         d0, d1 = df["Data"].min(), df["Data"].max()
         p = pdv_all[(pdv_all["Filial"] == filial) & (pdv_all["Data"] >= d0) & (pdv_all["Data"] <= d1)]
@@ -145,7 +141,7 @@ def main() -> None:
     bruto["dt_pdv"] = pd.to_datetime(bruto["Data"].astype(str) + " " + bruto["Hora"].astype(str).str[:5])
     bruto.loc[bruto["dt_pdv"].dt.hour < HORA_VIRADA, "dt_pdv"] += pd.Timedelta(days=1)
     bruto["Dia movimento"] = bruto["Data"]
-    bruto["Data"] = bruto["dt_pdv"].dt.date
+    bruto["Data calendário"] = bruto["dt_pdv"].dt.date
     for mod in MODAL:
         roda(mod, bruto, portais, lojas)
 

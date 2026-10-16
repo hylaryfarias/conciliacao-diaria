@@ -187,7 +187,7 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
     <div class="regras">
       <div class="regra"><b>PIX só pela máquina</b>Não existe PIX na chave da empresa. Todo PIX vendido passa pelo QR code ou TEF da maquininha Sicredi e aparece no portal como "Via QRCODE".</div>
       <div class="regra"><b>PIX cai D0 em dia útil</b>Sábado, domingo e feriado caem no próximo dia útil. Sem taxa: o valor que entra é o vendido. ROBS: 54 de 54 créditos casados.</div>
-      <div class="regra"><b>Data do PDV é dia de movimento</b>Cupom antes das 06:00 pertence ao dia seguinte do calendário. Confirmado em 299 de 301 caixas-dia.</div>
+      <div class="regra"><b>Dia único: o dia de movimento</b>A venda vai da abertura do caixa até a reabertura da loja às 10h. O PDV já conta assim; a Sicredi vira à meia-noite. O painel traz a maquininha e o banco para o mesmo dia do PDV: o que passou na máquina entre 00:00 e 09:59 é venda do dia anterior. Uma visão só, dia a dia.</div>
       <div class="regra"><b>Hora do PDV é a do fechamento</b>Pode vir até 80 minutos depois do pagamento. Serve só para desempatar valores iguais.</div>
       <div class="regra"><b>POS não é integrado</b>Terminais APT… dependem de digitação: a venda pode entrar no dia seguinte ou com a forma errada. A TEF (TFI…) bate hora a hora.</div>
       <div class="regra"><b>PIX a mais no banco não trava a venda</b>Crédito sem venda própria é quase sempre o cliente pagando duas vezes: a máquina recusa ou cancela, o PIX entra mesmo assim, ele paga de novo. A venda fecha; o PIX extra fica listado para devolver, ou marcado como devolvido quando a devolução já aparece no extrato.</div>
@@ -196,7 +196,7 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
       <div class="regra"><b>Serviço não baixado é divergência</b>Quando a máquina cobra o cupom + 10% e o PDV fecha sem o item da taxa, o cliente pagou a mais do que o PDV diz. A sobra fica em "em aberto" e na lista de pendências, com cupom, hora e terminal, para apurar na loja.</div>
       <div class="regra"><b>Reclassificação fica registrada</b>Quando a baixa no PDV saiu com a forma errada, o lançamento pode ser transferido aqui para a forma certa, com justificativa, autor e hora. Como o caixa fechado não aceita correção no PDV, esse ajuste é o registro oficial da conciliação e fica guardado com o painel.</div>
       <div class="regra"><b>Dia conferido no caixa fecha</b>Quando a diferença entre PDV e máquina aparece na contagem física do caixa (sobra ou falta), o dia pode ser fechado aqui pelo botão "Fechar dia", com o valor conferido, justificativa, autor e hora. O dia e suas pendências saem do em aberto; o registro fica guardado com o painel e pode ser reaberto.</div>
-      <div class="regra"><b>Virada de dia não é diferença</b>Cupom pago na máquina antes da meia-noite e fechado no PDV depois dela (delivery, últimas mesas) casa normalmente, mas cada relatório o conta num dia. O Δ do dia fica marcado "virada de dia ✓" e o cupom aparece nos dois dias, com a data do outro lado em laranja.</div>
+      <div class="regra"><b>Virada de dia só depois das 10h</b>Como os dois lados usam o dia de movimento, pagar na máquina à noite e fechar o cupom de madrugada cai no mesmo dia. Só fica "virada de dia" o raro cupom fechado no PDV depois das 10h do dia seguinte: o Δ do dia ganha a marca e o cupom aparece nos dois dias, com a data do outro lado em laranja.</div>
       <div class="regra"><b>Até R$ 1,00 é conciliado</b>Diferença de até R$ 1,00 para mais ou para menos entre o PDV e a máquina fecha, no lançamento e no dia. Acima disso é divergência.</div>
       <div class="regra"><b>Aguardar não é divergir</b>Venda depois da última data do extrato fica como "aguarda extrato", fora do Δ e fora da contagem de casos.</div>
     </div>
@@ -314,7 +314,7 @@ const EXPL = {
   "CONCILIADO COM O BANCO": "Baixa PIX sem par na máquina, mas o PIX de mesmo valor entrou na conta. A máquina recusou ou cancelou a tentativa e o pagamento foi concluído mesmo assim.",
   "OUTRA NATUREZA": "Entrou um PIX na conta classificado como venda, mas sem venda de mesmo valor na loja. Provável recebimento de outra natureza, como B2B ou transferência. Reclassificar no painel de extratos.",
   "BANCO SEM VENDA": "Entrou um PIX na conta sem venda correspondente. Pode ser recebimento de outra natureza classificado como venda.",
-  "CONCILIADO · VIRADA DE DIA": "O cliente pagou na máquina num dia e o caixa fechou o cupom no PDV depois da meia-noite, já no dia seguinte (comum no delivery e nas últimas mesas). Os dois lados casam; só o dia é diferente em cada relatório. Não é divergência: o Δ do dia da máquina fica negativo e o do dia seguinte, positivo, no mesmo valor.",
+  "CONCILIADO · VIRADA DE DIA": "O cliente pagou na máquina num dia de movimento e o caixa só fechou o cupom no PDV no dia de movimento seguinte (depois das 10h). Os dois lados casam; só o dia é diferente. Não é divergência: o Δ do dia da máquina fica negativo e o do dia seguinte, positivo, no mesmo valor.",
 };
 const virada = d => Math.round((((d.virada_saiu ?? 0) - (d.virada_entrou ?? 0)))*100)/100;   // o que o Δ do dia deve à virada
 const quando = iso => iso ? new Date(iso).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";

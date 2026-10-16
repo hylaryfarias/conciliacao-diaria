@@ -13,6 +13,13 @@ from pathlib import Path
 import pandas as pd
 from python_calamine import CalamineWorkbook
 
+HORA_VIRADA = 10  # a venda vai da abertura do caixa até a reabertura da loja (10h): tudo entre meia-noite e 09:59 ainda é do dia anterior
+
+
+def dia_movimento(dt: pd.Series) -> pd.Series:
+    """Dia de movimento de um datetime calendário (Sicredi, extrato): antes das 06:00 pertence ao dia anterior."""
+    return (pd.to_datetime(dt) - pd.Timedelta(hours=HORA_VIRADA)).dt.date
+
 FORMAS_PIX = {"PIX MAQUININHA", "PIX - TEF", "TEF - PIX"}
 
 

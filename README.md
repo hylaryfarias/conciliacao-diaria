@@ -79,11 +79,20 @@ Quando o PDV baixou com a forma errada e o caixa já fechou, o ajuste é feito n
 do artefato, coleção `ajustes`, e é lido de volta a cada rodada com a ferramenta de dados do
 artefato. O painel aplica os ajustes em cima dos números gerados.
 
+## Dia único: o dia de movimento
+
+A venda vai da abertura do caixa até a reabertura da loja às 10h. O PDV já informa o dia de
+movimento; a Sicredi e o extrato viram à meia-noite. Todos os leitores convertem a maquininha
+para o mesmo dia do PDV (`pdv_pix.dia_movimento`: datetime − 10 h), então o cruzamento, as
+planilhas de `saida/` e o painel usam um dia só. A coluna "Data calendário" guarda a data
+original. `portal_sicredi.ler_portais` junta os Históricos de uma mesma loja (semanas diferentes,
+exports sobrepostos) antes de cruzar. Exemplo: BIGGS 13, 09/10, PIX = R$ 2.440,69 nos dois lados
+(40 cupons: 35 do dia, 2 do delivery fechados às 00:48 e 3 da madrugada).
+
 ## Virada de dia
 
-Cupom pago na máquina antes da meia-noite e fechado no PDV depois dela (delivery, últimas mesas)
-casa normalmente, mas o Histórico de vendas o conta no dia do pagamento e o PDV no dia do
-fechamento. O painel marca o Δ desses dias como "virada de dia ✓", lista o cupom nos dois dias
+Com o dia único, só sobra "virada" o cupom fechado no PDV depois das 10h do dia seguinte ao
+pagamento na máquina (raro). O painel marca o Δ desses dias como "virada de dia ✓", lista o cupom nos dois dias
 (com a data do outro lado em laranja) e cria uma pendência informativa "CONCILIADO · VIRADA DE
 DIA" por cupom. Não é divergência e não entra no em aberto. Exemplo: BIGGS 13, 09/10, PIX
 −R$ 95,08 = cupons 11328 e 11330 do delivery, pagos 09/10 à noite e fechados 10/10 00:48.
