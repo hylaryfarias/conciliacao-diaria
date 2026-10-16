@@ -136,6 +136,7 @@ td.neg{color:var(--erro)}
 .pend li[data-s="ajuste"] .stripe{background:var(--gestao)} .pend li[data-s="ok"] .stripe{background:var(--ok)}
 .ajuste-nota{font-size:13px;color:var(--ink-soft);margin-top:4px} .ajuste-nota b{color:var(--ink)}
 .btn.mini{padding:3px 9px;font-size:11.5px;white-space:nowrap} td.fech{white-space:nowrap}
+.btn.mini.quieto{color:var(--ink-muted);border-color:var(--rule)} .btn.mini.quieto:hover{color:var(--ink);border-color:var(--rule-strong)}
 .fech-nota{margin:10px 12px 4px;padding:10px 12px;border-left:3px solid var(--ok);background:var(--ok-soft);border-radius:0 6px 6px 0}
 .fech-nota .acoes{display:flex;gap:8px;margin-top:8px}
 .fech-pad{padding:4px 12px 6px} .form-fech{margin-top:6px} .form-fech input{font:inherit;font-size:13.5px;padding:7px 9px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);max-width:220px}
@@ -370,9 +371,9 @@ function tabela(m){
   const f = v => v===undefined ? `<span style="color:var(--ink-muted)">—</span>` : brl(v);
   const podeFechar = !!dbRef && podeEscrever !== false;
   const fech = (d,i) => d.fechado
-    ? `<span class="chip" data-s="ok" title="${esc(d.fechado.justificativa)}">fechado no caixa</span>`
-    : (d.maq !== undefined && aberto(d) > TOL)
-      ? (podeFechar ? `<button type="button" class="btn mini" data-act="fechar" data-i="${i}">Fechar dia…</button>` : `<span style="color:var(--erro)">em aberto</span>`)
+    ? `<span class="chip" data-s="ok" title="${esc(d.fechado.justificativa)}">fechado ✓</span>`
+    : d.maq !== undefined
+      ? (podeFechar ? `<button type="button" class="btn mini ${aberto(d) > TOL ? "" : "quieto"}" data-act="fechar" data-i="${i}">Fechar dia…</button>` : `<span style="color:var(--ink-muted)">aberto</span>`)
       : `<span style="color:var(--ink-muted)">—</span>`;
   const rows = m.dias.map((d,i) => {
     const t = tone(d), fds = d.dow==="sáb"||d.dow==="dom"||d.feriado;
@@ -407,9 +408,11 @@ function lancamentos(d){
 }
 function formFechar(l, d){
   const ab = aberto(d), lado = (d.maq_sem_par ?? 0) > (d.pdv_sem_par ?? 0) ? "a máquina registrou mais do que o PDV baixou" : (d.pdv_sem_par ?? 0) > (d.maq_sem_par ?? 0) ? "o PDV baixou mais do que a máquina registrou" : "PDV e máquina diferem";
-  const just = `Conferido no fechamento de caixa de ${dBR(d.data)}: ${lado} em ${brl(ab)} e a diferença apareceu na contagem física do caixa. Fechamento confirmado como está.`;
+  const just = ab > TOL
+    ? `Conferido no fechamento de caixa de ${dBR(d.data)}: ${lado} em ${brl(ab)} e a diferença apareceu na contagem física do caixa. Fechamento confirmado como está.`
+    : `Conferido no fechamento de caixa de ${dBR(d.data)}: PDV, maquininha e caixa físico batem. Dia fechado.`;
   return `<div class="form-aj form-fech">
-    <div class="ajuste-nota"><b>${esc(l.nome)} · ${TABS[tab]} · ${dBR(d.data)}</b> · em aberto no painel: ${brl(ab)}${(d.servico??0)>0.004?` (inclui ${brl(d.servico)} de serviço não baixado)`:""}</div>
+    <div class="ajuste-nota"><b>${esc(l.nome)} · ${TABS[tab]} · ${dBR(d.data)}</b> · PDV ${brl(d.pdv)} · máquina ${brl(d.maq)} · em aberto no painel: ${brl(ab)}${(d.servico??0)>0.004?` (inclui ${brl(d.servico)} de serviço não baixado)`:""}</div>
     <label>Conferido no caixa físico (R$ · sobra positiva, falta negativa)<input type="number" step="0.01" data-f="caixa" value="${ab.toFixed(2)}"></label>
     <label>Justificativa<textarea data-f="just">${esc(just)}</textarea></label>
     <div class="acoes"><button type="button" class="btn primario" data-act="confirmar">Fechar o dia</button><button type="button" class="btn" data-act="cancelar">Cancelar</button><span class="erro"></span></div>
