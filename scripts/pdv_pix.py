@@ -24,12 +24,21 @@ FORMAS_PIX = {"PIX MAQUININHA", "PIX - TEF", "TEF - PIX"}
 
 
 def ler_pdv(caminho: str) -> pd.DataFrame:
-    wb = CalamineWorkbook.from_path(caminho)
-    rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
-    # cabeçalho achado pelo conteúdo, nunca por índice fixo
-    idx = next(i for i, r in enumerate(rows) if "Desc. pagam." in r)
-    df = pd.DataFrame(rows[idx + 1 :], columns=rows[idx])
+    """Relatório de cupons de vendas. Aceita vários arquivos (separados por vírgula ou curinga), ex.: o
+    relatório 01–14/10 mais o diário de 15/10; cupons repetidos entre arquivos entram uma vez só."""
+    import glob
+    arqs = [a for parte in str(caminho).split(",") for a in (sorted(glob.glob(parte.strip())) or [parte.strip()])]
+    partes = []
+    for a in arqs:
+        wb = CalamineWorkbook.from_path(a)
+        rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
+        # cabeçalho achado pelo conteúdo, nunca por índice fixo
+        idx = next(i for i, r in enumerate(rows) if "Desc. pagam." in r)
+        partes.append(pd.DataFrame(rows[idx + 1 :], columns=rows[idx]))
+    df = pd.concat(partes, ignore_index=True)
     df = df[df["Filial"].astype(str).str.strip() != ""]
+    chave = [c for c in ("Filial", "Caixa", "Data", "Hora", "Cupom", "Desc. pagam.", "Vl. pagamento") if c in df.columns]
+    df = df.drop_duplicates(subset=chave)
     df["Vl. pagamento"] = pd.to_numeric(df["Vl. pagamento"], errors="coerce").fillna(0)
     df["cent"] = (df["Vl. pagamento"] * 100).round().astype(int)
     df["Data"] = pd.to_datetime(df["Data"], dayfirst=True).dt.date

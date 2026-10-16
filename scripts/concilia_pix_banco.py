@@ -46,13 +46,25 @@ def chave_loja(nome: str) -> str:
     return " ".join(t[:2]) if len(t) > 1 and t[1].isdigit() else t[0] if t else ""
 
 
+def _extrato_bruto(caminho: str) -> pd.DataFrame:
+    """Lê um ou mais exports do painel de extratos (separados por vírgula ou com curinga) e junta sem repetir
+    lançamentos: exports de períodos sobrepostos são normais (ex.: 01–15/10 e 13–16/10)."""
+    arqs = [a for parte in str(caminho).split(",") for a in (sorted(glob.glob(parte.strip())) or [parte.strip()])]
+    partes = []
+    for a in arqs:
+        wb = CalamineWorkbook.from_path(a)
+        rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
+        h = next(i for i, r in enumerate(rows) if "Descrição" in r)
+        partes.append(pd.DataFrame(rows[h + 1 :], columns=rows[h]))
+    ex = pd.concat(partes, ignore_index=True)
+    chave = [c for c in ("Data", "Descrição", "Valor", "Loja", "Saldo após") if c in ex.columns]
+    return ex.drop_duplicates(subset=chave).reset_index(drop=True)
+
+
 def ler_extrato(caminho: str, filiais_pdv=()) -> pd.DataFrame:
     """Só 'Vendas no Pix' (RECEBIMENTO PIX). Estornos, VR, transferências e demais categorias ficam fora.
     A coluna Loja é traduzida para o nome da filial no PDV pela chave 'MARCA NN'."""
-    wb = CalamineWorkbook.from_path(caminho)
-    rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
-    h = next(i for i, r in enumerate(rows) if "Descrição" in r)
-    ex = pd.DataFrame(rows[h + 1 :], columns=rows[h])
+    ex = _extrato_bruto(caminho)
     ex = ex[ex["Descrição"].astype(str).str.upper().str.startswith("RECEBIMENTO PIX")].copy()
     if "Categoria" in ex.columns and ex["Categoria"].astype(str).str.contains("Vendas no Pix").any():
         ex = ex[ex["Categoria"].astype(str) == "Vendas no Pix"]
@@ -67,10 +79,7 @@ def ler_extrato(caminho: str, filiais_pdv=()) -> pd.DataFrame:
 
 def ler_devolucoes(caminho: str, filiais_pdv=()) -> pd.DataFrame:
     """DEVOLUCAO PIX: a loja devolveu um PIX ao cliente (pagamento em duplicidade, em geral)."""
-    wb = CalamineWorkbook.from_path(caminho)
-    rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
-    h = next(i for i, r in enumerate(rows) if "Descrição" in r)
-    ex = pd.DataFrame(rows[h + 1 :], columns=rows[h])
+    ex = _extrato_bruto(caminho)
     ex = ex[ex["Descrição"].astype(str).str.upper().str.startswith("DEVOLUCAO PIX")].copy()
     ex["Valor"] = pd.to_numeric(ex["Valor"], errors="coerce").fillna(0)
     ex["cent"] = (ex["Valor"].abs() * 100).round().astype(int)
@@ -144,8 +153,9 @@ def vendas_pix(pdv_arq: str, portais: list[str], lojas: dict, tef: pd.DataFrame 
     return pd.concat(partes + [p], ignore_index=True).sort_values(["Filial", "dt"]).reset_index(drop=True)
 
 
-def casa_banco(v: pd.DataFrame, ex: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    fim = ex["Data"].max()
+def casa_banco(v: pd.DataFrame, ex: pd.DataFrame, extrato_completo_ate=None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    # o último dia do export costuma estar incompleto (capturado no meio do dia): só os dias anteriores contam como lidos
+    fim = extrato_completo_ate or (ex["Data"].max() - pd.Timedelta(days=1))
     usados: set = set()
     out = []
     for _, a in v.iterrows():
@@ -173,6 +183,9 @@ def main() -> None:
         i = args.index("--de"); de = pd.Timestamp(args[i + 1]).date(); del args[i:i + 2]
     if "--ate" in args:
         i = args.index("--ate"); ate = pd.Timestamp(args[i + 1]).date(); del args[i:i + 2]
+    ext_ate = None
+    if "--extrato-completo-ate" in args:
+        i = args.index("--extrato-completo-ate"); ext_ate = pd.Timestamp(args[i + 1]).date(); del args[i:i + 2]
     tef = pd.DataFrame()
     if "--tef" in args:
         i = args.index("--tef"); tef = ler_tef(args[i + 1]); del args[i:i + 2]
@@ -189,7 +202,7 @@ def main() -> None:
         v = v[(v["Data"] <= ate) | (v["Fonte"].eq("PDV") & (v["Dia movimento"] <= ate))]
     d0, d1 = v["Data"].min(), v["Data"].max()
     ex = ex[(ex["Data"] >= d0) & (ex["Loja"].isin(v["Filial"].unique()))]   # só o período e as lojas com venda
-    res, sobra = casa_banco(v, ex)
+    res, sobra = casa_banco(v, ex, ext_ate)
     sobra = classifica_sobra(sobra, v, ler_devolucoes(ex_arq, v["Filial"].unique()))
 
     resumo = []

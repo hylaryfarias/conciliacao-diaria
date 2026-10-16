@@ -293,7 +293,7 @@ function lojas(){
 }
 
 function tone(d){
-  if(d.maq===undefined) return "aguarda";
+  if(d.maq===undefined || d.sem_pdv) return "aguarda";
   if(abertoEf(d) > TOL) return "erro";
   if(tab !== "pix") return "ok";
   if(d.banco===undefined || (d.aguarda ?? 0)>0.004) return "pendente";
@@ -376,6 +376,7 @@ function tabela(m){
   const podeFechar = !!dbRef && podeEscrever !== false;
   const fech = (d,i) => d.fechado
     ? `<span class="chip" data-s="ok" title="${esc(d.fechado.justificativa)}">fechado ✓</span>`
+    : d.sem_pdv ? `<span style="color:var(--ink-muted)">aguarda PDV</span>`
     : d.maq !== undefined
       ? (podeFechar ? `<button type="button" class="btn mini ${aberto(d) > TOL ? "" : "quieto"}" data-act="fechar" data-i="${i}">Fechar dia…</button>` : `<span style="color:var(--ink-muted)">aberto</span>`)
       : `<span style="color:var(--ink-muted)">—</span>`;
@@ -383,7 +384,7 @@ function tabela(m){
     const t = tone(d), fds = d.dow==="sáb"||d.dow==="dom"||d.feriado;
     const fim = (pix ? `<td>${f(d.banco)}</td>` : `<td>${f(d.mdr)}</td><td>${f(d.liquido)}</td>`) + `<td class="fech">${fech(d,i)}</td>`;
     return `<tr class="${fds?"fim":""}" data-i="${i}" data-open="false"><td class="dia"><span class="dot" data-s="${t}"></span><button type="button" data-i="${i}" aria-expanded="false">${dBR(d.data)}</button><small>${d.dow}${d.feriado?" · feriado":""}</small></td>
-      <td>${d.pdv_qtd}</td><td>${brl(d.pdv)}</td><td>${f(d.maq)}</td>
+      <td>${d.sem_pdv?"—":d.pdv_qtd}</td><td>${d.sem_pdv?`<span style="color:var(--ink-muted)">sem relatório</span>`:brl(d.pdv)}</td><td>${f(d.maq)}</td>
       <td class="${Math.abs(d.delta??0)>0.004 && Math.abs((d.delta??0)+virada(d))>0.004?"neg":""}">${d.delta===undefined?"—":brl(d.delta)}${virada(d)!==0?`<small class="vir" title="${esc(`${d.virada_saiu?brl(d.virada_saiu)+" pagos na máquina neste dia e fechados no PDV em outro dia":""}${d.virada_saiu&&d.virada_entrou?" · ":""}${d.virada_entrou?brl(d.virada_entrou)+" fechados no PDV neste dia e pagos na máquina em outro dia":""}`)}">virada de dia ${Math.abs((d.delta??0)+virada(d))<=0.004?"✓":brl(Math.round(((d.delta??0)+virada(d))*100)/100)+" além"}</small>`:""}</td>${fim}</tr>`;
   }).join("");
   const T = g => brl(sum(m.dias,g));
@@ -397,7 +398,7 @@ function lancamentos(d){
   const L = d.lanc || [];
   const topo = d.fechado ? notaFech(d.fechado, true) : "";
   if(!L.length) return topo + `<div class="lanc-vazio">Nenhum lançamento de ${TABS[tab]} neste dia.</div>`;
-  const st = r => r.aj ? ["ajuste", r.s.toLowerCase()] : /^(SEM PAR|MAQUININHA SEM PAR)/.test(r.s) ? ["pendente", "comanda parcial"] : r.s.startsWith("CONCILIADO") ? ["ok", r.s==="CONCILIADO" ? "conciliado" : r.s.toLowerCase().replace("conciliado ","")] : r.s.startsWith("SERVIÇO") ? ["erro", "serviço não baixado"] : r.s==="PDV" ? ["pdv","só PDV"] : ["erro", r.s.toLowerCase().replace("provável forma errada:","forma errada ·")];
+  const st = r => r.aj ? ["ajuste", r.s.toLowerCase()] : r.s==="AGUARDA PDV" ? ["pendente","aguarda PDV"] : /^(SEM PAR|MAQUININHA SEM PAR)/.test(r.s) ? ["pendente", "comanda parcial"] : r.s.startsWith("CONCILIADO") ? ["ok", r.s==="CONCILIADO" ? "conciliado" : r.s.toLowerCase().replace("conciliado ","")] : r.s.startsWith("SERVIÇO") ? ["erro", "serviço não baixado"] : r.s==="PDV" ? ["pdv","só PDV"] : ["erro", r.s.toLowerCase().replace("provável forma errada:","forma errada ·")];
   const head = temMaq
     ? `<th>Hora PDV</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th><th>Situação</th><th>Hora máq</th>${pix?"":"<th>Bandeira</th>"}<th>Terminal</th><th>Autorização</th>${pix?"<th>Crédito</th><th>Pagador</th>":"<th>MDR</th>"}`
     : `<th>Hora</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th>`;
@@ -607,7 +608,7 @@ function ligaAjustes(){
 function render(){ tabs(); kpis(); lojas(); detalhe(); ligaDias(); ligaAjustes(); }
 
 
-document.getElementById("stamp").innerHTML = `<span>Período <b>${dBR(D.de)} a ${dBR(D.ate)}/${D.ate.slice(0,4)}</b></span><span>Extrato lido até <b>${D.extrato_ate?dBR(D.extrato_ate):"—"}</b></span><span>Atualizado em ${D.gerado_em}</span>`;
+document.getElementById("stamp").innerHTML = `<span>Período <b>${dBR(D.de)} a ${dBR(D.ate)}/${D.ate.slice(0,4)}</b></span><span>PDV lido até <b>${D.pdv_ate?dBR(D.pdv_ate):"—"}</b></span><span>Extrato lido até <b>${D.extrato_ate?dBR(D.extrato_ate):"—"}</b></span><span>Atualizado em ${D.gerado_em}</span>`;
 document.getElementById("rodape").textContent = `Gerado em ${D.gerado_em} · scripts/gera_painel.py`;
 try{ sel = localStorage.getItem("loja"); const t = localStorage.getItem("tab"); if(TABS[t]) tab = t; }catch(e){}
 if(!D.lojas.some(l=>l.nome===sel)) sel = (D.lojas.find(l=>l.mod.pix.tem_maq) || D.lojas[0] || {}).nome || null;

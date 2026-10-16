@@ -61,6 +61,7 @@ def main() -> None:
     b = ler_pdv(args[0])
     b["dt_pdv"] = pd.to_datetime(b["Data"].astype(str) + " " + b["Hora"].astype(str).str[:5])
     b.loc[b["dt_pdv"].dt.hour < HORA_VIRADA, "dt_pdv"] += pd.Timedelta(days=1)   # só para ordenar; "Data" segue sendo o dia de movimento do PDV
+    pdv_ate = b["Data"].max()                      # último dia de movimento coberto pelo relatório de cupons
     b = b[(b["Data"] >= de) & (b["Data"] <= ate)]
     b["forma"] = b["Desc. pagam."].str.upper()
     pdv_dia = {m: b[b["forma"].isin(f)].groupby(["Filial", "Data"])["cent"].agg(qtd="count", cent="sum") for m, f in FORMAS.items()}
@@ -253,7 +254,9 @@ def main() -> None:
             x = pdv_dia["pix"].loc[(filial, d)] if (filial, d) in pdv_dia["pix"].index else None
             row["pdv_qtd"] = int(x["qtd"]) if x is not None else 0; row["pdv"] = r2(x["cent"] / 100) if x is not None else 0.0
             y = sel(e1, filial, d)
-            if y is not None:
+            if y is not None and d > pdv_ate:
+                row.update(maq_qtd=int(y["PIX maquininha (qtd)"]), maq=r2(y["PIX maquininha (R$)"]), sem_pdv=True)
+            elif y is not None:
                 row.update(maq_qtd=int(y["PIX maquininha (qtd)"]), maq=r2(y["PIX maquininha (R$)"]), conc=r2(y["Conciliado (R$)"]), servico=r2(y.get("Serviço não baixado (R$)", 0)),
                            pdv_sem_par=r2(y["PDV sem par (R$)"]), maq_sem_par=r2(y["Maquininha sem par (R$)"]), delta=r2(y["Δ PDV − maquininha (R$)"]))
             z = sel(e2, filial, d, "Venda")
@@ -262,6 +265,9 @@ def main() -> None:
                            aguarda=r2(z["Aguarda extrato (R$)"]), nao_caiu=r2(z["Não caiu (R$)"]),
                            sem_banco=r2(z.get("PDV sem par no banco (R$)", 0)))
             row["lanc"] = lanc_pix(filial, d)
+            if row.get("sem_pdv"):
+                for r in row["lanc"]:
+                    r["s"] = "AGUARDA PDV"
             dias.append(row)
         if len(e1p):
             for _, q in e1p[e1p["Filial"] == filial].iterrows():
@@ -296,6 +302,7 @@ def main() -> None:
                                 r["s"] = "CONCILIADO COM O BANCO"; r["cr"] = q["Data"].isoformat(); r["pg"] = str(q["Descrição"])[16:]
                                 row["pdv_sem_par"] = r2(max(0, row.get("pdv_sem_par", 0) - r["v"]))
                 pend.append(item)
+        pend = [q for q in pend if pd.Timestamp(q["data"]).date() <= pdv_ate]   # sem PDV não há o que apontar
         for row in dias:
             pend = aplica_comanda(filial, "pix", pd.Timestamp(row["data"]).date(), row, pend)
         pend = aplica_viradas(filial, "pix", dias, pend)
@@ -309,10 +316,15 @@ def main() -> None:
                 x = pdv_dia[m].loc[(filial, d)] if (filial, d) in pdv_dia[m].index else None
                 row["pdv_qtd"] = int(x["qtd"]) if x is not None else 0; row["pdv"] = r2(x["cent"] / 100) if x is not None else 0.0
                 y = sel(res, filial, d)
-                if y is not None:
+                if y is not None and d > pdv_ate:
+                    row.update(maq_qtd=int(y["Maquininha (qtd)"]), maq=r2(y["Maquininha bruto (R$)"]), mdr=r2(y["MDR (R$)"]), liquido=r2(y["Líquido (R$)"]), sem_pdv=True)
+                elif y is not None:
                     row.update(maq_qtd=int(y["Maquininha (qtd)"]), maq=r2(y["Maquininha bruto (R$)"]), mdr=r2(y["MDR (R$)"]), liquido=r2(y["Líquido (R$)"]),
                                conc=r2(y["Casado (R$)"]), servico=r2(y.get("Serviço não baixado (R$)", 0)), pdv_sem_par=r2(y["PDV sem par (R$)"]), maq_sem_par=r2(y["Maquininha sem par (R$)"]), delta=r2(y["Δ PDV − maquininha (R$)"]))
                 row["lanc"] = lanc_cartao(filial, m, d)
+                if row.get("sem_pdv"):
+                    for r in row["lanc"]:
+                        r["s"] = "AGUARDA PDV"
                 dias.append(row)
             if len(sem_m):
                 for _, q in sem_m[sem_m["Filial"] == filial].iterrows():
@@ -326,6 +338,7 @@ def main() -> None:
                 for _, q in sv[sv["Filial"] == filial].iterrows():
                     pend.append({"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Valor Bruto"]), "ref": f"cupom {q['Cupom']} · {q['Hora PDV']} · {q['Caixa']}", "status": str(q["Status"]),
                                  "detalhe": f"{q['Bandeira']} · terminal {q['Terminal']} · aut. {q['Autorização']} · máquina {q['Hora maq']}", "servico": r2(q["Serviço (R$)"])})
+            pend = [q for q in pend if pd.Timestamp(q["data"]).date() <= pdv_ate]
             for row in dias:
                 pend = aplica_comanda(filial, m, pd.Timestamp(row["data"]).date(), row, pend)
             pend = aplica_viradas(filial, m, dias, pend)
@@ -334,7 +347,7 @@ def main() -> None:
         lojas.append({"nome": filial, "marca": marca(filial), "ec": ec_de.get(filial), "mod": mods})
 
     dados = {"gerado_em": datetime.now().strftime("%d/%m/%Y %H:%M"), "de": de.isoformat(), "ate": ate.isoformat(),
-             "extrato_ate": extrato_ate.isoformat() if extrato_ate else None, "lojas": lojas}
+             "extrato_ate": extrato_ate.isoformat() if extrato_ate else None, "pdv_ate": pdv_ate.isoformat(), "lojas": lojas}
     out = RAIZ / "painel/index.html"
     out.write_text((RAIZ / "painel/template.html").read_text().replace("/*DADOS*/", json.dumps(dados, ensure_ascii=False)))
     print(f"{len(lojas)} lojas · PIX com maquininha: {sum(l['mod']['pix']['tem_maq'] for l in lojas)} · com banco: {sum(l['mod']['pix']['tem_banco'] for l in lojas)} · gravado em {out}")
