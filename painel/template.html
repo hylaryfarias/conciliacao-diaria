@@ -135,6 +135,10 @@ td.neg{color:var(--erro)}
 .form-aj .erro{color:var(--erro);font-size:12.5px}
 .pend li[data-s="ajuste"] .stripe{background:var(--gestao)} .pend li[data-s="ok"] .stripe{background:var(--ok)}
 .ajuste-nota{font-size:13px;color:var(--ink-soft);margin-top:4px} .ajuste-nota b{color:var(--ink)}
+.btn.mini{padding:3px 9px;font-size:11.5px;white-space:nowrap} td.fech{white-space:nowrap}
+.fech-nota{margin:10px 12px 4px;padding:10px 12px;border-left:3px solid var(--ok);background:var(--ok-soft);border-radius:0 6px 6px 0}
+.fech-nota .acoes{display:flex;gap:8px;margin-top:8px}
+.fech-pad{padding:4px 12px 6px} .form-fech{margin-top:6px} .form-fech input{font:inherit;font-size:13.5px;padding:7px 9px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);max-width:220px}
 td.st[data-s="ajuste"]{color:var(--gestao)}
 .pend .expl{font-size:13px;color:var(--ink-soft);margin-top:6px;max-width:70ch}
 
@@ -189,6 +193,7 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
       <div class="regra"><b>Comanda bate, forma não</b>Mesa dividida: cada cliente paga de um jeito e o caixa baixa com outra divisão. O motor soma o que sobrou sem par na comanda e procura na máquina, em qualquer forma, 1 a 4 vendas com a mesma soma. Resolve a comanda; o Δ por forma fica diferente de zero de propósito.</div>
       <div class="regra"><b>Serviço não baixado é divergência</b>Quando a máquina cobra o cupom + 10% e o PDV fecha sem o item da taxa, o cliente pagou a mais do que o PDV diz. A sobra fica em "em aberto" e na lista de pendências, com cupom, hora e terminal, para apurar na loja.</div>
       <div class="regra"><b>Reclassificação fica registrada</b>Quando a baixa no PDV saiu com a forma errada, o lançamento pode ser transferido aqui para a forma certa, com justificativa, autor e hora. Como o caixa fechado não aceita correção no PDV, esse ajuste é o registro oficial da conciliação e fica guardado com o painel.</div>
+      <div class="regra"><b>Dia conferido no caixa fecha</b>Quando a diferença entre PDV e máquina aparece na contagem física do caixa (sobra ou falta), o dia pode ser fechado aqui pelo botão "Fechar dia", com o valor conferido, justificativa, autor e hora. O dia e suas pendências saem do em aberto; o registro fica guardado com o painel e pode ser reaberto.</div>
       <div class="regra"><b>Até R$ 1,00 é conciliado</b>Diferença de até R$ 1,00 para mais ou para menos entre o PDV e a máquina fecha, no lançamento e no dia. Acima disso é divergência.</div>
       <div class="regra"><b>Aguardar não é divergir</b>Venda depois da última data do extrato fica como "aguarda extrato", fora do Δ e fora da contagem de casos.</div>
     </div>
@@ -206,6 +211,7 @@ let D = JSON.parse(JSON.stringify(D0));
 const TOL = 1.004;  // até R$ 1,00 para mais ou para menos é conciliado
 const aberto = d => Math.abs((d.pdv_sem_par ?? 0) - (d.maq_sem_par ?? 0)) + (d.nao_caiu ?? 0) + (d.servico ?? 0);   // sobras dos dois lados se compensam (comanda parcial)
 const parcial = d => Math.min(d.pdv_sem_par ?? 0, d.maq_sem_par ?? 0);
+const abertoEf = d => d.fechado ? 0 : aberto(d);   // dia fechado no caixa não conta como em aberto
 const brl = n => (n ?? 0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const dBR = s => s ? s.slice(8,10)+"/"+s.slice(5,7) : "";
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -219,7 +225,7 @@ const sum = (arr, f) => arr.reduce((a,x) => a + Math.round((f(x) ?? 0)*100), 0) 
 function statusLoja(l){
   const m = M(l);
   if(!m.tem_maq) return {s:"aguarda", t:"aguarda relatório"};
-  const diverg = m.dias.some(d => aberto(d) > TOL) || m.pendencias.some(p => !p.ajuste && !p.comanda && !p.banco && p.valor > TOL && /FORMA|NÃO CAIU|SERVIÇO/.test(p.status));
+  const diverg = m.dias.some(d => abertoEf(d) > TOL) || m.pendencias.some(p => !p.ajuste && !p.fechado && !p.comanda && !p.banco && p.valor > TOL && /FORMA|NÃO CAIU|SERVIÇO/.test(p.status));
   if(diverg) return {s:"erro", t:"divergência"};
   if(tab !== "pix") return {s:"ok", t:"PDV = máquina"};
   if(!m.tem_banco) return {s:"pendente", t:"sem extrato"};
@@ -249,9 +255,10 @@ function kpis(){
   const pdvConc = sum(conc, l => sum(M(l).dias, d => d.pdv));
   const maq = sum(conc, l => sum(M(l).dias, d => d.maq));
   const st = todas.map(statusLoja);
-  const semPar = sum(conc, l => sum(M(l).dias, d => aberto(d)));
-  const servicoTot = sum(conc, l => sum(M(l).dias, d => d.servico));
-  const parcialTot = sum(conc, l => sum(M(l).dias, d => parcial(d)));
+  const semPar = sum(conc, l => sum(M(l).dias, d => abertoEf(d)));
+  const nFech = conc.reduce((a,l) => a + M(l).dias.filter(d => d.fechado).length, 0);
+  const servicoTot = sum(conc, l => sum(M(l).dias, d => d.fechado ? 0 : d.servico));
+  const parcialTot = sum(conc, l => sum(M(l).dias, d => d.fechado ? 0 : parcial(d)));
   const k = [
     ["Lojas fechadas", `${st.filter(x=>x.s==="ok").length} de ${todas.length}`, `${st.filter(x=>x.s==="aguarda").length} aguardam relatório da maquininha`, st.filter(x=>x.s==="ok").length===todas.length?"ok":""],
     [`${TABS[tab]} no PDV`, brl(pdvTot), `${brl(pdvConc)} nas lojas já cruzadas`, ""],
@@ -268,7 +275,7 @@ function kpis(){
     k.push(["Taxa MDR", brl(mdr), maq>0?`${(mdr/maq*100).toFixed(2).replace(".",",")}% do bruto`:"", ""]);
     k.push(["Líquido a receber", brl(liq), "bruto − MDR · banco na etapa 2", ""]);
   }
-  k.push(["Em aberto", brl(semPar), `líquido do dia${servicoTot>0.004 ? ` · inclui ${brl(servicoTot)} de serviço não baixado` : ""}${parcialTot>0.004 ? ` · ${brl(parcialTot)} de comanda parcial compensada` : ""}`, semPar>TOL?"erro":"ok"]);
+  k.push(["Em aberto", brl(semPar), `líquido do dia${servicoTot>0.004 ? ` · inclui ${brl(servicoTot)} de serviço não baixado` : ""}${parcialTot>0.004 ? ` · ${brl(parcialTot)} de comanda parcial compensada` : ""}${nFech ? ` · ${nFech} dia${nFech===1?"":"s"} fechado${nFech===1?"":"s"} no caixa` : ""}`, semPar>TOL?"erro":"ok"]);
   document.getElementById("kpis").innerHTML = k.map(([l,v,s,t]) => `<div class="kpi" data-tone="${t}"><div class="lbl">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join("");
 }
 
@@ -284,7 +291,7 @@ function lojas(){
 
 function tone(d){
   if(d.maq===undefined) return "aguarda";
-  if(aberto(d) > TOL) return "erro";
+  if(abertoEf(d) > TOL) return "erro";
   if(tab !== "pix") return "ok";
   if(d.banco===undefined || (d.aguarda ?? 0)>0.004) return "pendente";
   return "ok";
@@ -305,16 +312,18 @@ const EXPL = {
   "OUTRA NATUREZA": "Entrou um PIX na conta classificado como venda, mas sem venda de mesmo valor na loja. Provável recebimento de outra natureza, como B2B ou transferência. Reclassificar no painel de extratos.",
   "BANCO SEM VENDA": "Entrou um PIX na conta sem venda correspondente. Pode ser recebimento de outra natureza classificado como venda.",
 };
+const quando = iso => iso ? new Date(iso).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
+const notaFech = (f, comBotao) => `<div class="ajuste-nota fech-nota"><b>Dia fechado no caixa</b> · conferido ${brl(f.caixa)} no caixa físico contra ${brl(f.aberto)} em aberto no painel.<br>${esc(f.justificativa)}<br><small>registrado em ${quando(f.criado_em)}<span data-por="${esc(f.por||"")}"></span></small>${comBotao && dbRef && podeEscrever !== false ? `<div class="acoes"><button type="button" class="btn" data-act="reabrir" data-id="${esc(idFech(f))}">Reabrir dia</button></div>` : ""}</div>`;
 function detalhe(){
   const el = document.getElementById("detalhe");
   const l = D.lojas.find(x => x.nome===sel);
   if(!l){ el.innerHTML = `<h2>Detalhe da loja</h2><p class="vazio">Escolha uma loja ao lado.</p>`; return; }
   const m = M(l), st = statusLoja(l);
   const pdv = sum(m.dias,d=>d.pdv), maq = sum(m.dias,d=>d.maq), banco = sum(m.dias,d=>d.banco), ag = sum(m.dias,d=>d.aguarda);
-  const aberto = sum(m.dias, d => Math.abs((d.pdv_sem_par ?? 0) - (d.maq_sem_par ?? 0)) + (d.nao_caiu ?? 0) + (d.servico ?? 0));
-  const nCasos = m.pendencias.filter(p=>p.status!=="AGUARDA EXTRATO" && !p.ajuste && !p.comanda && !p.banco && p.valor > TOL && !/SEM PAR/.test(p.status)).length;
+  const aberto = sum(m.dias, d => abertoEf(d)), nFech = m.dias.filter(d => d.fechado).length;
+  const nCasos = m.pendencias.filter(p=>p.status!=="AGUARDA EXTRATO" && !p.ajuste && !p.fechado && !p.comanda && !p.banco && p.valor > TOL && !/SEM PAR/.test(p.status)).length;
   const nBanco = m.pendencias.filter(p=>p.banco && !/DEVOLVIDO|MÁQUINA NÃO REGISTROU/.test(p.status)).length;
-  const nParcial = m.pendencias.filter(p=>/SEM PAR/.test(p.status) && !p.comanda).length;
+  const nParcial = m.pendencias.filter(p=>/SEM PAR/.test(p.status) && !p.comanda && !p.fechado).length;
   let html = `<div class="det-head"><h3>${esc(l.nome)} · ${TABS[tab]}</h3><span class="meta">${l.ec?`EC ${l.ec} · `:""}${dBR(D.de)} a ${dBR(D.ate)} · <span class="chip" data-s="${st.s}">${st.t}</span></span></div>`;
   if(!m.tem_maq){
     const semBanco = sum(m.dias, d => d.sem_banco);
@@ -327,7 +336,7 @@ function detalhe(){
       <div class="ponta"><div class="lbl">PDV</div><div class="val">${brl(pdv)}</div><div class="sub">${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)} lançamentos</div></div>
       <div class="ponta" data-tone="${Math.abs(pdv-maq)>0.004?"erro":"ok"}"><div class="lbl">Maquininha</div><div class="val">${brl(maq)}</div><div class="sub">Δ PDV − máquina ${brl(Math.round((pdv-maq)*100)/100)}</div></div>
       ${bancoPonta}
-      <div class="ponta" data-tone="${aberto>TOL?"erro":"ok"}"><div class="lbl">Em aberto</div><div class="val">${brl(aberto)}</div><div class="sub">${nCasos} caso${nCasos===1?"":"s"}${nParcial?` · ${nParcial} de comanda parcial`:""}${nBanco?` · ${nBanco} PIX a mais no banco`:""}</div></div>
+      <div class="ponta" data-tone="${aberto>TOL?"erro":"ok"}"><div class="lbl">Em aberto</div><div class="val">${brl(aberto)}</div><div class="sub">${nCasos} caso${nCasos===1?"":"s"}${nParcial?` · ${nParcial} de comanda parcial`:""}${nBanco?` · ${nBanco} PIX a mais no banco`:""}${nFech?` · ${nFech} dia${nFech===1?"":"s"} fechado${nFech===1?"":"s"} no caixa`:""}</div></div>
     </div>`;
   }
   html += tabela(m);
@@ -335,12 +344,14 @@ function detalhe(){
     const podeAjustar = !!dbRef && podeEscrever !== false;
     html += `<h2>Pendências · ${m.pendencias.length}</h2><ul class="pend" id="pend">` + m.pendencias.map((p,i) => {
       const key = Object.keys(EXPL).find(k => p.status.startsWith(k)) || "";
-      const s = p.ajuste ? "ajuste" : (p.comanda || p.valor <= TOL || /DEVOLVIDO|MÁQUINA NÃO REGISTROU/.test(p.status)) ? "ok" : (/AGUARDA/.test(p.status) || /SEM PAR/.test(p.status) || p.banco) ? "pendente" : "erro";
+      const s = (p.ajuste || p.fechado) ? "ajuste" : (p.comanda || p.valor <= TOL || /DEVOLVIDO|MÁQUINA NÃO REGISTROU/.test(p.status)) ? "ok" : (/AGUARDA/.test(p.status) || /SEM PAR/.test(p.status) || p.banco) ? "pendente" : "erro";
       let acoes = "";
       if(p.ajuste){
         const a = p.ajuste, dt = a.criado_em ? new Date(a.criado_em).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
         acoes = `<div class="ajuste-nota"><b>Justificativa:</b> ${esc(a.justificativa)}<br><small>registrado em ${dt}<span data-por="${esc(a.por||"")}"></span></small></div>` +
                 (podeAjustar ? `<div class="acoes"><button type="button" class="btn" data-act="desfazer" data-id="${esc(idAjuste(a))}">Desfazer</button></div>` : "");
+      } else if(p.fechado){
+        acoes = `<div class="ajuste-nota"><b>Dia fechado no caixa:</b> ${esc(p.fechado.justificativa)}<br><small>registrado em ${quando(p.fechado.criado_em)}<span data-por="${esc(p.fechado.por||"")}"></span></small></div>`;
       } else if(p.servico !== undefined){
         acoes = `<div class="ajuste-nota"><b>Sobra na máquina:</b> ${brl(p.servico)}</div>`;
       } else if(p.cupom && podeAjustar){
@@ -349,7 +360,7 @@ function detalhe(){
         acoes = `<div class="ajuste-nota"><small>Para reclassificar, abra o painel conectado ao claude.ai.</small></div>`;
       }
       return `<li data-s="${s}" data-i="${i}"><span class="stripe"></span><div><div class="top"><b>${brl(p.valor)} · ${dBR(p.data)}</b><span>etapa ${p.etapa} · ${esc(p.ref)}</span></div>
-        <div class="msg">${esc(p.status === "SEM PAR NA MAQUININHA" ? "COMANDA PARCIAL · baixa no PDV sem par" : p.status === "MAQUININHA SEM PAR NO PDV" ? "COMANDA PARCIAL · venda na máquina sem par" : p.status)}${p.detalhe?`<small>${esc(p.detalhe)}</small>`:""}</div>${key && !p.ajuste?`<div class="expl">${EXPL[key]}</div>`:""}${acoes}</div></li>`;
+        <div class="msg">${esc(p.status === "SEM PAR NA MAQUININHA" ? "COMANDA PARCIAL · baixa no PDV sem par" : p.status === "MAQUININHA SEM PAR NO PDV" ? "COMANDA PARCIAL · venda na máquina sem par" : p.status)}${p.detalhe?`<small>${esc(p.detalhe)}</small>`:""}</div>${key && !p.ajuste && !p.fechado?`<div class="expl">${EXPL[key]}</div>`:""}${acoes}</div></li>`;
     }).join("") + `</ul>`;
   }
   el.innerHTML = html;
@@ -357,25 +368,30 @@ function detalhe(){
 function tabela(m){
   const pix = tab === "pix";
   const f = v => v===undefined ? `<span style="color:var(--ink-muted)">—</span>` : brl(v);
+  const podeFechar = !!dbRef && podeEscrever !== false;
+  const fech = (d,i) => d.fechado
+    ? `<span class="chip" data-s="ok" title="${esc(d.fechado.justificativa)}">fechado no caixa</span>`
+    : (d.maq !== undefined && aberto(d) > TOL)
+      ? (podeFechar ? `<button type="button" class="btn mini" data-act="fechar" data-i="${i}">Fechar dia…</button>` : `<span style="color:var(--erro)">em aberto</span>`)
+      : `<span style="color:var(--ink-muted)">—</span>`;
   const rows = m.dias.map((d,i) => {
     const t = tone(d), fds = d.dow==="sáb"||d.dow==="dom"||d.feriado;
-    const fim = pix
-      ? `<td>${f(d.banco)}</td><td>${d.credito ? d.credito.split(", ").map(dBR).join(", ") : (d.aguarda>0.004?`<span style="color:var(--pendente)">aguarda</span>`:"—")}</td>`
-      : `<td>${f(d.mdr)}</td><td>${f(d.liquido)}</td>`;
+    const fim = (pix ? `<td>${f(d.banco)}</td>` : `<td>${f(d.mdr)}</td><td>${f(d.liquido)}</td>`) + `<td class="fech">${fech(d,i)}</td>`;
     return `<tr class="${fds?"fim":""}" data-i="${i}" data-open="false"><td class="dia"><span class="dot" data-s="${t}"></span><button type="button" data-i="${i}" aria-expanded="false">${dBR(d.data)}</button><small>${d.dow}${d.feriado?" · feriado":""}</small></td>
       <td>${d.pdv_qtd}</td><td>${brl(d.pdv)}</td><td>${f(d.maq)}</td>
       <td class="${Math.abs(d.delta??0)>0.004?"neg":""}">${d.delta===undefined?"—":brl(d.delta)}</td>${fim}</tr>`;
   }).join("");
   const T = g => brl(sum(m.dias,g));
-  const fimH = pix ? `<th>Banco R$</th><th>Crédito em</th>` : `<th>MDR R$</th><th>Líquido R$</th>`;
-  const fimT = pix ? `<td>${m.tem_banco?T(d=>d.banco):"—"}</td><td></td>` : `<td>${m.tem_maq?T(d=>d.mdr):"—"}</td><td>${m.tem_maq?T(d=>d.liquido):"—"}</td>`;
+  const fimH = (pix ? `<th>Banco R$</th>` : `<th>MDR R$</th><th>Líquido R$</th>`) + `<th>Fechamento</th>`;
+  const fimT = (pix ? `<td>${m.tem_banco?T(d=>d.banco):"—"}</td>` : `<td>${m.tem_maq?T(d=>d.mdr):"—"}</td><td>${m.tem_maq?T(d=>d.liquido):"—"}</td>`) + `<td></td>`;
   return `<div class="tablewrap"><table id="tab-dias"><thead><tr><th>Dia</th><th>PDV qtd</th><th>PDV R$</th><th>Maq ${pix?"":"bruto "}R$</th><th>Δ PDV−Maq</th>${fimH}</tr></thead>
     <tbody>${rows}</tbody><tfoot><tr><td>Total</td><td>${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)}</td><td>${T(d=>d.pdv)}</td><td>${m.tem_maq?T(d=>d.maq):"—"}</td><td class="${Math.abs(sum(m.dias,d=>d.delta))>0.004?"neg":""}">${m.tem_maq?T(d=>d.delta):"—"}</td>${fimT}</tr></tfoot></table></div>`;
 }
 function lancamentos(d){
   const pix = tab === "pix", temMaq = d.maq !== undefined;
   const L = d.lanc || [];
-  if(!L.length) return `<div class="lanc-vazio">Nenhum lançamento de ${TABS[tab]} neste dia.</div>`;
+  const topo = d.fechado ? notaFech(d.fechado, true) : "";
+  if(!L.length) return topo + `<div class="lanc-vazio">Nenhum lançamento de ${TABS[tab]} neste dia.</div>`;
   const st = r => r.aj ? ["ajuste", r.s.toLowerCase()] : /^(SEM PAR|MAQUININHA SEM PAR)/.test(r.s) ? ["pendente", "comanda parcial"] : r.s.startsWith("CONCILIADO") ? ["ok", r.s==="CONCILIADO" ? "conciliado" : r.s.toLowerCase().replace("conciliado ","")] : r.s.startsWith("SERVIÇO") ? ["erro", "serviço não baixado"] : r.s==="PDV" ? ["pdv","só PDV"] : ["erro", r.s.toLowerCase().replace("provável forma errada:","forma errada ·")];
   const head = temMaq
     ? `<th>Hora PDV</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th><th>Situação</th><th>Hora máq</th>${pix?"":"<th>Bandeira</th>"}<th>Terminal</th><th>Autorização</th>${pix?"<th>Crédito</th><th>Pagador</th>":"<th>MDR</th>"}`
@@ -387,7 +403,17 @@ function lancamentos(d){
     return `<tr title="${esc(r.cm||"")}"><td>${r.h||"—"}${r.dp?`<small style="color:var(--pendente)"> ${dBR(r.dp)}</small>`:""}</td><td>${esc(r.c||"—")}</td><td class="mono">${esc(cx)||"—"}</td><td>${esc(r.f||"—")}</td><td>${brl(r.v)}</td><td class="st" data-s="${s}">${esc(txt)}</td>
       <td>${r.hm||"—"}</td>${pix?"":`<td>${esc(r.b||"—")}</td>`}<td class="mono">${esc(r.t||"—")}</td><td class="mono">${esc(r.a||"—")}</td>${pix?`<td>${r.cr?dBR(r.cr):"—"}</td><td class="mono">${esc(r.pg||"—")}</td>`:`<td>${r.mdr!==undefined?brl(r.mdr):"—"}</td>`}</tr>`;
   }).join("");
-  return `<div class="lanc-wrap"><table class="lanc-t"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  return topo + `<div class="lanc-wrap"><table class="lanc-t"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function formFechar(l, d){
+  const ab = aberto(d), lado = (d.maq_sem_par ?? 0) > (d.pdv_sem_par ?? 0) ? "a máquina registrou mais do que o PDV baixou" : (d.pdv_sem_par ?? 0) > (d.maq_sem_par ?? 0) ? "o PDV baixou mais do que a máquina registrou" : "PDV e máquina diferem";
+  const just = `Conferido no fechamento de caixa de ${dBR(d.data)}: ${lado} em ${brl(ab)} e a diferença apareceu na contagem física do caixa. Fechamento confirmado como está.`;
+  return `<div class="form-aj form-fech">
+    <div class="ajuste-nota"><b>${esc(l.nome)} · ${TABS[tab]} · ${dBR(d.data)}</b> · em aberto no painel: ${brl(ab)}${(d.servico??0)>0.004?` (inclui ${brl(d.servico)} de serviço não baixado)`:""}</div>
+    <label>Conferido no caixa físico (R$ · sobra positiva, falta negativa)<input type="number" step="0.01" data-f="caixa" value="${ab.toFixed(2)}"></label>
+    <label>Justificativa<textarea data-f="just">${esc(just)}</textarea></label>
+    <div class="acoes"><button type="button" class="btn primario" data-act="confirmar">Fechar o dia</button><button type="button" class="btn" data-act="cancelar">Cancelar</button><span class="erro"></span></div>
+  </div>`;
 }
 let abertos = new Set();
 function ligaDias(){
@@ -400,6 +426,28 @@ function ligaDias(){
     const row = document.createElement("tr"); row.className = "lanc";
     row.innerHTML = `<td colspan="${tr.children.length}">${lancamentos(m.dias[i])}</td>`;
     tr.after(row); tr.dataset.open="true"; b.setAttribute("aria-expanded","true"); abertos.add(key);
+    const re = row.querySelector('[data-act="reabrir"]');
+    if(re) re.addEventListener("click", ev => reabreDia(re.dataset.id, ev.currentTarget));
+    const quem = row.querySelector("[data-por]");
+    if(quem) nomeDe(quem.dataset.por).then(n => { if(n) quem.textContent = ` por ${n}`; });
+  }));
+  document.querySelectorAll('#tab-dias [data-act="fechar"]').forEach(b => b.addEventListener("click", () => {
+    const i = +b.dataset.i, tr = b.closest("tr"), d = m.dias[i];
+    document.querySelectorAll("#tab-dias tr.fech-row").forEach(x => x.remove());
+    const row = document.createElement("tr"); row.className = "lanc fech-row";
+    row.innerHTML = `<td colspan="${tr.children.length}"><div class="fech-pad">${formFechar(l, d)}</div></td>`;
+    const next = tr.nextElementSibling;
+    (next && next.classList.contains("lanc") ? next : tr).after(row);
+    row.querySelector('[data-act="cancelar"]').addEventListener("click", () => row.remove());
+    row.querySelector('[data-act="confirmar"]').addEventListener("click", ev => {
+      const caixa = parseFloat(row.querySelector('[data-f="caixa"]').value.replace(",", ".")), just = row.querySelector('[data-f="just"]').value.trim();
+      if(isNaN(caixa)){ row.querySelector(".erro").textContent = "Informe o valor conferido no caixa."; return; }
+      if(!just){ row.querySelector(".erro").textContent = "Escreva a justificativa."; return; }
+      const f = {loja:l.nome, mod:tab, data:d.data, aberto:Math.round(aberto(d)*100)/100, caixa:Math.round(caixa*100)/100,
+                 pdv:d.pdv, maq:d.maq, justificativa:just, criado_em:new Date().toISOString(), por:meuId || null};
+      salvaFechamento(f, ev.currentTarget);
+    });
+    row.querySelector('[data-f="just"]').focus();
   }));
   // reabre o que estava aberto antes de re-renderizar
   document.querySelectorAll("#tab-dias td.dia button").forEach(b => { if(abertos.has(`${sel}|${tab}|${b.dataset.i}`)) b.click(); });
@@ -407,6 +455,8 @@ function ligaDias(){
 
 /* ---------- ajustes (reclassificação de forma de pagamento), guardados no banco do painel ---------- */
 let AJ = {};            // id -> ajuste
+let FE = {};            // id -> fechamento de dia conferido no caixa
+const idFech = f => `${slug(f.loja)}_${f.mod}_${f.data}`;
 let dbRef = null, userRef = null, podeEscrever = null, meuId = null;
 const NOMES = {pix:"PIX", credito:"Crédito", debito:"Débito"};
 const slug = x => String(x).replace(/[^A-Za-z0-9_.~:@+-]+/g, "-");
@@ -443,6 +493,13 @@ function aplicaAjustes(){
       if(dd.pdv_sem_par !== undefined) dd.pdv_sem_par = r(dd.pdv_sem_par + v);
     }
   }
+  for(const f of Object.values(FE)){
+    const l = D.lojas.find(x => x.nome === f.loja); if(!l) continue;
+    const m = l.mod[f.mod]; if(!m) continue;
+    const dia = m.dias.find(d => d.data === f.data); if(!dia) continue;
+    dia.fechado = f;
+    for(const p of m.pendencias) if(p.data === f.data && !p.banco && !p.ajuste && !/AGUARDA/.test(p.status)) p.fechado = f;
+  }
   function r(x){ return Math.round(x*100)/100; }
 }
 
@@ -459,6 +516,28 @@ async function ligaBanco(){
     snap.docs.forEach(d => { if(d.exists) AJ[d.id] = d.data(); });
     aplicaAjustes(); render();
   }, err => { console.warn("ajustes:", err); });
+  dbRef.collection("fechamentos").onSnapshot(snap => {
+    FE = {};
+    snap.docs.forEach(d => { if(d.exists) FE[d.id] = d.data(); });
+    aplicaAjustes(); render();
+  }, err => { console.warn("fechamentos:", err); });
+}
+
+async function salvaFechamento(f, botao){
+  if(!dbRef) return;
+  botao.disabled = true;
+  try{
+    await dbRef.collection("fechamentos").doc(idFech(f)).set(f);
+  }catch(e){
+    botao.disabled = false;
+    const erro = botao.closest(".form-aj")?.querySelector(".erro");
+    if(erro) erro.textContent = e?.code === "invalid_argument" ? "Você não tem permissão para gravar neste painel." : `Não foi possível gravar (${e?.code || "erro"}). Tente de novo.`;
+  }
+}
+async function reabreDia(id, botao){
+  if(!dbRef) return;
+  botao.disabled = true;
+  try{ await dbRef.collection("fechamentos").doc(id).delete(); }catch(e){ botao.disabled = false; }
 }
 
 async function salvaAjuste(a, botao){

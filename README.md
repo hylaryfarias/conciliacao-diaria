@@ -79,6 +79,15 @@ Quando o PDV baixou com a forma errada e o caixa já fechou, o ajuste é feito n
 do artefato, coleção `ajustes`, e é lido de volta a cada rodada com a ferramenta de dados do
 artefato. O painel aplica os ajustes em cima dos números gerados.
 
+## Fechamento de dia conferido no caixa
+
+Quando a diferença entre PDV e máquina apareceu na contagem física do caixa (sobra ou falta),
+o dia é fechado no painel pelo botão "Fechar dia…" na coluna "Fechamento" da tabela de dias, com o
+valor conferido no caixa, justificativa, autor e hora. Fica na coleção `fechamentos` do artefato
+(id `<loja>_<pix|credito|debito>_<data>`). O dia e as pendências daquela data saem do em aberto, a
+loja fecha, e o registro aparece ao abrir o dia (com botão "Reabrir dia"). Primeiro caso: MAPOLI,
+PIX, 08/10, R$ 6,00 a mais na máquina que sobrou no caixa físico.
+
 ## Painel
 
 ```bash
