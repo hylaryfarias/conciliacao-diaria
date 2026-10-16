@@ -136,6 +136,7 @@ td.neg{color:var(--erro)}
 .pend li[data-s="ajuste"] .stripe{background:var(--gestao)} .pend li[data-s="ok"] .stripe{background:var(--ok)}
 .ajuste-nota{font-size:13px;color:var(--ink-soft);margin-top:4px} .ajuste-nota b{color:var(--ink)}
 .btn.mini{padding:3px 9px;font-size:11.5px;white-space:nowrap} td.fech{white-space:nowrap}
+td small.vir{display:block;font-size:10.5px;color:var(--ink-muted);font-weight:500;cursor:help}
 .btn.mini.quieto{color:var(--ink-muted);border-color:var(--rule)} .btn.mini.quieto:hover{color:var(--ink);border-color:var(--rule-strong)}
 .fech-nota{margin:10px 12px 4px;padding:10px 12px;border-left:3px solid var(--ok);background:var(--ok-soft);border-radius:0 6px 6px 0}
 .fech-nota .acoes{display:flex;gap:8px;margin-top:8px}
@@ -195,6 +196,7 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
       <div class="regra"><b>Serviço não baixado é divergência</b>Quando a máquina cobra o cupom + 10% e o PDV fecha sem o item da taxa, o cliente pagou a mais do que o PDV diz. A sobra fica em "em aberto" e na lista de pendências, com cupom, hora e terminal, para apurar na loja.</div>
       <div class="regra"><b>Reclassificação fica registrada</b>Quando a baixa no PDV saiu com a forma errada, o lançamento pode ser transferido aqui para a forma certa, com justificativa, autor e hora. Como o caixa fechado não aceita correção no PDV, esse ajuste é o registro oficial da conciliação e fica guardado com o painel.</div>
       <div class="regra"><b>Dia conferido no caixa fecha</b>Quando a diferença entre PDV e máquina aparece na contagem física do caixa (sobra ou falta), o dia pode ser fechado aqui pelo botão "Fechar dia", com o valor conferido, justificativa, autor e hora. O dia e suas pendências saem do em aberto; o registro fica guardado com o painel e pode ser reaberto.</div>
+      <div class="regra"><b>Virada de dia não é diferença</b>Cupom pago na máquina antes da meia-noite e fechado no PDV depois dela (delivery, últimas mesas) casa normalmente, mas cada relatório o conta num dia. O Δ do dia fica marcado "virada de dia ✓" e o cupom aparece nos dois dias, com a data do outro lado em laranja.</div>
       <div class="regra"><b>Até R$ 1,00 é conciliado</b>Diferença de até R$ 1,00 para mais ou para menos entre o PDV e a máquina fecha, no lançamento e no dia. Acima disso é divergência.</div>
       <div class="regra"><b>Aguardar não é divergir</b>Venda depois da última data do extrato fica como "aguarda extrato", fora do Δ e fora da contagem de casos.</div>
     </div>
@@ -312,7 +314,9 @@ const EXPL = {
   "CONCILIADO COM O BANCO": "Baixa PIX sem par na máquina, mas o PIX de mesmo valor entrou na conta. A máquina recusou ou cancelou a tentativa e o pagamento foi concluído mesmo assim.",
   "OUTRA NATUREZA": "Entrou um PIX na conta classificado como venda, mas sem venda de mesmo valor na loja. Provável recebimento de outra natureza, como B2B ou transferência. Reclassificar no painel de extratos.",
   "BANCO SEM VENDA": "Entrou um PIX na conta sem venda correspondente. Pode ser recebimento de outra natureza classificado como venda.",
+  "CONCILIADO · VIRADA DE DIA": "O cliente pagou na máquina num dia e o caixa fechou o cupom no PDV depois da meia-noite, já no dia seguinte (comum no delivery e nas últimas mesas). Os dois lados casam; só o dia é diferente em cada relatório. Não é divergência: o Δ do dia da máquina fica negativo e o do dia seguinte, positivo, no mesmo valor.",
 };
+const virada = d => Math.round((((d.virada_saiu ?? 0) - (d.virada_entrou ?? 0)))*100)/100;   // o que o Δ do dia deve à virada
 const quando = iso => iso ? new Date(iso).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
 const notaFech = (f, comBotao) => `<div class="ajuste-nota fech-nota"><b>Dia fechado no caixa</b> · conferido ${brl(f.caixa)} no caixa físico contra ${brl(f.aberto)} em aberto no painel.<br>${esc(f.justificativa)}<br><small>registrado em ${quando(f.criado_em)}<span data-por="${esc(f.por||"")}"></span></small>${comBotao && dbRef && podeEscrever !== false ? `<div class="acoes"><button type="button" class="btn" data-act="reabrir" data-id="${esc(idFech(f))}">Reabrir dia</button></div>` : ""}</div>`;
 function detalhe(){
@@ -380,7 +384,7 @@ function tabela(m){
     const fim = (pix ? `<td>${f(d.banco)}</td>` : `<td>${f(d.mdr)}</td><td>${f(d.liquido)}</td>`) + `<td class="fech">${fech(d,i)}</td>`;
     return `<tr class="${fds?"fim":""}" data-i="${i}" data-open="false"><td class="dia"><span class="dot" data-s="${t}"></span><button type="button" data-i="${i}" aria-expanded="false">${dBR(d.data)}</button><small>${d.dow}${d.feriado?" · feriado":""}</small></td>
       <td>${d.pdv_qtd}</td><td>${brl(d.pdv)}</td><td>${f(d.maq)}</td>
-      <td class="${Math.abs(d.delta??0)>0.004?"neg":""}">${d.delta===undefined?"—":brl(d.delta)}</td>${fim}</tr>`;
+      <td class="${Math.abs(d.delta??0)>0.004 && Math.abs((d.delta??0)+virada(d))>0.004?"neg":""}">${d.delta===undefined?"—":brl(d.delta)}${virada(d)!==0?`<small class="vir" title="${esc(`${d.virada_saiu?brl(d.virada_saiu)+" pagos na máquina neste dia e fechados no PDV em outro dia":""}${d.virada_saiu&&d.virada_entrou?" · ":""}${d.virada_entrou?brl(d.virada_entrou)+" fechados no PDV neste dia e pagos na máquina em outro dia":""}`)}">virada de dia ${Math.abs((d.delta??0)+virada(d))<=0.004?"✓":brl(Math.round(((d.delta??0)+virada(d))*100)/100)+" além"}</small>`:""}</td>${fim}</tr>`;
   }).join("");
   const T = g => brl(sum(m.dias,g));
   const fimH = (pix ? `<th>Banco R$</th>` : `<th>MDR R$</th><th>Líquido R$</th>`) + `<th>Fechamento</th>`;
@@ -402,7 +406,7 @@ function lancamentos(d){
     const cx = (r.cx||"").replace(/^\d+ - /,"");
     if(!temMaq) return `<tr><td>${r.h||""}</td><td>${esc(r.c||"")}</td><td class="mono">${esc(cx)}</td><td>${esc(r.f||"")}</td><td>${brl(r.v)}</td></tr>`;
     return `<tr title="${esc(r.cm||"")}"><td>${r.h||"—"}${r.dp?`<small style="color:var(--pendente)"> ${dBR(r.dp)}</small>`:""}</td><td>${esc(r.c||"—")}</td><td class="mono">${esc(cx)||"—"}</td><td>${esc(r.f||"—")}</td><td>${brl(r.v)}</td><td class="st" data-s="${s}">${esc(txt)}</td>
-      <td>${r.hm||"—"}</td>${pix?"":`<td>${esc(r.b||"—")}</td>`}<td class="mono">${esc(r.t||"—")}</td><td class="mono">${esc(r.a||"—")}</td>${pix?`<td>${r.cr?dBR(r.cr):"—"}</td><td class="mono">${esc(r.pg||"—")}</td>`:`<td>${r.mdr!==undefined?brl(r.mdr):"—"}</td>`}</tr>`;
+      <td>${r.hm||"—"}${r.dm?`<small style="color:var(--pendente)"> ${dBR(r.dm)}</small>`:""}</td>${pix?"":`<td>${esc(r.b||"—")}</td>`}<td class="mono">${esc(r.t||"—")}</td><td class="mono">${esc(r.a||"—")}</td>${pix?`<td>${r.cr?dBR(r.cr):"—"}</td><td class="mono">${esc(r.pg||"—")}</td>`:`<td>${r.mdr!==undefined?brl(r.mdr):"—"}</td>`}</tr>`;
   }).join("");
   return topo + `<div class="lanc-wrap"><table class="lanc-t"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }

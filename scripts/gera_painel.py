@@ -167,13 +167,21 @@ def main() -> None:
             r = {"h": hh(x["Hora"]), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Desc. pagam."]), "v": r2(x["Vl. pagamento"]), "s": str(x["Status"])}
             if pd.notna(x.get("Hora maq")):
                 r.update(hm=hh(x["Hora maq"]), t=str(x["Terminal"]), a=str(x["Autorização"]))
+                if pd.notna(x.get("Dia maq")) and pd.to_datetime(x["Dia maq"]).date() != d:
+                    r["dm"] = pd.to_datetime(x["Dia maq"]).date().isoformat()
                 if str(x["Status"]) == "CONCILIADO" and str(x["Autorização"]) in banco_por_aut:
                     r["cr"], r["pg"] = banco_por_aut[str(x["Autorização"])]
             rows.append(r)
+        if "Dia maq" in l1.columns:
+            vm = l1[(l1["Filial"] == filial) & l1["Dia maq"].notna()]
+            vm = vm[(pd.to_datetime(vm["Dia maq"]).dt.date == d) & (vm["Data"] != d)]
+            for _, x in vm.iterrows():
+                rows.append({"h": hh(x["Hora"]), "dp": x["Data"].isoformat(), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Desc. pagam."]), "v": r2(x["Vl. pagamento"]),
+                             "s": str(x["Status"]), "hm": hh(x["Hora maq"]), "t": str(x["Terminal"]), "a": str(x["Autorização"])})
         if len(e1m):
             for _, x in e1m[(e1m["Filial"] == filial) & (e1m["Data"] == d)].iterrows():
                 rows.append({"s": "MAQUININHA SEM PAR NO PDV", "v": r2(x["Valor Bruto"]), "hm": hh(x["dt"]), "t": str(x["Número do terminal"]), "a": str(x["Cód. de autorização"])})
-        rows.sort(key=lambda r: r.get("h") or r.get("hm") or "")
+        rows.sort(key=lambda r: r.get("hm") or r.get("h") or "")
         return rows
 
     def lanc_cartao(filial, m, d):
@@ -188,11 +196,53 @@ def main() -> None:
                 if pd.notna(x["Dia PDV"]) and pd.to_datetime(x["Dia PDV"]).date() != d:
                     r["dp"] = pd.to_datetime(x["Dia PDV"]).date().isoformat()
             rows.append(r)
+        vp = L[(L["Filial"] == filial) & L["Dia PDV"].notna()]
+        vp = vp[(pd.to_datetime(vp["Dia PDV"]).dt.date == d) & (pd.to_datetime(vp["Data"]).dt.date != d)]
+        for _, x in vp.sort_values("Hora PDV").iterrows():
+            rows.append({"s": str(x["Status"]), "v": r2(x["Valor Bruto"]), "hm": hh(x["Hora maq"]), "dm": pd.to_datetime(x["Data"]).date().isoformat(), "b": str(x["Bandeira"]), "t": str(x["Terminal"]), "a": str(x["Autorização"]), "mdr": r2(x["MDR"]),
+                         "h": hh(x["Hora PDV"]), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Forma PDV"])})
         sp = cart[m][2]
         if len(sp):
             for _, x in sp[(sp["Filial"] == filial) & (sp["Data"] == d)].iterrows():
                 rows.append({"s": "SEM PAR NA MAQUININHA", "h": hh(x["Hora"]), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Desc. pagam."]), "v": r2(x["Vl. pagamento"])})
         return rows
+
+    def viradas(filial, m):
+        """Pares casados em que o dia da máquina difere do dia do PDV (cupom fechado depois da virada)."""
+        out = []
+        if m == "pix":
+            if not len(l1) or "Dia maq" not in l1.columns:
+                return out
+            q = l1[(l1["Filial"] == filial) & l1["Dia maq"].notna() & l1["Status"].astype(str).str.startswith(("CONCILIADO", "SERVIÇO"))]
+            for _, x in q.iterrows():
+                dm = pd.to_datetime(x["Dia maq"]).date()
+                if dm != x["Data"]:
+                    out.append({"dm": dm, "dp": x["Data"], "v": r2(x["Vl. pagamento"]), "cupom": str(x["Cupom"]), "caixa": str(x["Caixa"]), "hp": hh(x["Hora"]), "hm": hh(x["Hora maq"]), "t": str(x["Terminal"]), "forma": str(x["Desc. pagam."])})
+        else:
+            L = lc[m]
+            if not len(L):
+                return out
+            q = L[(L["Filial"] == filial) & L["Dia PDV"].notna() & L["Status"].astype(str).str.startswith(("CONCILIADO", "SERVIÇO"))]
+            for _, x in q.iterrows():
+                dm, dp = pd.to_datetime(x["Data"]).date(), pd.to_datetime(x["Dia PDV"]).date()
+                if dm != dp:
+                    out.append({"dm": dm, "dp": dp, "v": r2(x["Valor Bruto"]), "cupom": str(x["Cupom"]).replace(".0", ""), "caixa": str(x["Caixa"]), "hp": hh(x["Hora PDV"]), "hm": hh(x["Hora maq"]), "t": str(x["Terminal"]), "forma": str(x["Forma PDV"])})
+        return out
+
+    def aplica_viradas(filial, m, dias, pend):
+        por_dia = {row["data"]: row for row in dias}
+        for v in viradas(filial, m):
+            rm, rp = por_dia.get(v["dm"].isoformat()), por_dia.get(v["dp"].isoformat())
+            if rm is None and rp is None:
+                continue
+            if rm is not None and "maq" in rm:
+                rm["virada_saiu"] = r2(rm.get("virada_saiu", 0) + v["v"])
+            if rp is not None:
+                rp["virada_entrou"] = r2(rp.get("virada_entrou", 0) + v["v"])
+            pend.append({"etapa": 1, "data": v["dm"].isoformat(), "valor": v["v"], "ref": f"cupom {v['cupom']} · {v['caixa']}", "status": "CONCILIADO · VIRADA DE DIA",
+                         "detalhe": f"pago na máquina {v['dm']:%d/%m} {v['hm']} (terminal {v['t']}) · fechado no PDV {v['dp']:%d/%m} {v['hp']} como {v['forma']}",
+                         "cupom": v["cupom"], "comanda": True, "virada": True})
+        return pend
 
     lojas = []
     for filial in sorted(b["Filial"].unique()):
@@ -249,6 +299,7 @@ def main() -> None:
                 pend.append(item)
         for row in dias:
             pend = aplica_comanda(filial, "pix", pd.Timestamp(row["data"]).date(), row, pend)
+        pend = aplica_viradas(filial, "pix", dias, pend)
         mods["pix"] = {"tem_maq": any("maq" in r for r in dias), "tem_banco": any("banco" in r for r in dias), "dias": dias, "pendencias": sorted(pend, key=lambda q: (q["etapa"], q["data"]))}
 
         # ---- cartão
@@ -278,6 +329,7 @@ def main() -> None:
                                  "detalhe": f"{q['Bandeira']} · terminal {q['Terminal']} · aut. {q['Autorização']} · máquina {q['Hora maq']}", "servico": r2(q["Serviço (R$)"])})
             for row in dias:
                 pend = aplica_comanda(filial, m, pd.Timestamp(row["data"]).date(), row, pend)
+            pend = aplica_viradas(filial, m, dias, pend)
             mods[m] = {"tem_maq": any("maq" in r for r in dias), "tem_banco": False, "dias": dias, "pendencias": sorted(pend, key=lambda q: q["data"])}
 
         lojas.append({"nome": filial, "marca": marca(filial), "ec": ec_de.get(filial), "mod": mods})
