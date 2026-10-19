@@ -68,11 +68,17 @@ def pix_do_portal(df: pd.DataFrame) -> pd.DataFrame:
 def ler_tef(caminho: str) -> pd.DataFrame:
     """Relatório de PIX pela TEF (colunas Data, Hora, Valor, Status, Loja - Descrição).
     Sai com as mesmas colunas que pix_do_portal, para entrar junto no casamento."""
-    wb = CalamineWorkbook.from_path(caminho)
-    rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
-    h = next(i for i, r in enumerate(rows) if "Método Pagamento" in r or "Loja - Descrição" in r)
-    df = pd.DataFrame(rows[h + 1 :], columns=rows[h])
+    import glob
+    arqs = [a for parte in str(caminho).split(",") for a in (sorted(glob.glob(parte.strip())) or [parte.strip()])]
+    partes = []
+    for a in arqs:
+        wb = CalamineWorkbook.from_path(a)
+        rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
+        h = next(i for i, r in enumerate(rows) if "Método Pagamento" in r or "Loja - Descrição" in r)
+        partes.append(pd.DataFrame(rows[h + 1 :], columns=rows[h]))
+    df = pd.concat(partes, ignore_index=True)
     df = df[df["Data"].astype(str).str.match(r"\d{2}/\d{2}/\d{4}")].copy()
+    df = df.drop_duplicates(subset=[c for c in ("Data", "Hora", "Valor", "Status", "Loja - Descrição") if c in df.columns])
     df = df[df["Método Pagamento"].astype(str).str.lower().str.contains("pix")]
     df["Valor Bruto"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
     df["dt"] = pd.to_datetime(df["Data"] + " " + df["Hora"].astype(str).str.strip(), dayfirst=True)
