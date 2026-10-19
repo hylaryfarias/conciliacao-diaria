@@ -35,7 +35,7 @@ def casa(maq: pd.DataFrame, pdv: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
     pdv = pdv.sort_values("dt_pdv")
     for i, m in maq.sort_values("dt").iterrows():
         dif = (pdv["dt_pdv"] - m["dt"]).dt.total_seconds() / 60
-        c = pdv[(pdv["cent"] == m["cent"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~pdv.index.isin(usados))]
+        c = pdv[(pdv["cent"] == m["cent"]) & (pdv["Data"] == m["Data"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~pdv.index.isin(usados))]
         base = {"Data": m["Data"], "Hora maq": m["dt"].strftime("%H:%M:%S"), "Bandeira": m["Bandeira"], "Canal": m["Canal"],
                 "Valor Bruto": m["Valor Bruto"], "MDR": m["Valor da taxa (MDR)"], "Líquido": m["Valor líquido"],
                 "Terminal": m["Número do terminal"], "Autorização": m["Cód. de autorização"], "cent": m["cent"], "dt": m["dt"]}
@@ -59,7 +59,7 @@ def casa(maq: pd.DataFrame, pdv: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
         usados_p: set = set()
         for i, m in res[res["Status"] != "CONCILIADO"].iterrows():
             dif = (sobra["dt_pdv"] - m["dt"]).dt.total_seconds() / 60
-            c = sobra[((sobra["cent"] * (1 + TAXA_SERVICO)).round() == m["cent"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados_p))]
+            c = sobra[((sobra["cent"] * (1 + TAXA_SERVICO)).round() == m["cent"]) & (sobra["Data"] == m["Data"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados_p))]
             if len(c) == 0:
                 continue
             j = (c["dt_pdv"] - m["dt"]).abs().idxmin()
@@ -76,7 +76,7 @@ def casa(maq: pd.DataFrame, pdv: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
         for i, m in res[res["Status"] == "MAQUININHA SEM PAR NO PDV"].iterrows():
             tm = m["dt"]
             dif = (sobra["dt_pdv"] - tm).dt.total_seconds() / 60
-            c = sobra[((sobra["cent"] - m["cent"]).abs() <= TOLERANCIA_CENT) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados_t))]
+            c = sobra[((sobra["cent"] - m["cent"]).abs() <= TOLERANCIA_CENT) & (sobra["Data"] == m["Data"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados_t))]
             if len(c) == 0:
                 continue
             j = ((c["cent"] - m["cent"]).abs() * 1e6 + (c["dt_pdv"] - tm).abs().dt.total_seconds()).idxmin()

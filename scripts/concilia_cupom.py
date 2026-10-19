@@ -56,18 +56,18 @@ def main() -> None:
     M = []
     mp = le("concilia_pix_2*.xlsx", "Maquininha sem par")
     for _, x in mp.iterrows():
-        M.append(dict(Forma="PIX", Filial=x["Filial"], dt=pd.to_datetime(x["dt"]), cent=int(round(float(x["Valor Bruto"]) * 100)), Aut=str(x["Cód. de autorização"]), Terminal=str(x["Número do terminal"]), Bandeira="PIX"))
+        M.append(dict(Forma="PIX", Filial=x["Filial"], Data=pd.to_datetime(x["Data"]).date(), dt=pd.to_datetime(x["dt"]), cent=int(round(float(x["Valor Bruto"]) * 100)), Aut=str(x["Cód. de autorização"]), Terminal=str(x["Número do terminal"]), Bandeira="PIX"))
     for mod, nome in (("credito", "Crédito"), ("debito", "Débito")):
         sm = le(f"concilia_{mod}_2*.xlsx", "Maquininha sem par")
         for _, x in sm.iterrows():
-            M.append(dict(Forma=nome, Filial=x["Filial"], dt=_dt(x["Data"], str(x["Hora maq"])[:8]), cent=int(round(float(x["Valor Bruto"]) * 100)), Aut=str(x["Autorização"]), Terminal=str(x["Terminal"]), Bandeira=str(x["Bandeira"])))
+            M.append(dict(Forma=nome, Filial=x["Filial"], Data=pd.to_datetime(x["Data"]).date(), dt=_dt(x["Data"], str(x["Hora maq"])[:8]), cent=int(round(float(x["Valor Bruto"]) * 100)), Aut=str(x["Autorização"]), Terminal=str(x["Terminal"]), Bandeira=str(x["Bandeira"])))
     M = pd.DataFrame(M)
     print(f"PDV sem par: {len(P)} linhas em {P.groupby(['Filial','Cupom']).ngroups} cupons | máquina sem par: {len(M)}")
 
     usados_m, resolvidos, linhas = set(), [], []
     for (fil, cup), g in P.groupby(["Filial", "Cupom"]):
         alvo = int(g["cent"].sum()); dtc = g["dt"].max()
-        c = M[(M["Filial"] == fil) & (~M.index.isin(usados_m))].copy()
+        c = M[(M["Filial"] == fil) & (M["Data"] == g["Data"].iloc[0]) & (~M.index.isin(usados_m))].copy()   # mesmo dia de movimento
         dif = (dtc - c["dt"]).dt.total_seconds() / 60
         c = c[(dif >= -JANELA_DEPOIS_MIN) & (dif <= JANELA_ANTES_H * 60)]
         if len(c) == 0:

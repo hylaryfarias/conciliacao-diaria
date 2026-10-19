@@ -58,7 +58,7 @@ def casa(pdv: pd.DataFrame, maq: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
     for _, a in pdv.iterrows():
         # mesmo valor; o cupom do PDV fecha de 30 min antes até 36 h depois do PIX na máquina
         dif = (a["dt_pdv"] - maq["dt"]).dt.total_seconds() / 60
-        cand = maq[(maq["cent"] == a["cent"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~maq.index.isin(usados))]
+        cand = maq[(maq["cent"] == a["cent"]) & (maq["Data"] == a["Data"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~maq.index.isin(usados))]
         if len(cand) == 0:
             linhas.append({**a.to_dict(), "Status": "SEM PAR NA MAQUININHA"})
             continue
@@ -107,7 +107,7 @@ def casa_servico(res: pd.DataFrame, sobra: pd.DataFrame) -> tuple[pd.DataFrame, 
     for i, a in res[res["Status"] == "SEM PAR NA MAQUININHA"].iterrows():
         alvo = int(round(a["cent"] * (1 + TAXA_SERVICO)))
         dif = (a["dt_pdv"] - sobra["dt"]).dt.total_seconds() / 60
-        cand = sobra[(sobra["cent"] == alvo) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados))]
+        cand = sobra[(sobra["cent"] == alvo) & (sobra["Data"] == a["Data"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados))]
         if len(cand) == 0:
             continue
         j = (cand["dt"] - a["dt_pdv"]).abs().idxmin()
@@ -127,7 +127,7 @@ def casa_tolerancia(res: pd.DataFrame, sobra: pd.DataFrame) -> tuple[pd.DataFram
     usados: set = set()
     for i, a in res[res["Status"] == "SEM PAR NA MAQUININHA"].iterrows():
         dif = (a["dt_pdv"] - sobra["dt"]).dt.total_seconds() / 60
-        c = sobra[((sobra["cent"] - a["cent"]).abs() <= TOLERANCIA_CENT) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados))]
+        c = sobra[((sobra["cent"] - a["cent"]).abs() <= TOLERANCIA_CENT) & (sobra["Data"] == a["Data"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados))]
         if len(c) == 0:
             continue
         j = ((c["cent"] - a["cent"]).abs() * 1e6 + (c["dt"] - a["dt_pdv"]).abs().dt.total_seconds()).idxmin()
@@ -149,7 +149,7 @@ def casa_grupos(res: pd.DataFrame, sobra: pd.DataFrame) -> tuple[pd.DataFrame, p
     # 1 cupom : N PIX
     for i, a in pend.iterrows():
         dif = (a["dt_pdv"] - sobra["dt"]).dt.total_seconds() / 60
-        cand = sobra[(dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados)) & (sobra["cent"] < a["cent"])]
+        cand = sobra[(sobra["Data"] == a["Data"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados)) & (sobra["cent"] < a["cent"])]
         g = _subconjunto(int(a["cent"]), cand, a["dt_pdv"]) if len(cand) >= 2 else None
         if not g:
             continue
@@ -167,7 +167,7 @@ def casa_grupos(res: pd.DataFrame, sobra: pd.DataFrame) -> tuple[pd.DataFrame, p
     pend = res[res["Status"] == "SEM PAR NA MAQUININHA"]
     for j, m in sobra.sort_values("cent", ascending=False).iterrows():
         dif = (pend["dt_pdv"] - m["dt"]).dt.total_seconds() / 60
-        cand = pend[(dif >= -JANELA_ANTES_MIN) & (dif <= GRUPO_ESPALHA_H * 60) & (~pend.index.isin(usados_p)) & (pend["cent"] < m["cent"])].rename(columns={"dt_pdv": "dt"})
+        cand = pend[(pend["Data"] == m["Data"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= GRUPO_ESPALHA_H * 60) & (~pend.index.isin(usados_p)) & (pend["cent"] < m["cent"])].rename(columns={"dt_pdv": "dt"})
         g = _subconjunto(int(m["cent"]), cand, m["dt"]) if len(cand) >= 2 else None
         if not g:
             continue
@@ -189,7 +189,7 @@ def caca_forma_errada(res: pd.DataFrame, maq: pd.DataFrame, cartao_pdv: pd.DataF
     usados: set = set()
     for _, x in cart_m.sort_values("dt").iterrows():
         dif = (cartao_pdv["dt_pdv"] - x["dt"]).dt.total_seconds() / 60
-        c = cartao_pdv[(cartao_pdv["cent"] == x["cent"]) & (dif >= -30) & (dif <= 36 * 60)
+        c = cartao_pdv[(cartao_pdv["cent"] == x["cent"]) & (cartao_pdv["Data"] == x["Data"]) & (dif >= -30) & (dif <= 36 * 60)
                        & (~cartao_pdv.index.isin(usados))]
         if len(c):
             usados.add((c["dt_pdv"] - x["dt"]).abs().idxmin())
