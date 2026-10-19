@@ -12,6 +12,10 @@ from python_calamine import CalamineWorkbook
 from pdv_pix import dia_movimento
 
 NUM = ["Valor Bruto", "Valor da taxa (MDR)", "Valor líquido", "Valor cancelado"]
+# O "Relatório de vendas detalhado" tem as mesmas vendas do Histórico (simplificado) com outros nomes de coluna
+# e mais seis colunas de liquidação (data prevista, data efetiva e código do pagamento). Lê-se igual.
+DETALHADO = {"Código de autorização": "Cód. de autorização", "Código do estabelecimento": "Número do estabelecimento",
+             "Valor bruto transação": "Valor Bruto", "Valor líquido da parcela/transação": "Valor líquido", "Cód. do pedido": "Código do pedido"}
 
 
 def ler_portal(caminho: str) -> tuple[pd.DataFrame, dict]:
@@ -27,10 +31,10 @@ def ler_portal(caminho: str) -> tuple[pd.DataFrame, dict]:
     m = re.search(r"(\d{8})", meta.get("Estabelecimento comercial", ""))
     meta["EC"] = m.group(1) if m else None
 
-    df = pd.DataFrame(rows[h + 1 :], columns=rows[h])
+    df = pd.DataFrame(rows[h + 1 :], columns=rows[h]).rename(columns=DETALHADO)
     df = df[df["Data da venda"].astype(str).str.match(r"\d{2}/\d{2}/\d{4}")]
     for c in NUM:
-        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0) if c in df.columns else 0.0
     df["dt"] = pd.to_datetime(
         df["Data da venda"] + " " + df["Hora da venda"].astype(str).str.strip(), dayfirst=True
     )
