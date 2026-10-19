@@ -44,14 +44,15 @@ def analitico(arqs):
     d["Cupom"] = d["Cupom"].astype(str).str.replace(".0", "", regex=False)
     d["taxa"] = d["Produto"].astype(str).str.upper().str.contains("TAXA DE SERV")
     d["Preço"] = pd.to_numeric(d["Preço"], errors="coerce").fillna(0)
-    g = d.groupby(["Filial", "Cupom"]).agg(**{
+    d["Caixa"] = d["Caixa"].astype(str).str.strip()
+    g = d.groupby(["Filial", "Caixa", "Cupom"]).agg(**{
         "Operador do caixa": ("Operador", "first"),
         "Atendente": ("Nome do atendente", "first"),
         "Mesa": ("Nr. mesa/comanda", "first"),
         "Item taxa no cupom": ("taxa", "any"),
     }).reset_index()
-    tx = d[d["taxa"]].groupby(["Filial", "Cupom"])["Preço"].sum().rename("Taxa no cupom (R$)").reset_index()
-    g = g.merge(tx, on=["Filial", "Cupom"], how="left")
+    tx = d[d["taxa"]].groupby(["Filial", "Caixa", "Cupom"])["Preço"].sum().rename("Taxa no cupom (R$)").reset_index()
+    g = g.merge(tx, on=["Filial", "Caixa", "Cupom"], how="left")
     g["Item taxa no cupom"] = g["Item taxa no cupom"].map({True: "sim", False: "não"})
     return g
 
@@ -108,7 +109,8 @@ def main():
     A = analitico(ana)
     I = L[L["Filial"].str.startswith("ISAIAS 01")].copy()
     if len(A):
-        I = I.merge(A, on=["Filial", "Cupom"], how="left")
+        I["Caixa"] = I["Caixa"].astype(str).str.strip()
+        I = I.merge(A, on=["Filial", "Caixa", "Cupom"], how="left")   # cupom repete entre caixas: a chave precisa do caixa
     I_op = I.groupby("Operador do caixa").agg(Cupons=("Cupom", "count"), **{"Sobra (R$)": ("Serviço (R$)", "sum")}).reset_index().sort_values("Sobra (R$)", ascending=False) if "Operador do caixa" in I.columns else pd.DataFrame()
 
     out = RAIZ / "saida" / f"taxa_servico_{de or L['Data'].min()}_a_{ate or L['Data'].max()}.xlsx"
