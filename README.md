@@ -79,6 +79,11 @@ Quando o PDV baixou com a forma errada e o caixa já fechou, o ajuste é feito n
 do artefato, coleção `ajustes`, e é lido de volta a cada rodada com a ferramenta de dados do
 artefato. O painel aplica os ajustes em cima dos números gerados.
 
+## Funcionamento das lojas
+
+- MAPOLI não abre sábado e domingo: esses dias ficam sem venda nos dois lados (traço no painel).
+- ISAIAS 01 não abre às terças à noite.
+
 ## Dia único: o dia de movimento
 
 A venda vai da abertura do caixa até a reabertura da loja às 10h. O PDV já informa o dia de
