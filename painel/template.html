@@ -287,7 +287,7 @@ function lojas(){
   const ordem = {erro:0, pendente:1, ok:2, aguarda:3};
   const lista = D.lojas.map(l => ({l, st:statusLoja(l), tot:sum(M(l).dias, d=>d.pdv)})).sort((a,b) => ordem[a.st.s]-ordem[b.st.s] || a.l.nome.localeCompare(b.l.nome));
   document.getElementById("lojas-n").textContent = D.lojas.length;
-  ul.innerHTML = lista.map(({l,st,tot}) => `<li><button class="loja" data-nome="${esc(l.nome)}" aria-pressed="${l.nome===sel}" style="--m:var(--${l.marca})">
+  ul.innerHTML = lista.map(({l,st,tot}) => `<li><button class="loja" data-nome="${esc(l.nome)}" aria-pressed="${l.nome===sel}" style="--m:var(--${({ok:"ok",erro:"erro",pendente:"pendente"})[st.s] || "ink-muted"})">
     <span class="bar"></span><span class="nm">${esc(l.nome)}<small>${brl(tot)} em ${TABS[tab]} no PDV${l.ec?` · EC ${l.ec}`:""}</small></span><span class="chip" data-s="${st.s}">${st.t}</span></button></li>`).join("");
   ul.querySelectorAll(".loja").forEach(b => b.addEventListener("click", () => { sel = b.dataset.nome; try{localStorage.setItem("loja",sel)}catch(e){} lojas(); detalhe(); ligaDias(); }));
 }
