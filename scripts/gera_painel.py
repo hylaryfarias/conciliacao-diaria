@@ -155,18 +155,25 @@ def main() -> None:
         x = str(x)
         return x[11:16] if len(x) > 10 and x[10] == " " else x[:5]
 
+    def dif_maq(x):
+        """máquina − PDV da linha casada: diferença tolerada ou taxa de serviço não baixada (ambas são máquina − PDV)."""
+        for c in ("Dif. valor (R$)", "Serviço (R$)"):
+            if c in x.index and pd.notna(x[c]):
+                return float(x[c])
+        return 0.0
+
     def lanc_pdv(filial, m, d):
         q = b[(b["Filial"] == filial) & (b["Data"] == d) & (b["forma"].isin(FORMAS[m]))].sort_values("dt_pdv")
-        return [{"h": hh(x["dt_pdv"]), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Desc. pagam."]), "v": r2(x["cent"] / 100), "s": "PDV"} for _, x in q.iterrows()]
+        return [{"h": hh(x["dt_pdv"]), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Desc. pagam."]), "v": r2(x["cent"] / 100), "vp": r2(x["cent"] / 100), "s": "PDV"} for _, x in q.iterrows()]
 
     def lanc_pix(filial, d):
         if not len(l1) or not len(l1[(l1["Filial"] == filial) & (l1["Data"] == d)]):
             return lanc_pdv(filial, "pix", d)
         rows = []
         for _, x in l1[(l1["Filial"] == filial) & (l1["Data"] == d)].sort_values("Hora").iterrows():
-            r = {"h": hh(x["Hora"]), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Desc. pagam."]), "v": r2(x["Vl. pagamento"]), "s": str(x["Status"])}
+            r = {"h": hh(x["Hora"]), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Desc. pagam."]), "v": r2(x["Vl. pagamento"]), "vp": r2(x["Vl. pagamento"]), "s": str(x["Status"])}
             if pd.notna(x.get("Hora maq")):
-                r.update(hm=hh(x["Hora maq"]), t=str(x["Terminal"]), a=str(x["Autorização"]))
+                r.update(hm=hh(x["Hora maq"]), t=str(x["Terminal"]), a=str(x["Autorização"]), vm=r2(float(x["Vl. pagamento"]) + dif_maq(x)))
                 if pd.notna(x.get("Dia maq")) and pd.to_datetime(x["Dia maq"]).date() != d:
                     r["dm"] = pd.to_datetime(x["Dia maq"]).date().isoformat()
                 if str(x["Status"]) == "CONCILIADO" and str(x["Autorização"]) in banco_por_aut:
@@ -176,11 +183,11 @@ def main() -> None:
             vm = l1[(l1["Filial"] == filial) & l1["Dia maq"].notna()]
             vm = vm[(pd.to_datetime(vm["Dia maq"]).dt.date == d) & (vm["Data"] != d)]
             for _, x in vm.iterrows():
-                rows.append({"h": hh(x["Hora"]), "dp": x["Data"].isoformat(), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Desc. pagam."]), "v": r2(x["Vl. pagamento"]),
-                             "s": str(x["Status"]), "hm": hh(x["Hora maq"]), "t": str(x["Terminal"]), "a": str(x["Autorização"])})
+                rows.append({"h": hh(x["Hora"]), "dp": x["Data"].isoformat(), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Desc. pagam."]), "v": r2(x["Vl. pagamento"]), "vp": r2(x["Vl. pagamento"]),
+                             "s": str(x["Status"]), "hm": hh(x["Hora maq"]), "t": str(x["Terminal"]), "a": str(x["Autorização"]), "vm": r2(float(x["Vl. pagamento"]) + dif_maq(x))})
         if len(e1m):
             for _, x in e1m[(e1m["Filial"] == filial) & (e1m["Data"] == d)].iterrows():
-                rows.append({"s": "MAQUININHA SEM PAR NO PDV", "v": r2(x["Valor Bruto"]), "hm": hh(x["dt"]), "t": str(x["Número do terminal"]), "a": str(x["Cód. de autorização"])})
+                rows.append({"s": "MAQUININHA SEM PAR NO PDV", "v": r2(x["Valor Bruto"]), "vm": r2(x["Valor Bruto"]), "hm": hh(x["dt"]), "t": str(x["Número do terminal"]), "a": str(x["Cód. de autorização"])})
         rows.sort(key=lambda r: r.get("hm") or r.get("h") or "")
         return rows
 
@@ -190,21 +197,21 @@ def main() -> None:
             return lanc_pdv(filial, m, d)
         rows = []
         for _, x in L[(L["Filial"] == filial) & (pd.to_datetime(L["Data"]).dt.date == d)].sort_values("Hora maq").iterrows():
-            r = {"s": str(x["Status"]), "v": r2(x["Valor Bruto"]), "hm": hh(x["Hora maq"]), "b": str(x["Bandeira"]), "t": str(x["Terminal"]), "a": str(x["Autorização"]), "mdr": r2(x["MDR"])}
+            r = {"s": str(x["Status"]), "v": r2(x["Valor Bruto"]), "vm": r2(x["Valor Bruto"]), "hm": hh(x["Hora maq"]), "b": str(x["Bandeira"]), "t": str(x["Terminal"]), "a": str(x["Autorização"]), "mdr": r2(x["MDR"])}
             if str(x["Status"]).startswith(("CONCILIADO", "SERVIÇO")):
-                r.update(h=hh(x["Hora PDV"]), c=str(x["Cupom"]), cx=str(x["Caixa"]), f=str(x["Forma PDV"]))
+                r.update(h=hh(x["Hora PDV"]), c=str(x["Cupom"]), cx=str(x["Caixa"]), f=str(x["Forma PDV"]), vp=r2(float(x["Valor Bruto"]) - dif_maq(x)))
                 if pd.notna(x["Dia PDV"]) and pd.to_datetime(x["Dia PDV"]).date() != d:
                     r["dp"] = pd.to_datetime(x["Dia PDV"]).date().isoformat()
             rows.append(r)
         vp = L[(L["Filial"] == filial) & L["Dia PDV"].notna()]
         vp = vp[(pd.to_datetime(vp["Dia PDV"]).dt.date == d) & (pd.to_datetime(vp["Data"]).dt.date != d)]
         for _, x in vp.sort_values("Hora PDV").iterrows():
-            rows.append({"s": str(x["Status"]), "v": r2(x["Valor Bruto"]), "hm": hh(x["Hora maq"]), "dm": pd.to_datetime(x["Data"]).date().isoformat(), "b": str(x["Bandeira"]), "t": str(x["Terminal"]), "a": str(x["Autorização"]), "mdr": r2(x["MDR"]),
+            rows.append({"s": str(x["Status"]), "v": r2(x["Valor Bruto"]), "vm": r2(x["Valor Bruto"]), "vp": r2(float(x["Valor Bruto"]) - dif_maq(x)), "hm": hh(x["Hora maq"]), "dm": pd.to_datetime(x["Data"]).date().isoformat(), "b": str(x["Bandeira"]), "t": str(x["Terminal"]), "a": str(x["Autorização"]), "mdr": r2(x["MDR"]),
                          "h": hh(x["Hora PDV"]), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Forma PDV"])})
         sp = cart[m][2]
         if len(sp):
             for _, x in sp[(sp["Filial"] == filial) & (sp["Data"] == d)].iterrows():
-                rows.append({"s": "SEM PAR NA MAQUININHA", "h": hh(x["Hora"]), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Desc. pagam."]), "v": r2(x["Vl. pagamento"])})
+                rows.append({"s": "SEM PAR NA MAQUININHA", "h": hh(x["Hora"]), "c": str(x["Cupom"]), "cx": str(x["Caixa"]), "f": str(x["Desc. pagam."]), "v": r2(x["Vl. pagamento"]), "vp": r2(x["Vl. pagamento"])})
         return rows
 
     def viradas(filial, m):

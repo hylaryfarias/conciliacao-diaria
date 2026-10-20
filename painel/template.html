@@ -406,13 +406,13 @@ function lancamentos(d){
   if(!L.length) return topo + `<div class="lanc-vazio">Nenhum lançamento de ${TABS[tab]} neste dia.</div>`;
   const st = r => r.aj ? ["ajuste", r.s.toLowerCase()] : r.s==="AGUARDA PDV" ? ["pendente","aguarda PDV"] : /^(SEM PAR|MAQUININHA SEM PAR)/.test(r.s) ? ["pendente", "comanda parcial"] : r.s.startsWith("CONCILIADO") ? ["ok", r.s==="CONCILIADO" ? "conciliado" : r.s.toLowerCase().replace("conciliado ","")] : r.s.startsWith("SERVIÇO") ? ["erro", "serviço não baixado"] : r.s==="PDV" ? ["pdv","só PDV"] : ["erro", r.s.toLowerCase().replace("provável forma errada:","forma errada ·")];
   const head = temMaq
-    ? `<th>Hora PDV</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th><th>Situação</th><th>Hora máq</th>${pix?"":"<th>Bandeira</th>"}<th>Terminal</th><th>Autorização</th>${pix?"<th>Pagador</th>":"<th>MDR</th>"}`
+    ? `<th>Hora PDV</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor PDV</th><th>Valor máq</th><th>Situação</th><th>Hora máq</th>${pix?"":"<th>Bandeira</th>"}<th>Terminal</th><th>Autorização</th>${pix?"<th>Pagador</th>":"<th>MDR</th>"}`
     : `<th>Hora</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th>`;
   const rows = L.map(r => {
     const [s,txt] = st(r);
     const cx = (r.cx||"").replace(/^\d+ - /,"");
     if(!temMaq) return `<tr><td>${r.h||""}</td><td>${esc(r.c||"")}</td><td class="mono">${esc(cx)}</td><td>${esc(r.f||"")}</td><td>${brl(r.v)}</td></tr>`;
-    return `<tr title="${esc(r.cm||"")}"><td>${r.h||"—"}${r.dp?`<small style="color:var(--pendente)"> ${dBR(r.dp)}</small>`:""}</td><td>${esc(r.c||"—")}</td><td class="mono">${esc(cx)||"—"}</td><td>${esc(r.f||"—")}</td><td>${brl(r.v)}</td><td class="st" data-s="${s}">${esc(txt)}</td>
+    return `<tr title="${esc(r.cm||"")}"><td>${r.h||"—"}${r.dp?`<small style="color:var(--pendente)"> ${dBR(r.dp)}</small>`:""}</td><td>${esc(r.c||"—")}</td><td class="mono">${esc(cx)||"—"}</td><td>${esc(r.f||"—")}</td><td>${r.vp!==undefined?brl(r.vp):"—"}</td><td class="${r.vm!==undefined&&r.vp!==undefined&&Math.abs(r.vm-r.vp)>0.004?"neg":""}">${r.vm!==undefined?brl(r.vm):"—"}</td><td class="st" data-s="${s}">${esc(txt)}</td>
       <td>${r.hm||"—"}${r.dm?`<small style="color:var(--pendente)"> ${dBR(r.dm)}</small>`:""}</td>${pix?"":`<td>${esc(r.b||"—")}</td>`}<td class="mono">${esc(r.t||"—")}</td><td class="mono" title="${esc(r.a||"")}">${esc(autCurta(r.a))}</td>${pix?`<td class="mono pg">${esc(r.pg||"—")}</td>`:`<td>${r.mdr!==undefined?brl(r.mdr):"—"}</td>`}</tr>`;
   }).join("");
   return topo + `<div class="lanc-wrap"><table class="lanc-t"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -500,13 +500,13 @@ function aplicaAjustes(){
     if(dd.delta !== undefined) dd.delta = r(dd.delta + v);
     const lm = a.aut ? (dd.lanc||[]).find(x => x.a === a.aut && x.s === "MAQUININHA SEM PAR NO PDV") : null;
     if(lm){
-      lm.s = "CONCILIADO (ajuste)"; lm.aj = true; lm.h = a.hora; lm.c = a.cupom; lm.cx = a.caixa; lm.f = `${a.forma} → ${NOMES[a.para]}`;
+      lm.s = "CONCILIADO (ajuste)"; lm.aj = true; lm.h = a.hora; lm.c = a.cupom; lm.cx = a.caixa; lm.f = `${a.forma} → ${NOMES[a.para]}`; lm.vp = v;
       if(a.data !== dd.data) lm.dp = a.data;
       if(dd.maq_sem_par !== undefined) dd.maq_sem_par = r(Math.max(0, dd.maq_sem_par - v));
       const pj = para.pendencias.findIndex(p => p.status === "MAQUININHA SEM PAR NO PDV" && String(p.ref).includes(`aut. ${a.aut}`));
       if(pj >= 0) para.pendencias.splice(pj, 1);
     } else {
-      (dd.lanc ||= []).push({h:a.hora, c:a.cupom, cx:a.caixa, f:`${a.forma} → ${NOMES[a.para]}`, v, s:"RECLASSIFICADO (sem par na máquina)", aj:true});
+      (dd.lanc ||= []).push({h:a.hora, c:a.cupom, cx:a.caixa, f:`${a.forma} → ${NOMES[a.para]}`, v, vp:v, s:"RECLASSIFICADO (sem par na máquina)", aj:true});
       if(dd.pdv_sem_par !== undefined) dd.pdv_sem_par = r(dd.pdv_sem_par + v);
     }
   }
