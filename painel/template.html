@@ -472,7 +472,7 @@ const idFech = f => `${slug(f.loja)}_${f.mod}_${f.data}`;
 let dbRef = null, userRef = null, podeEscrever = null, meuId = null;
 const NOMES = {pix:"PIX", credito:"Crédito", debito:"Débito", voucher:"Voucher (vale)"};
 const slug = x => String(x).replace(/[^A-Za-z0-9_.~:@+-]+/g, "-");
-const idAjuste = a => `${slug(a.loja)}_${a.data}_${a.cupom}_${a.de}`;
+const idAjuste = a => a.id || `${slug(a.loja)}_${a.data}_${a.cupom}_${a.de}${a.aut ? "_" + slug(a.aut) : ""}`;   // um cupom pode ter duas linhas (dois vales): a autorização entra no id
 
 function aplicaAjustes(){
   D = JSON.parse(JSON.stringify(D0));
@@ -487,7 +487,7 @@ function aplicaAjustes(){
     dia.pdv_qtd -= 1; dia.pdv = r(dia.pdv - v);
     if(dia.pdv_sem_par !== undefined) dia.pdv_sem_par = r(Math.max(0, dia.pdv_sem_par - v));
     if(dia.delta !== undefined) dia.delta = r(dia.delta - v);
-    const pi = de.pendencias.findIndex(p => p.cupom === a.cupom && p.data === a.data);
+    const pi = de.pendencias.findIndex(p => p.cupom === a.cupom && p.data === a.data && !p.ajuste && (!a.aut || !p.aut || p.aut === a.aut));
     if(pi >= 0){ const p = de.pendencias[pi]; p.ajuste = a; p.status = `RECLASSIFICADO → ${NOMES[a.para]}`; }
     // destino: entra nas somas do dia da máquina (ou do PDV, se não houver par) e casa com a linha órfã
     if(!para) continue;
@@ -605,6 +605,7 @@ function ligaCliques(){
       const a = {loja:l.nome, de:tab, para, data:p.data, cupom:p.cupom, caixa:p.caixa, hora:p.hora, forma:p.forma, valor:p.valor,
                  justificativa:just, criado_em:new Date().toISOString(), por:meuId || null};
       if(p.aut && para === p.para){ a.aut = p.aut; a.data_maq = p.data_maq; }
+      a.id = idAjuste(a);
       salvaAjuste(a, alvo);
     }
     else if(act === "desfazer"){ desfazAjuste(alvo.dataset.id, alvo); }
