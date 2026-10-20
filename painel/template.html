@@ -197,6 +197,8 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
       <div class="regra"><b>Reclassificação fica registrada</b>Quando a baixa no PDV saiu com a forma errada, o lançamento pode ser transferido aqui para a forma certa, com justificativa, autor e hora. Como o caixa fechado não aceita correção no PDV, esse ajuste é o registro oficial da conciliação e fica guardado com o painel.</div>
       <div class="regra"><b>Dia conferido no caixa fecha</b>Quando a diferença entre PDV e máquina aparece na contagem física do caixa (sobra ou falta), o dia pode ser fechado aqui pelo botão "Fechar dia", com o valor conferido, justificativa, autor e hora. O dia e suas pendências saem do em aberto; o registro fica guardado com o painel e pode ser reaberto.</div>
       <div class="regra"><b>Virada de dia só depois das 10h</b>Como os dois lados usam o dia de movimento, pagar na máquina à noite e fechar o cupom de madrugada cai no mesmo dia. Só fica "virada de dia" o raro cupom fechado no PDV depois das 10h do dia seguinte: o Δ do dia ganha a marca e o cupom aparece nos dois dias, com a data do outro lado em laranja.</div>
+      <div class="regra"><b>Vale baixado como cartão</b>Voucher Ticket, Alelo, Pluxee, Fepas ou Elo/Visa passado na máquina no mesmo minuto de uma baixa de cartão ou PIX sem par é forma errada: o pagamento foi em vale. O painel aponta e permite transferir para Voucher.</div>
+      <div class="regra"><b>Cupom duplicado no PDV</b>Baixa sem par cujo vizinho (mesmo caixa, mesmo valor, até 5 minutos) já casou com a venda da máquina é cupom fechado duas vezes. Não há dinheiro faltando: o PDV registrou a mais.</div>
       <div class="regra"><b>Até R$ 1,00 é conciliado</b>Diferença de até R$ 1,00 para mais ou para menos entre o PDV e a máquina fecha, no lançamento e no dia. Acima disso é divergência.</div>
       <div class="regra"><b>Aguardar não é divergir</b>Venda depois da última data do extrato fica como "aguarda extrato", fora do Δ e fora da contagem de casos.</div>
     </div>
@@ -301,6 +303,8 @@ function tone(d){
 }
 const EXPL = {
   "PROVÁVEL FORMA ERRADA": "O PDV registrou PIX, mas a máquina tem um cartão de mesmo valor sem lançamento no PDV. O caixa provavelmente escolheu a forma de pagamento errada. Confirmar com a loja e corrigir no PDV.",
+  "PROVÁVEL FORMA ERRADA: VOUCHER": "O cliente pagou com vale (Ticket, Alelo, Pluxee, Fepas, voucher Elo/Visa) na máquina Sicredi no mesmo minuto, e o caixa baixou como cartão ou PIX. O dinheiro vem pela operadora do vale, não pela Sicredi. Transferir para Voucher.",
+  "PROVÁVEL CUPOM DUPLICADO NO PDV": "Dois cupons do mesmo caixa, mesmo valor, mesmos itens, fechados com minutos de diferença, e só uma venda na máquina. O PDV registrou a venda duas vezes. Na conferência de caixa aparece como falta. Fechar o dia com essa justificativa e orientar o caixa.",
   "SERVIÇO NÃO BAIXADO": "A máquina cobrou o cupom mais 10% de serviço e o PDV foi fechado sem o item da taxa. O cliente pagou a mais do que o PDV registra, e essa sobra na forma de pagamento não tem lançamento. Apurar com a loja quem operou o caixa nesse horário.",
   "CONCILIADO POR TOTAL DA COMANDA": "Mesa dividida: a comanda fechou com o mesmo total nos dois lados, mas os clientes pagaram com outra divisão de formas. Linha a linha não bate; a comanda bate.",
   "SEM PAR NA MAQUININHA": "Comanda parcial: baixa no PDV que não bate sozinha com nenhuma venda da máquina. Ela se compensa com as vendas da máquina sem baixa do mesmo dia; o dia só fica em aberto pelo líquido entre os dois lados.",
@@ -316,6 +320,7 @@ const EXPL = {
   "BANCO SEM VENDA": "Entrou um PIX na conta sem venda correspondente. Pode ser recebimento de outra natureza classificado como venda.",
   "CONCILIADO · VIRADA DE DIA": "O cliente pagou na máquina num dia de movimento e o caixa só fechou o cupom no PDV no dia de movimento seguinte (depois das 10h). Os dois lados casam; só o dia é diferente. Não é divergência: o Δ do dia da máquina fica negativo e o do dia seguinte, positivo, no mesmo valor.",
 };
+const neg = x => (x ? -x : 0);   // Δ exibido como máquina − PDV: positivo = entrou a mais, negativo = faltou
 const virada = d => Math.round((((d.virada_saiu ?? 0) - (d.virada_entrou ?? 0)))*100)/100;   // o que o Δ do dia deve à virada
 const quando = iso => iso ? new Date(iso).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
 const notaFech = (f, comBotao) => `<div class="ajuste-nota fech-nota"><b>Dia fechado no caixa</b> · conferido ${brl(f.caixa)} no caixa físico contra ${brl(f.aberto)} em aberto no painel.<br>${esc(f.justificativa)}<br><small>registrado em ${quando(f.criado_em)}<span data-por="${esc(f.por||"")}"></span></small>${comBotao && dbRef && podeEscrever !== false ? `<div class="acoes"><button type="button" class="btn" data-act="reabrir" data-id="${esc(idFech(f))}">Reabrir dia</button></div>` : ""}</div>`;
@@ -339,7 +344,7 @@ function detalhe(){
       : `<div class="ponta"><div class="lbl">Líquido previsto</div><div class="val">${brl(sum(m.dias,d=>d.liquido))}</div><div class="sub">MDR ${brl(sum(m.dias,d=>d.mdr))} · banco na etapa 2</div></div>`;
     html += `<div class="pontas">
       <div class="ponta"><div class="lbl">PDV</div><div class="val">${brl(pdv)}</div><div class="sub">${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)} lançamentos</div></div>
-      <div class="ponta" data-tone="${Math.abs(pdv-maq)>0.004?"erro":"ok"}"><div class="lbl">Maquininha</div><div class="val">${brl(maq)}</div><div class="sub">Δ PDV − máquina ${brl(Math.round((pdv-maq)*100)/100)}</div></div>
+      <div class="ponta" data-tone="${Math.abs(pdv-maq)>0.004?"erro":"ok"}"><div class="lbl">Maquininha</div><div class="val">${brl(maq)}</div><div class="sub">Δ máquina − PDV ${brl(Math.round((maq-pdv)*100)/100)}</div></div>
       ${bancoPonta}
       <div class="ponta" data-tone="${aberto>TOL?"erro":"ok"}"><div class="lbl">Em aberto</div><div class="val">${brl(aberto)}</div><div class="sub">${nCasos} caso${nCasos===1?"":"s"}${nParcial?` · ${nParcial} de comanda parcial`:""}${nBanco?` · ${nBanco} PIX a mais no banco`:""}${nFech?` · ${nFech} dia${nFech===1?"":"s"} fechado${nFech===1?"":"s"} no caixa`:""}</div></div>
     </div>`;
@@ -359,7 +364,7 @@ function detalhe(){
         acoes = `<div class="ajuste-nota"><b>Dia fechado no caixa:</b> ${esc(p.fechado.justificativa)}<br><small>registrado em ${quando(p.fechado.criado_em)}<span data-por="${esc(p.fechado.por||"")}"></span></small></div>`;
       } else if(p.servico !== undefined){
         acoes = `<div class="ajuste-nota"><b>Sobra na máquina:</b> ${brl(p.servico)}</div>`;
-      } else if(p.cupom && podeAjustar){
+      } else if(p.cupom && podeAjustar && !/DUPLICADO/.test(p.status)){
         acoes = `<div class="acoes"><button type="button" class="btn primario" data-act="abrir">Transferir para ${p.para ? NOMES[p.para] : "outra forma"}…</button></div>` + formAjuste(p, l);
       } else if(p.cupom && !dbRef){
         acoes = `<div class="ajuste-nota"><small>Para reclassificar, abra o painel conectado ao claude.ai.</small></div>`;
@@ -385,13 +390,13 @@ function tabela(m){
     const fim = (pix ? `<td>${f(d.banco)}</td>` : `<td>${f(d.mdr)}</td><td>${f(d.liquido)}</td>`) + `<td class="fech">${fech(d,i)}</td>`;
     return `<tr class="${fds?"fim":""}" data-i="${i}" data-open="false"><td class="dia"><span class="dot" data-s="${t}"></span><button type="button" data-i="${i}" aria-expanded="false">${dBR(d.data)}</button><small>${d.dow}${d.feriado?" · feriado":""}</small></td>
       <td>${d.sem_pdv?"—":d.pdv_qtd}</td><td>${d.sem_pdv?`<span style="color:var(--ink-muted)">sem relatório</span>`:brl(d.pdv)}</td><td>${f(d.maq)}</td>
-      <td class="${Math.abs(d.delta??0)>0.004 && Math.abs((d.delta??0)+virada(d))>0.004?"neg":""}">${d.delta===undefined?"—":brl(d.delta)}${virada(d)!==0?`<small class="vir" title="${esc(`${d.virada_saiu?brl(d.virada_saiu)+" pagos na máquina neste dia e fechados no PDV em outro dia":""}${d.virada_saiu&&d.virada_entrou?" · ":""}${d.virada_entrou?brl(d.virada_entrou)+" fechados no PDV neste dia e pagos na máquina em outro dia":""}`)}">virada de dia ${Math.abs((d.delta??0)+virada(d))<=0.004?"✓":brl(Math.round(((d.delta??0)+virada(d))*100)/100)+" além"}</small>`:""}</td>${fim}</tr>`;
+      <td class="${Math.abs(d.delta??0)>0.004 && Math.abs((d.delta??0)+virada(d))>0.004?"neg":""}">${d.delta===undefined?"—":brl(neg(d.delta))}${virada(d)!==0?`<small class="vir" title="${esc(`${d.virada_saiu?brl(d.virada_saiu)+" pagos na máquina neste dia e fechados no PDV em outro dia":""}${d.virada_saiu&&d.virada_entrou?" · ":""}${d.virada_entrou?brl(d.virada_entrou)+" fechados no PDV neste dia e pagos na máquina em outro dia":""}`)}">virada de dia ${Math.abs((d.delta??0)+virada(d))<=0.004?"✓":brl(neg(Math.round(((d.delta??0)+virada(d))*100)/100))+" além"}</small>`:""}</td>${fim}</tr>`;
   }).join("");
   const T = g => brl(sum(m.dias,g));
   const fimH = (pix ? `<th>Banco R$</th>` : `<th>MDR R$</th><th>Líquido R$</th>`) + `<th>Fechamento</th>`;
   const fimT = (pix ? `<td>${m.tem_banco?T(d=>d.banco):"—"}</td>` : `<td>${m.tem_maq?T(d=>d.mdr):"—"}</td><td>${m.tem_maq?T(d=>d.liquido):"—"}</td>`) + `<td></td>`;
-  return `<div class="tablewrap"><table id="tab-dias"><thead><tr><th>Dia</th><th>PDV qtd</th><th>PDV R$</th><th>Maq ${pix?"":"bruto "}R$</th><th>Δ PDV−Maq</th>${fimH}</tr></thead>
-    <tbody>${rows}</tbody><tfoot><tr><td>Total</td><td>${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)}</td><td>${T(d=>d.pdv)}</td><td>${m.tem_maq?T(d=>d.maq):"—"}</td><td class="${Math.abs(sum(m.dias,d=>d.delta))>0.004?"neg":""}">${m.tem_maq?T(d=>d.delta):"—"}</td>${fimT}</tr></tfoot></table></div>`;
+  return `<div class="tablewrap"><table id="tab-dias"><thead><tr><th>Dia</th><th>PDV qtd</th><th>PDV R$</th><th>Maq ${pix?"":"bruto "}R$</th><th>Δ Maq−PDV</th>${fimH}</tr></thead>
+    <tbody>${rows}</tbody><tfoot><tr><td>Total</td><td>${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)}</td><td>${T(d=>d.pdv)}</td><td>${m.tem_maq?T(d=>d.maq):"—"}</td><td class="${Math.abs(sum(m.dias,d=>d.delta))>0.004?"neg":""}">${m.tem_maq?brl(neg(sum(m.dias,d=>d.delta))):"—"}</td>${fimT}</tr></tfoot></table></div>`;
 }
 function lancamentos(d){
   const pix = tab === "pix", temMaq = d.maq !== undefined;
@@ -466,7 +471,7 @@ let AJ = {};            // id -> ajuste
 let FE = {};            // id -> fechamento de dia conferido no caixa
 const idFech = f => `${slug(f.loja)}_${f.mod}_${f.data}`;
 let dbRef = null, userRef = null, podeEscrever = null, meuId = null;
-const NOMES = {pix:"PIX", credito:"Crédito", debito:"Débito"};
+const NOMES = {pix:"PIX", credito:"Crédito", debito:"Débito", voucher:"Voucher (vale)"};
 const slug = x => String(x).replace(/[^A-Za-z0-9_.~:@+-]+/g, "-");
 const idAjuste = a => `${slug(a.loja)}_${a.data}_${a.cupom}_${a.de}`;
 
@@ -474,7 +479,7 @@ function aplicaAjustes(){
   D = JSON.parse(JSON.stringify(D0));
   for(const a of Object.values(AJ)){
     const l = D.lojas.find(x => x.nome === a.loja); if(!l) continue;
-    const de = l.mod[a.de], para = l.mod[a.para]; if(!de || !para) continue;
+    const de = l.mod[a.de], para = l.mod[a.para]; if(!de) continue;   // destino pode não ter aba (voucher): só sai da origem
     const dia = de.dias.find(d => d.data === a.data); if(!dia) continue;
     const v = a.valor;
     // origem: tira o lançamento das somas e marca a linha
@@ -486,6 +491,7 @@ function aplicaAjustes(){
     const pi = de.pendencias.findIndex(p => p.cupom === a.cupom && p.data === a.data);
     if(pi >= 0){ const p = de.pendencias[pi]; p.ajuste = a; p.status = `RECLASSIFICADO → ${NOMES[a.para]}`; }
     // destino: entra nas somas do dia da máquina (ou do PDV, se não houver par) e casa com a linha órfã
+    if(!para) continue;
     const dd = para.dias.find(d => d.data === (a.data_maq || a.data)) || para.dias.find(d => d.data === a.data); if(!dd) continue;
     dd.pdv_qtd += 1; dd.pdv = r(dd.pdv + v);
     if(dd.delta !== undefined) dd.delta = r(dd.delta + v);

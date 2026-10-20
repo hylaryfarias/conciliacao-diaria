@@ -17,7 +17,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
 from concilia_pix import TAXA_SERVICO, TOLERANCIA_CENT, carrega_lojas  # noqa: E402
-from pdv_pix import HORA_VIRADA  # noqa: E402
+from pdv_pix import HORA_VIRADA, explica_sem_par  # noqa: E402
 from pdv_pix import ler_pdv  # noqa: E402
 from portal_sicredi import ler_portais  # noqa: E402
 
@@ -98,6 +98,9 @@ def roda(mod: str, bruto: pd.DataFrame, portais: list[str], lojas: dict) -> None
         d0, d1 = df["Data"].min(), df["Data"].max()
         p = pdv_all[(pdv_all["Filial"] == filial) & (pdv_all["Data"] >= d0) & (pdv_all["Data"] <= d1)]
         res, sobra = casa(maq, p)
+        if len(sobra):
+            casados = res[res["Status"].astype(str).str.startswith(("CONCILIADO", "SERVIÇO"))]["Cupom"].dropna().astype(str).str.replace(".0", "", regex=False)
+            sobra = explica_sem_par(sobra, df[df["Status"].str.upper().isin({"APROVADA", "AUTORIZADA"})], bruto[bruto["Filial"] == filial], casados)
         res["Filial"], res["EC"] = filial, ec
         sobra["Filial"], sobra["EC"] = filial, ec
         todas.append(res); sobras.append(sobra)
@@ -122,7 +125,7 @@ def roda(mod: str, bruto: pd.DataFrame, portais: list[str], lojas: dict) -> None
     out = RAIZ / "saida" / f"concilia_{mod}_{resumo['Data'].min():%Y-%m-%d}_a_{resumo['Data'].max():%Y-%m-%d}.xlsx"
     cols = ["Filial", "EC", "Data", "Hora maq", "Bandeira", "Canal", "Valor Bruto", "MDR", "Líquido", "Terminal", "Autorização",
             "Status", "Dia PDV", "Hora PDV", "Cupom", "Caixa", "Forma PDV", "Dif. hora (min)", "Serviço (R$)", "Dif. valor (R$)"]
-    cols_p = ["Filial", "EC", "Data", "Dia movimento", "Hora", "Cupom", "Caixa", "Desc. pagam.", "Vl. pagamento"]
+    cols_p = ["Filial", "EC", "Data", "Dia movimento", "Hora", "Cupom", "Caixa", "Desc. pagam.", "Vl. pagamento", "Status", "Modalidade maq", "Bandeira maq", "Hora maq", "Autorização", "Terminal", "Cupom igual"]
     with pd.ExcelWriter(out) as xw:
         resumo.to_excel(xw, sheet_name="Resumo loja x dia", index=False)
         res[[c for c in cols if c in res.columns]].to_excel(xw, sheet_name="Maquininha x PDV", index=False)

@@ -276,6 +276,8 @@ def main() -> None:
                         "cupom": str(q["Cupom"]), "caixa": str(q["Caixa"]), "hora": str(q["Hora"])[:5], "forma": str(q["Desc. pagam."])}
                 if str(q["Status"]).startswith("SERVIÇO"):
                     item["servico"] = r2(q.get("Serviço (R$)", 0))
+                if str(q["Status"]).startswith("PROVÁVEL FORMA ERRADA: VOUCHER"):
+                    item.update(para="voucher", aut=str(q["Autorização"]), detalhe=f"{q.get('Modalidade maq')} {q.get('Bandeira maq')} · terminal {q['Terminal']} · aut. {q['Autorização']}")
                 mm = re.search(r"FORMA ERRADA: (Crédito|Débito) .* em (\d\d)/(\d\d)", str(q["Status"]))
                 if mm:
                     item.update(aut=str(q["Autorização"]), para="credito" if mm.group(1) == "Crédito" else "debito",
@@ -331,8 +333,13 @@ def main() -> None:
                     pend.append({"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Valor Bruto"]), "ref": f"{q['Hora maq']} · {q['Bandeira']} · terminal {q['Terminal']} · aut. {q['Autorização']}", "status": "MAQUININHA SEM PAR NO PDV", "detalhe": ""})
             if len(sem_p):
                 for _, q in sem_p[sem_p["Filial"] == filial].iterrows():
-                    pend.append({"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Vl. pagamento"]), "ref": f"cupom {q['Cupom']} · {q['Hora']} · {q['Caixa']}", "status": "SEM PAR NA MAQUININHA", "detalhe": "",
-                                 "cupom": str(q["Cupom"]), "caixa": str(q["Caixa"]), "hora": str(q["Hora"])[:5], "forma": str(q["Desc. pagam."])})
+                    st = str(q.get("Status", "SEM PAR NA MAQUININHA")) if pd.notna(q.get("Status")) else "SEM PAR NA MAQUININHA"
+                    item = {"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Vl. pagamento"]), "ref": f"cupom {q['Cupom']} · {q['Hora']} · {q['Caixa']}", "status": st,
+                            "detalhe": f"{q['Modalidade maq']} {q['Bandeira maq']} · terminal {q['Terminal']} · aut. {q['Autorização']}" if pd.notna(q.get("Modalidade maq")) else "",
+                            "cupom": str(q["Cupom"]), "caixa": str(q["Caixa"]), "hora": str(q["Hora"])[:5], "forma": str(q["Desc. pagam."])}
+                    if st.startswith("PROVÁVEL FORMA ERRADA: VOUCHER"):
+                        item.update(para="voucher", aut=str(q["Autorização"]))
+                    pend.append(item)
             sv = csv_[m]
             if len(sv):
                 for _, q in sv[sv["Filial"] == filial].iterrows():

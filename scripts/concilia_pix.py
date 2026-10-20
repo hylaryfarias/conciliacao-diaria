@@ -35,7 +35,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-from pdv_pix import HORA_VIRADA, ler_pdv, pix_do_pdv  # noqa: E402
+from pdv_pix import HORA_VIRADA, explica_sem_par, ler_pdv, pix_do_pdv  # noqa: E402
 from portal_sicredi import ler_portais, ler_tef, pix_do_portal  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -247,6 +247,14 @@ def main() -> None:
         res, sobra = casa_tolerancia(res, sobra)
         res["EC"] = ec
         res = caca_forma_errada(res, df, cartao_pdv[cartao_pdv["Filial"] == filial])
+        sp = res[res["Status"] == "SEM PAR NA MAQUININHA"]
+        if len(sp):
+            casados = res[res["Status"].astype(str).str.startswith(("CONCILIADO", "SERVIÇO"))]["Cupom"].astype(str)
+            ex = explica_sem_par(sp, df, bruto[bruto["Filial"] == filial], casados)
+            for c in ("Modalidade maq", "Bandeira maq", "Cupom igual"):
+                if c not in res.columns:
+                    res[c] = None
+            res.loc[ex.index, ["Status", "Hora maq", "Autorização", "Terminal", "Modalidade maq", "Bandeira maq", "Cupom igual"]] = ex[["Status", "Hora maq", "Autorização", "Terminal", "Modalidade maq", "Bandeira maq", "Cupom igual"]].values
         sobra["Filial"] = filial
         rec = rec.assign(Filial=filial)
         todas.append(res); sobras.append(sobra); recusados.append(rec)
@@ -285,7 +293,7 @@ def main() -> None:
     rec = pd.concat(recusados, ignore_index=True)
 
     col_pdv = ["Filial", "EC", "Data", "Dia movimento", "Hora", "Cupom", "Caixa", "Desc. pagam.", "Vl. pagamento",
-               "Status", "Hora maq", "Dia maq", "Dif. hora (min)", "Autorização", "Terminal", "Comprovante", "Canal", "Serviço (R$)", "Dif. valor (R$)"]
+               "Status", "Hora maq", "Dia maq", "Dif. hora (min)", "Autorização", "Terminal", "Comprovante", "Canal", "Serviço (R$)", "Dif. valor (R$)", "Modalidade maq", "Bandeira maq", "Cupom igual"]
     col_maq = ["Filial", "EC", "Data", "dt", "Cód. de autorização", "Valor Bruto", "Status",
                "Número do terminal", "Comprovante de venda", "Canal"]
     d0, d1 = resumo["Data"].min(), resumo["Data"].max()
