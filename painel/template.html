@@ -142,7 +142,7 @@ td small.vir{display:block;font-size:10.5px;color:var(--ink-muted);font-weight:5
 .fech-nota .acoes{display:flex;gap:8px;margin-top:8px}
 .fech-pad{padding:4px 12px 6px} .form-fech{margin-top:6px} .form-fech input{font:inherit;font-size:13.5px;padding:7px 9px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);max-width:220px}
 td.st[data-s="ajuste"]{color:var(--gestao)}
-.pend .expl{font-size:13px;color:var(--ink-soft);margin-top:6px;max-width:70ch}
+.pend .expl{font-size:13px;color:var(--ink-soft);margin-top:6px;
 
 /* regras */
 .regras{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0;padding:4px 0}
@@ -364,7 +364,7 @@ function detalhe(){
         acoes = `<div class="ajuste-nota"><b>Dia fechado no caixa:</b> ${esc(p.fechado.justificativa)}<br><small>registrado em ${quando(p.fechado.criado_em)}<span data-por="${esc(p.fechado.por||"")}"></span></small></div>`;
       } else if(p.servico !== undefined){
         acoes = `<div class="ajuste-nota"><b>Sobra na máquina:</b> ${brl(p.servico)}</div>`;
-      } else if(p.cupom && podeAjustar && !/DUPLICADO/.test(p.status)){
+      } else if(p.cupom && podeAjustar && !/DUPLICADO/.test(p.status) && !p.comanda && !/^CONCILIADO/.test(p.status)){
         acoes = `<div class="acoes"><button type="button" class="btn primario" data-act="abrir">Transferir para ${p.para ? NOMES[p.para] : "outra forma"}…</button></div>` + formAjuste(p, l);
       } else if(p.cupom && !dbRef){
         acoes = `<div class="ajuste-nota"><small>Para reclassificar, abra o painel conectado ao claude.ai.</small></div>`;
