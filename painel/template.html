@@ -587,27 +587,28 @@ async function nomeDe(id){
 }
 
 function ligaAjustes(){
-  const l = D.lojas.find(x => x.nome===sel); if(!l) return;
-  const m = M(l);
-  document.querySelectorAll("#pend li").forEach(li => {
-    const i = +li.dataset.i, p = m.pendencias[i]; if(!p) return;
-    const abrir = li.querySelector('[data-act="abrir"]'), form = li.querySelector(".form-aj");
-    if(abrir && form){
-      abrir.addEventListener("click", () => { form.hidden = !form.hidden; });
-      form.querySelector('[data-act="cancelar"]').addEventListener("click", () => { form.hidden = true; });
-      form.querySelector('[data-act="confirmar"]').addEventListener("click", ev => {
-        const para = form.querySelector('[data-f="para"]').value, just = form.querySelector('[data-f="just"]').value.trim();
-        if(!just){ form.querySelector(".erro").textContent = "Escreva a justificativa."; return; }
-        const a = {loja:l.nome, de:tab, para, data:p.data, cupom:p.cupom, caixa:p.caixa, hora:p.hora, forma:p.forma, valor:p.valor,
-                   justificativa:just, criado_em:new Date().toISOString(), por:meuId || null};
-        if(p.aut && para === p.para){ a.aut = p.aut; a.data_maq = p.data_maq; }
-        salvaAjuste(a, ev.currentTarget);
-      });
+  // só preenche o nome de quem registrou; os cliques são tratados por delegação em #detalhe (ligaCliques), uma vez só
+  document.querySelectorAll("#pend [data-por]").forEach(quem => nomeDe(quem.dataset.por).then(n => { if(n) quem.textContent = ` por ${n}`; }));
+}
+function ligaCliques(){
+  document.getElementById("detalhe").addEventListener("click", ev => {
+    const alvo = ev.target.closest("[data-act]"); if(!alvo) return;
+    const li = alvo.closest("#pend li"); if(!li) return;
+    const l = D.lojas.find(x => x.nome===sel); if(!l) return;
+    const p = M(l).pendencias[+li.dataset.i]; if(!p) return;
+    const form = li.querySelector(".form-aj");
+    const act = alvo.dataset.act;
+    if(act === "abrir" && form){ form.hidden = !form.hidden; if(!form.hidden) form.querySelector("textarea")?.focus(); }
+    else if(act === "cancelar" && form){ form.hidden = true; }
+    else if(act === "confirmar" && form){
+      const para = form.querySelector('[data-f="para"]').value, just = form.querySelector('[data-f="just"]').value.trim();
+      if(!just){ form.querySelector(".erro").textContent = "Escreva a justificativa."; return; }
+      const a = {loja:l.nome, de:tab, para, data:p.data, cupom:p.cupom, caixa:p.caixa, hora:p.hora, forma:p.forma, valor:p.valor,
+                 justificativa:just, criado_em:new Date().toISOString(), por:meuId || null};
+      if(p.aut && para === p.para){ a.aut = p.aut; a.data_maq = p.data_maq; }
+      salvaAjuste(a, alvo);
     }
-    const desf = li.querySelector('[data-act="desfazer"]');
-    if(desf) desf.addEventListener("click", ev => desfazAjuste(desf.dataset.id, ev.currentTarget));
-    const quem = li.querySelector("[data-por]");
-    if(quem) nomeDe(quem.dataset.por).then(n => { if(n) quem.textContent = ` por ${n}`; });
+    else if(act === "desfazer"){ desfazAjuste(alvo.dataset.id, alvo); }
   });
 }
 
@@ -618,6 +619,7 @@ document.getElementById("stamp").innerHTML = `<span>Período <b>${dBR(D.de)} a $
 document.getElementById("rodape").textContent = `Gerado em ${D.gerado_em} · scripts/gera_painel.py`;
 try{ sel = localStorage.getItem("loja"); const t = localStorage.getItem("tab"); if(TABS[t]) tab = t; }catch(e){}
 if(!D.lojas.some(l=>l.nome===sel)) sel = (D.lojas.find(l=>l.mod.pix.tem_maq) || D.lojas[0] || {}).nome || null;
+ligaCliques();
 render();
 ligaBanco();
 </script>
