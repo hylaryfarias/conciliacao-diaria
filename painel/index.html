@@ -106,12 +106,13 @@ td.dia button:focus-visible{outline:2px solid var(--gestao);outline-offset:2px;b
 td.dia button::after{content:"▸";display:inline-block;margin-left:5px;font-size:10px;transition:transform .15s}
 tr[data-open="true"] td.dia button::after{transform:rotate(90deg)}
 tr.lanc>td{padding:0 0 10px;background:var(--bg-soft);white-space:normal;text-align:left}
-.lanc-wrap{overflow-x:auto;padding:8px 10px 2px}
+.lanc-wrap{overflow-x:auto;padding:8px 10px 2px;width:0;min-width:100%;box-sizing:border-box}   /* dentro da célula da tabela: não alarga a tabela, rola por dentro */
 table.lanc-t{min-width:0;width:100%;font-size:12.5px}
-table.lanc-t th{padding:5px 7px;font-size:10px;border-bottom-color:var(--rule)} table.lanc-t td{padding:5px 7px;border-bottom:1px solid var(--rule)}
+table.lanc-t th{padding:5px 6px;font-size:10px;border-bottom-color:var(--rule)} table.lanc-t td{padding:4px 6px;border-bottom:1px solid var(--rule)}
+.lanc-wrap::-webkit-scrollbar{height:9px} .lanc-wrap::-webkit-scrollbar-thumb{background:var(--rule);border-radius:9px} .lanc-wrap::-webkit-scrollbar-track{background:transparent} .lanc-wrap{scrollbar-width:thin}
 table.lanc-t tr:last-child td{border-bottom:0}
 table.lanc-t td.st{font-size:11px;font-weight:600;white-space:nowrap} td.st[data-s="ok"]{color:var(--ok)} td.st[data-s="erro"]{color:var(--erro)} td.st[data-s="pdv"]{color:var(--ink-muted)} td.st[data-s="pendente"]{color:var(--pendente)}
-table.lanc-t td.mono{font-size:11.5px;color:var(--ink-soft)}
+table.lanc-t td.mono{font-size:11.5px;color:var(--ink-soft)} table.lanc-t td.pg{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} table.lanc-t td{white-space:nowrap} table.lanc-t td.st{white-space:normal;min-width:110px}
 .lanc-vazio{padding:10px 12px;font-size:13px;color:var(--ink-muted)}
 td.neg{color:var(--erro)}
 .vazio{padding:18px 16px 22px;color:var(--ink-soft);font-size:14px;max-width:62ch}
@@ -397,6 +398,7 @@ function tabela(m){
   return `<div class="tablewrap"><table id="tab-dias"><thead><tr><th>Dia</th><th>PDV qtd</th><th>PDV R$</th><th>Maq ${pix?"":"bruto "}R$</th><th>Δ Maq−PDV</th>${fimH}</tr></thead>
     <tbody>${rows}</tbody><tfoot><tr><td>Total</td><td>${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)}</td><td>${T(d=>d.pdv)}</td><td>${m.tem_maq?T(d=>d.maq):"—"}</td><td class="${Math.abs(sum(m.dias,d=>d.delta))>0.004?"neg":""}">${m.tem_maq?brl(neg(sum(m.dias,d=>d.delta))):"—"}</td>${fimT}</tr></tfoot></table></div>`;
 }
+const autCurta = a => !a ? "—" : String(a).length > 14 ? "…" + String(a).slice(-10) : String(a);   // autorização de PIX tem 34 caracteres; a ponta final identifica
 function lancamentos(d){
   const pix = tab === "pix", temMaq = d.maq !== undefined;
   const L = d.lanc || [];
@@ -404,14 +406,14 @@ function lancamentos(d){
   if(!L.length) return topo + `<div class="lanc-vazio">Nenhum lançamento de ${TABS[tab]} neste dia.</div>`;
   const st = r => r.aj ? ["ajuste", r.s.toLowerCase()] : r.s==="AGUARDA PDV" ? ["pendente","aguarda PDV"] : /^(SEM PAR|MAQUININHA SEM PAR)/.test(r.s) ? ["pendente", "comanda parcial"] : r.s.startsWith("CONCILIADO") ? ["ok", r.s==="CONCILIADO" ? "conciliado" : r.s.toLowerCase().replace("conciliado ","")] : r.s.startsWith("SERVIÇO") ? ["erro", "serviço não baixado"] : r.s==="PDV" ? ["pdv","só PDV"] : ["erro", r.s.toLowerCase().replace("provável forma errada:","forma errada ·")];
   const head = temMaq
-    ? `<th>Hora PDV</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th><th>Situação</th><th>Hora máq</th>${pix?"":"<th>Bandeira</th>"}<th>Terminal</th><th>Autorização</th>${pix?"<th>Crédito</th><th>Pagador</th>":"<th>MDR</th>"}`
+    ? `<th>Hora PDV</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th><th>Situação</th><th>Hora máq</th>${pix?"":"<th>Bandeira</th>"}<th>Terminal</th><th>Autorização</th>${pix?"<th>Pagador</th>":"<th>MDR</th>"}`
     : `<th>Hora</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th>`;
   const rows = L.map(r => {
     const [s,txt] = st(r);
     const cx = (r.cx||"").replace(/^\d+ - /,"");
     if(!temMaq) return `<tr><td>${r.h||""}</td><td>${esc(r.c||"")}</td><td class="mono">${esc(cx)}</td><td>${esc(r.f||"")}</td><td>${brl(r.v)}</td></tr>`;
     return `<tr title="${esc(r.cm||"")}"><td>${r.h||"—"}${r.dp?`<small style="color:var(--pendente)"> ${dBR(r.dp)}</small>`:""}</td><td>${esc(r.c||"—")}</td><td class="mono">${esc(cx)||"—"}</td><td>${esc(r.f||"—")}</td><td>${brl(r.v)}</td><td class="st" data-s="${s}">${esc(txt)}</td>
-      <td>${r.hm||"—"}${r.dm?`<small style="color:var(--pendente)"> ${dBR(r.dm)}</small>`:""}</td>${pix?"":`<td>${esc(r.b||"—")}</td>`}<td class="mono">${esc(r.t||"—")}</td><td class="mono">${esc(r.a||"—")}</td>${pix?`<td>${r.cr?dBR(r.cr):"—"}</td><td class="mono">${esc(r.pg||"—")}</td>`:`<td>${r.mdr!==undefined?brl(r.mdr):"—"}</td>`}</tr>`;
+      <td>${r.hm||"—"}${r.dm?`<small style="color:var(--pendente)"> ${dBR(r.dm)}</small>`:""}</td>${pix?"":`<td>${esc(r.b||"—")}</td>`}<td class="mono">${esc(r.t||"—")}</td><td class="mono" title="${esc(r.a||"")}">${esc(autCurta(r.a))}</td>${pix?`<td class="mono pg">${esc(r.pg||"—")}</td>`:`<td>${r.mdr!==undefined?brl(r.mdr):"—"}</td>`}</tr>`;
   }).join("");
   return topo + `<div class="lanc-wrap"><table class="lanc-t"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
