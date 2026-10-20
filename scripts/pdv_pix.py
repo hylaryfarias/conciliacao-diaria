@@ -57,7 +57,8 @@ VOUCHER_MOD = {"Alimentação", "Refeição", "Voucher", "Multiplo", "Flex", "Mu
 def explica_sem_par(sobra: pd.DataFrame, maq_tudo: pd.DataFrame, pdv_loja: pd.DataFrame, cupons_casados) -> pd.DataFrame:
     """Para baixas do PDV sem venda na máquina, tenta duas explicações medidas no dado:
     1. voucher (Ticket, Alelo, Pluxee, Fepas, Elo/Visa voucher) passado na máquina no mesmo minuto e baixado como cartão/PIX;
-    2. cupom duplicado: outro cupom do mesmo caixa, mesmo valor, até 5 min, que já casou com a venda da máquina.
+    2. cupom vizinho idêntico (mesmo caixa, mesmo valor, até 5 min) que já casou com a venda da máquina: fica como
+       baixa sem par (o que o operador baixou vale, e é falta de caixa), só com a observação em "Cupom igual".
     sobra precisa de dt_pdv, Data, cent, Caixa, Cupom; maq_tudo de dt, Data, cent, Modalidade, Bandeira, Status."""
     sobra = sobra.copy()
     if "Status" not in sobra.columns:
@@ -84,7 +85,6 @@ def explica_sem_par(sobra: pd.DataFrame, maq_tudo: pd.DataFrame, pdv_loja: pd.Da
                      & ((pdv_loja["dt_pdv"] - a["dt_pdv"]).abs() <= pd.Timedelta(minutes=5))]
         d = d[d["Cupom"].astype(str).isin(casados)]
         if len(d):
-            sobra.loc[i, "Status"] = f"PROVÁVEL CUPOM DUPLICADO NO PDV (igual ao cupom {d.iloc[0]['Cupom']})"
             sobra.loc[i, "Cupom igual"] = str(d.iloc[0]["Cupom"])
     return sobra
 

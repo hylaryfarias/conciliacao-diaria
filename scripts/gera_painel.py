@@ -276,6 +276,8 @@ def main() -> None:
                         "cupom": str(q["Cupom"]), "caixa": str(q["Caixa"]), "hora": str(q["Hora"])[:5], "forma": str(q["Desc. pagam."])}
                 if str(q["Status"]).startswith("SERVIÇO"):
                     item["servico"] = r2(q.get("Serviço (R$)", 0))
+                if pd.notna(q.get("Cupom igual")):
+                    item["detalhe"] = f"o cupom vizinho {str(q['Cupom igual']).replace('.0', '')} é idêntico (mesmo caixa, valor e minuto) e casou com a venda da máquina: ou a comanda foi fechada duas vezes, ou este pagamento não entrou"
                 if str(q["Status"]).startswith("PROVÁVEL FORMA ERRADA: VOUCHER"):
                     item.update(para="voucher", aut=str(q["Autorização"]), detalhe=f"{q.get('Modalidade maq')} {q.get('Bandeira maq')} · terminal {q['Terminal']} · aut. {q['Autorização']}")
                 mm = re.search(r"FORMA ERRADA: (Crédito|Débito) .* em (\d\d)/(\d\d)", str(q["Status"]))
@@ -339,6 +341,8 @@ def main() -> None:
                             "cupom": str(q["Cupom"]), "caixa": str(q["Caixa"]), "hora": str(q["Hora"])[:5], "forma": str(q["Desc. pagam."])}
                     if st.startswith("PROVÁVEL FORMA ERRADA: VOUCHER"):
                         item.update(para="voucher", aut=str(q["Autorização"]))
+                    if pd.notna(q.get("Cupom igual")):
+                        item["detalhe"] = f"o cupom vizinho {str(q['Cupom igual']).replace('.0', '')} é idêntico (mesmo caixa, valor e minuto) e casou com a venda da máquina: ou a comanda foi fechada duas vezes, ou este pagamento não entrou"
                     pend.append(item)
             sv = csv_[m]
             if len(sv):

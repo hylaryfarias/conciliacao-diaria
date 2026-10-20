@@ -198,7 +198,7 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
       <div class="regra"><b>Dia conferido no caixa fecha</b>Quando a diferença entre PDV e máquina aparece na contagem física do caixa (sobra ou falta), o dia pode ser fechado aqui pelo botão "Fechar dia", com o valor conferido, justificativa, autor e hora. O dia e suas pendências saem do em aberto; o registro fica guardado com o painel e pode ser reaberto.</div>
       <div class="regra"><b>Virada de dia só depois das 10h</b>Como os dois lados usam o dia de movimento, pagar na máquina à noite e fechar o cupom de madrugada cai no mesmo dia. Só fica "virada de dia" o raro cupom fechado no PDV depois das 10h do dia seguinte: o Δ do dia ganha a marca e o cupom aparece nos dois dias, com a data do outro lado em laranja.</div>
       <div class="regra"><b>Vale baixado como cartão</b>Voucher Ticket, Alelo, Pluxee, Fepas ou Elo/Visa passado na máquina no mesmo minuto de uma baixa de cartão ou PIX sem par é forma errada: o pagamento foi em vale. O painel aponta e permite transferir para Voucher.</div>
-      <div class="regra"><b>Cupom duplicado no PDV</b>Baixa sem par cujo vizinho (mesmo caixa, mesmo valor, até 5 minutos) já casou com a venda da máquina é cupom fechado duas vezes. Não há dinheiro faltando: o PDV registrou a mais.</div>
+      <div class="regra"><b>O que o operador baixou vale</b>Dois cupons baixados e um só pagamento na máquina é falta de caixa, mesmo que os cupons sejam idênticos. O painel mantém a baixa sem par e só avisa que o vizinho é igual, para a loja explicar se a comanda foi fechada duas vezes ou se um pagamento não entrou.</div>
       <div class="regra"><b>Até R$ 1,00 é conciliado</b>Diferença de até R$ 1,00 para mais ou para menos entre o PDV e a máquina fecha, no lançamento e no dia. Acima disso é divergência.</div>
       <div class="regra"><b>Aguardar não é divergir</b>Venda depois da última data do extrato fica como "aguarda extrato", fora do Δ e fora da contagem de casos.</div>
     </div>
@@ -304,7 +304,6 @@ function tone(d){
 const EXPL = {
   "PROVÁVEL FORMA ERRADA": "O PDV registrou PIX, mas a máquina tem um cartão de mesmo valor sem lançamento no PDV. O caixa provavelmente escolheu a forma de pagamento errada. Confirmar com a loja e corrigir no PDV.",
   "PROVÁVEL FORMA ERRADA: VOUCHER": "O cliente pagou com vale (Ticket, Alelo, Pluxee, Fepas, voucher Elo/Visa) na máquina Sicredi no mesmo minuto, e o caixa baixou como cartão ou PIX. O dinheiro vem pela operadora do vale, não pela Sicredi. Transferir para Voucher.",
-  "PROVÁVEL CUPOM DUPLICADO NO PDV": "Dois cupons do mesmo caixa, mesmo valor, mesmos itens, fechados com minutos de diferença, e só uma venda na máquina. O PDV registrou a venda duas vezes. Na conferência de caixa aparece como falta. Fechar o dia com essa justificativa e orientar o caixa.",
   "SERVIÇO NÃO BAIXADO": "A máquina cobrou o cupom mais 10% de serviço e o PDV foi fechado sem o item da taxa. O cliente pagou a mais do que o PDV registra, e essa sobra na forma de pagamento não tem lançamento. Apurar com a loja quem operou o caixa nesse horário.",
   "CONCILIADO POR TOTAL DA COMANDA": "Mesa dividida: a comanda fechou com o mesmo total nos dois lados, mas os clientes pagaram com outra divisão de formas. Linha a linha não bate; a comanda bate.",
   "SEM PAR NA MAQUININHA": "Comanda parcial: baixa no PDV que não bate sozinha com nenhuma venda da máquina. Ela se compensa com as vendas da máquina sem baixa do mesmo dia; o dia só fica em aberto pelo líquido entre os dois lados.",
@@ -364,7 +363,7 @@ function detalhe(){
         acoes = `<div class="ajuste-nota"><b>Dia fechado no caixa:</b> ${esc(p.fechado.justificativa)}<br><small>registrado em ${quando(p.fechado.criado_em)}<span data-por="${esc(p.fechado.por||"")}"></span></small></div>`;
       } else if(p.servico !== undefined){
         acoes = `<div class="ajuste-nota"><b>Sobra na máquina:</b> ${brl(p.servico)}</div>`;
-      } else if(p.cupom && podeAjustar && !/DUPLICADO/.test(p.status) && !p.comanda && !/^CONCILIADO/.test(p.status)){
+      } else if(p.cupom && podeAjustar && !p.comanda && !/^CONCILIADO/.test(p.status)){
         acoes = `<div class="acoes"><button type="button" class="btn primario" data-act="abrir">Transferir para ${p.para ? NOMES[p.para] : "outra forma"}…</button></div>` + formAjuste(p, l);
       } else if(p.cupom && !dbRef){
         acoes = `<div class="ajuste-nota"><small>Para reclassificar, abra o painel conectado ao claude.ai.</small></div>`;

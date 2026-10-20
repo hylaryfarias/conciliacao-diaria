@@ -84,6 +84,14 @@ artefato. O painel aplica os ajustes em cima dos números gerados.
 - MAPOLI não abre sábado e domingo: esses dias ficam sem venda nos dois lados (traço no painel).
 - ISAIAS 01 não abre às terças à noite.
 
+## O que o operador baixou vale
+
+Dois cupons baixados e um só pagamento na máquina é falta de caixa, mesmo com cupons idênticos
+(mesmo caixa, valor e minuto). O motor mantém "SEM PAR NA MAQUININHA" e preenche "Cupom igual" com o
+vizinho que casou, para a loja explicar. Vale (Ticket, Alelo, Pluxee, Fepas, Elo/Visa voucher) passado na
+máquina no mesmo minuto de uma baixa de cartão/PIX sem par vira "PROVÁVEL FORMA ERRADA: VOUCHER",
+transferível no painel para Voucher.
+
 ## Dia único: o dia de movimento
 
 A venda vai da abertura do caixa até a reabertura da loja às 10h. O PDV já informa o dia de
