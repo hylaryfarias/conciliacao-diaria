@@ -94,13 +94,13 @@ original. `portal_sicredi.ler_portais` junta os Históricos de uma mesma loja (s
 exports sobrepostos) antes de cruzar. Exemplo: BIGGS 13, 09/10, PIX = R$ 2.440,69 nos dois lados
 (40 cupons: 35 do dia, 2 do delivery fechados às 00:48 e 3 da madrugada).
 
-## Cada dia fecha sozinho
+## Virada de dia
 
-A venda da máquina só casa com cupom do mesmo dia de movimento (os dois lados já estão em dia de
-movimento, então o filtro é `Data` igual em todos os passos: exato, serviço, grupos, tolerância,
-forma errada e comanda). Cupom que o caixa deixou aberto e baixou no turno seguinte fica em aberto
-nos dois dias: "máquina sem par" no dia do pagamento e "PDV sem par" no dia seguinte. Exemplo: ROBS,
-cupons 58751 e 58752, pagos na noite de 02/10 e baixados às 18:03 de 03/10 na abertura do caixa.
+Com o dia único, só sobra "virada" o cupom fechado no PDV depois das 10h do dia seguinte ao
+pagamento na máquina (raro). O painel marca o Δ desses dias como "virada de dia ✓", lista o cupom nos dois dias
+(com a data do outro lado em laranja) e cria uma pendência informativa "CONCILIADO · VIRADA DE
+DIA" por cupom. Não é divergência e não entra no em aberto. Exemplo: BIGGS 13, 09/10, PIX
+−R$ 95,08 = cupons 11328 e 11330 do delivery, pagos 09/10 à noite e fechados 10/10 00:48.
 
 ## Fechamento de dia conferido no caixa
 
