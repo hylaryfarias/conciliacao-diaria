@@ -76,9 +76,13 @@ def ler_tef(caminho: str) -> pd.DataFrame:
         rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
         h = next(i for i, r in enumerate(rows) if "Método Pagamento" in r or "Loja - Descrição" in r)
         partes.append(pd.DataFrame(rows[h + 1 :], columns=rows[h]))
+    for i, p in enumerate(partes):
+        p["_arq"] = i
     df = pd.concat(partes, ignore_index=True)
     df = df[df["Data"].astype(str).str.match(r"\d{2}/\d{2}/\d{4}")].copy()
-    df = df.drop_duplicates(subset=[c for c in ("Data", "Hora", "Valor", "Status", "Loja - Descrição") if c in df.columns])
+    chave = [c for c in ("Data", "Hora", "Valor", "Status", "Loja - Descrição") if c in df.columns]
+    df["_seq"] = df.groupby(["_arq"] + chave).cumcount()          # igual dentro do mesmo arquivo fica; entre arquivos sai
+    df = df.drop_duplicates(subset=chave + ["_seq"]).drop(columns=["_arq", "_seq"])
     df = df[df["Método Pagamento"].astype(str).str.lower().str.contains("pix")]
     df["Valor Bruto"] = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
     df["dt"] = pd.to_datetime(df["Data"] + " " + df["Hora"].astype(str).str.strip(), dayfirst=True)

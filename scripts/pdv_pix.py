@@ -35,10 +35,15 @@ def ler_pdv(caminho: str) -> pd.DataFrame:
         # cabeçalho achado pelo conteúdo, nunca por índice fixo
         idx = next(i for i, r in enumerate(rows) if "Desc. pagam." in r)
         partes.append(pd.DataFrame(rows[idx + 1 :], columns=rows[idx]))
+    # repetição ENTRE arquivos sai; repetição DENTRO do mesmo arquivo fica (conta dividida em partes iguais tem
+    # duas linhas idênticas no mesmo cupom, ex.: ROBS 60212, dois PIX de 32,45)
+    for i, p in enumerate(partes):
+        p["_arq"] = i
     df = pd.concat(partes, ignore_index=True)
     df = df[df["Filial"].astype(str).str.strip() != ""]
     chave = [c for c in ("Filial", "Caixa", "Data", "Hora", "Cupom", "Desc. pagam.", "Vl. pagamento") if c in df.columns]
-    df = df.drop_duplicates(subset=chave)
+    df["_seq"] = df.groupby(["_arq"] + chave).cumcount()
+    df = df.drop_duplicates(subset=chave + ["_seq"]).drop(columns=["_arq", "_seq"])
     df["Vl. pagamento"] = pd.to_numeric(df["Vl. pagamento"], errors="coerce").fillna(0)
     df["cent"] = (df["Vl. pagamento"] * 100).round().astype(int)
     df["Data"] = pd.to_datetime(df["Data"], dayfirst=True).dt.date
