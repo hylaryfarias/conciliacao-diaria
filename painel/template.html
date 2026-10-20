@@ -470,7 +470,7 @@ let AJ = {};            // id -> ajuste
 let FE = {};            // id -> fechamento de dia conferido no caixa
 const idFech = f => `${slug(f.loja)}_${f.mod}_${f.data}`;
 let dbRef = null, userRef = null, podeEscrever = null, meuId = null;
-const NOMES = {pix:"PIX", credito:"Crédito", debito:"Débito", voucher:"Voucher (vale)"};
+const NOMES = {pix:"PIX", credito:"Crédito", debito:"Débito", voucher:"Voucher (vale)", dinheiro:"Dinheiro"};
 const slug = x => String(x).replace(/[^A-Za-z0-9_.~:@+-]+/g, "-");
 const idAjuste = a => a.id || `${slug(a.loja)}_${a.data}_${a.cupom}_${a.de}${a.aut ? "_" + slug(a.aut) : ""}`;   // um cupom pode ter duas linhas (dois vales): a autorização entra no id
 
@@ -478,17 +478,19 @@ function aplicaAjustes(){
   D = JSON.parse(JSON.stringify(D0));
   for(const a of Object.values(AJ)){
     const l = D.lojas.find(x => x.nome === a.loja); if(!l) continue;
-    const de = l.mod[a.de], para = l.mod[a.para]; if(!de) continue;   // destino pode não ter aba (voucher): só sai da origem
-    const dia = de.dias.find(d => d.data === a.data); if(!dia) continue;
+    const de = l.mod[a.de], para = l.mod[a.para]; if(!de && !para) continue;   // origem ou destino podem não ter aba (voucher, dinheiro): só mexe no lado que existe
     const v = a.valor;
-    // origem: tira o lançamento das somas e marca a linha
-    const li = (dia.lanc||[]).find(r => r.c === a.cupom && !String(r.s).startsWith("CONCILIADO") && !r.aj);
-    if(li){ li.aj = true; li.s = `RECLASSIFICADO → ${NOMES[a.para]}`; }
-    dia.pdv_qtd -= 1; dia.pdv = r(dia.pdv - v);
-    if(dia.pdv_sem_par !== undefined) dia.pdv_sem_par = r(Math.max(0, dia.pdv_sem_par - v));
-    if(dia.delta !== undefined) dia.delta = r(dia.delta - v);
-    const pi = de.pendencias.findIndex(p => p.cupom === a.cupom && p.data === a.data && !p.ajuste && (!a.aut || !p.aut || p.aut === a.aut));
-    if(pi >= 0){ const p = de.pendencias[pi]; p.ajuste = a; p.status = `RECLASSIFICADO → ${NOMES[a.para]}`; }
+    const dia = de ? de.dias.find(d => d.data === a.data) : null;
+    if(dia){
+      // origem: tira o lançamento das somas e marca a linha
+      const li = (dia.lanc||[]).find(r => r.c === a.cupom && !String(r.s).startsWith("CONCILIADO") && !r.aj);
+      if(li){ li.aj = true; li.s = `RECLASSIFICADO → ${NOMES[a.para]}`; }
+      dia.pdv_qtd -= 1; dia.pdv = r(dia.pdv - v);
+      if(dia.pdv_sem_par !== undefined) dia.pdv_sem_par = r(Math.max(0, dia.pdv_sem_par - v));
+      if(dia.delta !== undefined) dia.delta = r(dia.delta - v);
+      const pi = de.pendencias.findIndex(p => p.cupom === a.cupom && p.data === a.data && !p.ajuste && (!a.aut || !p.aut || p.aut === a.aut));
+      if(pi >= 0){ const p = de.pendencias[pi]; p.ajuste = a; p.status = `RECLASSIFICADO → ${NOMES[a.para]}`; }
+    }
     // destino: entra nas somas do dia da máquina (ou do PDV, se não houver par) e casa com a linha órfã
     if(!para) continue;
     const dd = para.dias.find(d => d.data === (a.data_maq || a.data)) || para.dias.find(d => d.data === a.data); if(!dd) continue;

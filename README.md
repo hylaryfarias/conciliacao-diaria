@@ -92,6 +92,15 @@ vizinho que casou, para a loja explicar. Vale (Ticket, Alelo, Pluxee, Fepas, Elo
 máquina no mesmo minuto de uma baixa de cartão/PIX sem par vira "PROVÁVEL FORMA ERRADA: VOUCHER",
 transferível no painel para Voucher.
 
+## Transferência de forma com evidência é automática
+
+Regra da Hylary (20/10): toda baixa com forma errada que tenha evidência na máquina (mesmo valor,
+mesma loja, poucos minutos de diferença: PIX baixado e cartão na máquina, crédito × débito, dinheiro
+baixado e PIX na máquina, vale baixado como cartão) é transferida direto, sem clique um a um. O registro
+continua igual: um documento em `ajustes` no painel (id `<loja>_<data>_<cupom>_<origem>_<aut>`), com a
+justificativa e a autorização da máquina, e a cópia em `ajustes/ajustes.csv`. Só o que não tem par
+claro continua como pendência para decisão.
+
 ## Dia único: o dia de movimento
 
 A venda vai da abertura do caixa até a reabertura da loja às 10h. O PDV já informa o dia de
