@@ -12,6 +12,7 @@ import glob
 import json
 import re
 import sys
+from zoneinfo import ZoneInfo
 from datetime import date, datetime
 from pathlib import Path
 
@@ -364,7 +365,7 @@ def main() -> None:
 
         lojas.append({"nome": filial, "marca": marca(filial), "ec": ec_de.get(filial), "mod": mods})
 
-    dados = {"gerado_em": datetime.now().strftime("%d/%m/%Y %H:%M"), "de": de.isoformat(), "ate": ate.isoformat(),
+    dados = {"gerado_em": datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M"), "de": de.isoformat(), "ate": ate.isoformat(),
              "extrato_ate": extrato_ate.isoformat() if extrato_ate else None, "pdv_ate": pdv_ate.isoformat(), "lojas": lojas}
     out = RAIZ / "painel/index.html"
     out.write_text((RAIZ / "painel/template.html").read_text().replace("/*DADOS*/", json.dumps(dados, ensure_ascii=False)))
