@@ -133,7 +133,8 @@ def classifica_sobra(sobra: pd.DataFrame, vendas: pd.DataFrame, devol: pd.DataFr
                 m = mesmo.iloc[0]
                 cls.append("PIX EM DUPLICIDADE · A DEVOLVER"); evid.append(f"o mesmo pagador já pagou a venda de {m['Data']:%d/%m} {m['dt']:%H:%M} ({m['Fonte']}, {m['Ref']}); este é o segundo PIX dele")
             else:
-                cls.append("PIX SEM VENDA REGISTRADA"); evid.append(f"pagador sem venda na máquina nem cupom no PDV; a venda de mesmo valor em {r['Data']:%d/%m} {r['dt']:%H:%M} ({r['Fonte']}, {r['Ref']}) já está paga por outro pagador")
+                n_iguais = int(((sobra["Loja"] == x["Loja"]) & (sobra["cent"] == x["cent"]) & (sobra["Data"] == d)).sum()) + int(len(pagos[(pagos["Filial"] == x["Loja"]) & (pagos["cent"] == x["cent"]) & (pagos["Crédito"] == d)])) if len(pagos) else 1
+                cls.append("PIX SEM VENDA REGISTRADA"); evid.append(f"entrou um PIX de R$ {x['Valor']:.2f} a mais que as vendas registradas; {n_iguais} PIX de mesmo valor no dia, o banco não traz hora, então o pagador da sobra se identifica pelo comprovante Sicredi (hora + pagador)")
         else:
             cls.append("OUTRA NATUREZA"); evid.append("sem venda de mesmo valor na loja em 4 dias; pagador " + ("CNPJ" if len(str(x["doc"])) == 14 else "CPF"))
         if cls[-1] != "PIX PAGO · MÁQUINA NÃO REGISTROU":
