@@ -139,6 +139,10 @@ td.neg{color:var(--erro)}
 .form-aj textarea{min-height:56px;resize:vertical}
 .form-aj .erro{color:var(--erro);font-size:12.5px}
 .pend li[data-s="ajuste"] .stripe{background:var(--gestao)} .pend li[data-s="ok"] .stripe{background:var(--ok)}
+.pend li{position:relative} .pend li.visto{opacity:.45} .pend li.visto:hover{opacity:.8}
+.visto-box{position:absolute;right:10px;bottom:8px;display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-muted);cursor:pointer;user-select:none}
+.visto-box input{width:15px;height:15px;accent-color:var(--ok);cursor:pointer;margin:0} .pend li.visto .visto-box{color:var(--ok);font-weight:600}
+.pend li > div{padding-right:70px}
 .ajuste-nota{font-size:13px;color:var(--ink-soft);margin-top:4px} .ajuste-nota b{color:var(--ink)}
 .btn.mini{padding:3px 9px;font-size:11.5px;white-space:nowrap} td.fech{white-space:nowrap}
 td small.vir{display:block;font-size:10.5px;color:var(--ink-muted);font-weight:500;cursor:help}
@@ -377,8 +381,10 @@ function detalhe(){
       } else if(p.cupom && !dbRef){
         acoes = `<div class="ajuste-nota"><small>Para reclassificar, abra o painel conectado ao claude.ai.</small></div>`;
       }
-      return `<li data-s="${s}" data-i="${i}"><span class="stripe"></span><div><div class="top"><b>${brl(p.valor)} · ${dBR(p.data)}</b><span>etapa ${p.etapa} · ${esc(p.ref)}</span></div>
-        <div class="msg">${esc(p.status === "SEM PAR NA MAQUININHA" ? "COMANDA PARCIAL · baixa no PDV sem par" : p.status === "MAQUININHA SEM PAR NO PDV" ? "COMANDA PARCIAL · venda na máquina sem par" : p.status)}${p.detalhe?`<small>${esc(p.detalhe)}</small>`:""}</div>${key && !p.ajuste && !p.fechado?`<div class="expl">${EXPL[key]}</div>`:""}${acoes}</div></li>`;
+      const vid = idVisto(l, p), visto = !!VI[vid];
+      const caixinha = dbRef ? `<label class="visto-box" title="Marcar como visto"><input type="checkbox" data-act="visto" data-id="${esc(vid)}" ${visto?"checked":""}>${visto?"feito":"visto"}</label>` : "";
+      return `<li data-s="${s}" data-i="${i}" class="${visto?"visto":""}"><span class="stripe"></span><div><div class="top"><b>${brl(p.valor)} · ${dBR(p.data)}</b><span>etapa ${p.etapa} · ${esc(p.ref)}</span></div>
+        <div class="msg">${esc(p.status === "SEM PAR NA MAQUININHA" ? "COMANDA PARCIAL · baixa no PDV sem par" : p.status === "MAQUININHA SEM PAR NO PDV" ? "COMANDA PARCIAL · venda na máquina sem par" : p.status)}${p.detalhe?`<small>${esc(p.detalhe)}</small>`:""}</div>${key && !p.ajuste && !p.fechado?`<div class="expl">${EXPL[key]}</div>`:""}${acoes}</div>${caixinha}</li>`;
     }).join("") + `</ul>`;
   }
   el.innerHTML = html;
@@ -478,6 +484,8 @@ function ligaDias(){
 /* ---------- ajustes (reclassificação de forma de pagamento), guardados no banco do painel ---------- */
 let AJ = {};            // id -> ajuste
 let FE = {};            // id -> fechamento de dia conferido no caixa
+let VI = {};            // id -> pendência marcada como vista (feito)
+const idVisto = (l, p) => `${slug(l.nome)}_${tab}_${p.data || ""}_${slug(p.cupom || "")}_${slug(p.aut || p.ref || "").slice(0, 60)}`;
 const idFech = f => `${slug(f.loja)}_${f.mod}_${f.data}`;
 let dbRef = null, userRef = null, podeEscrever = null, meuId = null;
 const NOMES = {pix:"PIX", credito:"Crédito", debito:"Débito", voucher:"Voucher (vale)", dinheiro:"Dinheiro"};
@@ -560,6 +568,11 @@ async function ligaBanco(){
     snap.docs.forEach(d => { if(d.exists) FE[d.id] = d.data(); });
     aplicaAjustes(); render();
   }, err => { console.warn("fechamentos:", err); });
+  dbRef.collection("vistos").onSnapshot(snap => {
+    VI = {};
+    snap.docs.forEach(d => { if(d.exists) VI[d.id] = d.data(); });
+    detalhe(); ligaDias(); ligaAjustes();
+  }, err => { console.warn("vistos:", err); });
 }
 
 async function salvaFechamento(f, botao){
@@ -615,9 +628,22 @@ function ligaAjustes(){
   // só preenche o nome de quem registrou; os cliques são tratados por delegação em #detalhe (ligaCliques), uma vez só
   document.querySelectorAll("#pend [data-por]").forEach(quem => nomeDe(quem.dataset.por).then(n => { if(n) quem.textContent = ` por ${n}`; }));
 }
+async function marcaVisto(id, li, marcado){
+  if(!dbRef) return;
+  const l = D.lojas.find(x => x.nome===sel), p = l && M(l).pendencias[+li.dataset.i];
+  try{
+    if(marcado) await dbRef.collection("vistos").doc(id).set({loja: l.nome, mod: tab, data: p.data, cupom: p.cupom || null, ref: p.ref || "", valor: p.valor, status: p.status, criado_em: new Date().toISOString(), por: meuId || null});
+    else await dbRef.collection("vistos").doc(id).delete();
+  }catch(e){ console.warn("visto:", e); }
+}
 function ligaCliques(){
   document.getElementById("detalhe").addEventListener("click", ev => {
     const alvo = ev.target.closest("[data-act]"); if(!alvo) return;
+    if(alvo.dataset.act === "visto"){
+      const li = alvo.closest("#pend li"); if(!li) return;
+      li.classList.toggle("visto", alvo.checked); alvo.nextSibling.textContent = alvo.checked ? "feito" : "visto";
+      marcaVisto(alvo.dataset.id, li, alvo.checked); return;
+    }
     const li = alvo.closest("#pend li"); if(!li) return;
     const l = D.lojas.find(x => x.nome===sel); if(!l) return;
     const p = M(l).pendencias[+li.dataset.i]; if(!p) return;
