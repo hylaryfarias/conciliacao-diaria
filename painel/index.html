@@ -50,6 +50,10 @@ h1 em{font-style:italic;font-weight:600;opacity:.85}
 .tab:focus-visible{outline:2px solid var(--gestao);outline-offset:-2px;border-radius:4px}
 .tab .n{font-size:11px;font-weight:600;padding:2px 7px;border-radius:999px;background:var(--bg-soft);color:var(--ink-soft)}
 .tab .n[data-s="erro"]{background:var(--erro-soft);color:var(--erro)} .tab .n[data-s="ok"]{background:var(--ok-soft);color:var(--ok)}
+.ate{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-muted);padding:4px 0 6px}
+.ate input{font:inherit;font-size:13px;color:var(--ink);background:var(--bg-soft);border:1px solid var(--rule-strong);border-radius:6px;padding:4px 8px}
+.ate button{font:inherit;font-size:12px;color:var(--ink-muted);background:none;border:0;cursor:pointer;text-decoration:underline}
+@media (max-width:560px){.ate{margin-left:0;width:100%}}
 .nota{font-size:13px;color:var(--ink-soft);background:var(--bg-soft);border-radius:8px;padding:10px 14px;max-width:80ch}
 
 /* KPIs */
@@ -246,8 +250,11 @@ function tabs(){
     const nErro = st.filter(x=>x.s==="erro").length, nOk = st.filter(x=>x.s==="ok").length;
     const badge = nErro ? `<span class="n" data-s="erro">${nErro} em aberto</span>` : nOk ? `<span class="n" data-s="ok">${nOk} ok</span>` : "";
     return `<button class="tab" role="tab" id="tab-${k}" data-tab="${k}" aria-selected="${k===tab}">${v}${badge}</button>`;
-  }).join("");
+  }).join("") + `<label class="ate">até <input type="date" id="ate" value="${ATE}" min="${D0.de}" max="${D0.ate}">${ATE < D0.ate ? `<button type="button" id="ate-tudo">todo o período</button>` : ""}</label>`;
   document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => { tab = b.dataset.tab; try{localStorage.setItem("tab",tab)}catch(e){} render(); }));
+  const mudaAte = v => { if(!v || v < D0.de || v > D0.ate) v = D0.ate; ATE = v; try{localStorage.setItem("ate",ATE)}catch(e){} aplicaAjustes(); render(); stamp(); };
+  document.getElementById("ate").addEventListener("change", ev => mudaAte(ev.target.value));
+  const bt = document.getElementById("ate-tudo"); if(bt) bt.addEventListener("click", () => mudaAte(D0.ate));
   const nota = document.getElementById("nota");
   nota.hidden = tab === "pix";
   nota.textContent = tab === "credito"
@@ -476,6 +483,9 @@ const NOMES = {pix:"PIX", credito:"Crédito", debito:"Débito", voucher:"Voucher
 const slug = x => String(x).replace(/[^A-Za-z0-9_.~:@+-]+/g, "-");
 const idAjuste = a => a.id || `${slug(a.loja)}_${a.data}_${a.cupom}_${a.de}${a.aut ? "_" + slug(a.aut) : ""}`;   // um cupom pode ter duas linhas (dois vales): a autorização entra no id
 
+let ATE = D0.ate;   // "até" escolhido no topo: cartões, lista de lojas, dias e pendências só até esta data
+try{ const a = localStorage.getItem("ate"); if(a && a >= D0.de && a <= D0.ate) ATE = a; }catch(e){}
+
 function aplicaAjustes(){
   D = JSON.parse(JSON.stringify(D0));
   for(const a of Object.values(AJ)){
@@ -516,6 +526,14 @@ function aplicaAjustes(){
     const dia = m.dias.find(d => d.data === f.data); if(!dia) continue;
     dia.fechado = f;
     for(const p of m.pendencias) if(p.data === f.data && !p.banco && !p.ajuste && !/AGUARDA/.test(p.status)) p.fechado = f;
+  }
+  // recorte "até": só os dias de movimento até a data escolhida (totais, lojas, tabela e pendências)
+  if(ATE < D.ate){
+    D.ate = ATE;
+    for(const l of D.lojas) for(const m of Object.values(l.mod)){
+      m.dias = m.dias.filter(d => d.data <= ATE);
+      m.pendencias = m.pendencias.filter(p => !p.data || p.data <= ATE);
+    }
   }
   function r(x){ return Math.round(x*100)/100; }
 }
@@ -619,7 +637,8 @@ function ligaCliques(){
 function render(){ tabs(); kpis(); lojas(); detalhe(); ligaDias(); ligaAjustes(); }
 
 
-document.getElementById("stamp").innerHTML = `<span>Período <b>${dBR(D.de)} a ${dBR(D.ate)}/${D.ate.slice(0,4)}</b></span><span>PDV lido até <b>${D.pdv_ate?dBR(D.pdv_ate):"—"}</b></span><span>Extrato lido até <b>${D.extrato_ate?dBR(D.extrato_ate):"—"}</b></span><span>Atualizado em ${D.gerado_em}</span>`;
+function stamp(){ document.getElementById("stamp").innerHTML = `<span>Período <b>${dBR(D.de)} a ${dBR(ATE)}/${ATE.slice(0,4)}</b>${ATE < D0.ate ? ` <small>(relatório vai até ${dBR(D0.ate)})</small>` : ""}</span><span>PDV lido até <b>${D.pdv_ate?dBR(D.pdv_ate):"—"}</b></span><span>Extrato lido até <b>${D.extrato_ate?dBR(D.extrato_ate):"—"}</b></span><span>Atualizado em ${D.gerado_em}</span>`; }
+stamp();
 document.getElementById("rodape").textContent = `Gerado em ${D.gerado_em} · scripts/gera_painel.py`;
 try{ sel = localStorage.getItem("loja"); const t = localStorage.getItem("tab"); if(TABS[t]) tab = t; }catch(e){}
 if(!D.lojas.some(l=>l.nome===sel)) sel = (D.lojas.find(l=>l.mod.pix.tem_maq) || D.lojas[0] || {}).nome || null;
