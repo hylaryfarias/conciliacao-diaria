@@ -36,6 +36,9 @@ def ler_totais(padroes: str, loja: str) -> pd.DataFrame:
         d = pd.read_excel(f, engine="calamine")
         partes.append(d[d["Filial"].astype(str).str.strip() == loja])
     d = pd.concat(partes, ignore_index=True)
+    if "Total Cupom" not in d.columns and "Total" in d.columns:   # analítico (itens): uma linha por cupom
+        d["Caixa"] = d["Caixa"].astype(str).str.strip(); d["Cupom"] = d["Cupom"].astype(str).str.replace(".0", "", regex=False)
+        d = d.groupby(["Filial", "Caixa", "Data", "Cupom"], as_index=False).agg(Hora=("Hora", "first"), **{"Total Cupom": ("Total", "first")}, Operador=("Operador", "first"))
     d["Caixa"] = d["Caixa"].astype(str).str.strip(); d["Cupom"] = d["Cupom"].astype(str).str.replace(".0", "", regex=False)
     d["Data"] = pd.to_datetime(d["Data"], dayfirst=True).dt.date
     d = d.drop_duplicates(["Caixa", "Data", "Cupom"])
@@ -62,6 +65,26 @@ def ler_analitico(padroes: str, loja: str) -> pd.DataFrame:
     return g.drop(columns="taxa").drop_duplicates(["Caixa", "Cupom"])
 
 
+MAQ_FORMAS = ("PIX MAQUININHA", "TEF - CREDITO", "TEF - DEBITO", "CARTAO CREDITO", "CARTAO DEBITO", "TEF - VOUCHER")
+
+
+def ler_formas(padroes: str, loja: str) -> pd.DataFrame:
+    """Relatório de cupons por forma de pagamento: só as linhas que passam na maquininha (Caixa, Cupom, Data, cent)."""
+    fs = [f for p in padroes.split(",") for f in sorted(glob.glob(p))] if padroes else []
+    partes = []
+    for f in fs:
+        d = pd.read_excel(f, engine="calamine")
+        partes.append(d[d["Filial"].astype(str).str.strip() == loja])
+    if not partes:
+        return pd.DataFrame()
+    d = pd.concat(partes, ignore_index=True)
+    d["Caixa"] = d["Caixa"].astype(str).str.strip(); d["Cupom"] = d["Cupom"].astype(str).str.replace(".0", "", regex=False)
+    d["Data"] = pd.to_datetime(d["Data"], dayfirst=True).dt.date
+    d["cent"] = (pd.to_numeric(d["Vl. pagamento"], errors="coerce").fillna(0) * 100).round().astype(int)
+    d["maq"] = d["Desc. pagam."].astype(str).str.upper().str.strip().isin(MAQ_FORMAS)
+    return d[["Caixa", "Cupom", "Data", "cent", "maq"]]
+
+
 def forma(m) -> str:
     p = str(m.get("Produto", "")).upper(); mod = str(m.get("Modalidade", "")).upper()
     if "PIX" in p or "PIX" in mod:
@@ -81,10 +104,12 @@ def main():
     totais = g("--totais", str(RAIZ / "entrada" / f"pdv_totais_{'isa' if 'ISAIAS' in loja else ''}{cod[-2:]}_*.xlsx"))
     anal = g("--analitico", str(RAIZ / "entrada" / f"pdv_analitico_{'isa' if 'ISAIAS' in loja else ''}{cod[-2:]}_*.xlsx"))
     out = Path(g("--out", str(RAIZ / "saida" / f"isaias_taxa_servico_{de}_a_{ate or 'fim'}.xlsx")))
+    portal = g("--portal", str(RAIZ / "entrada" / "portal" / "*.xlsx"))
 
     c = ler_totais(totais, loja)
+    F = ler_formas(g("--formas", ""), loja)
     lojas = carrega_lojas()
-    m = next(df for (f, _), df in ler_portais(glob.glob(str(RAIZ / "entrada" / "portal" / "*.xlsx")), lojas).items() if f == loja)
+    m = next(df for (f, _), df in ler_portais([f for p in portal.split(",") for f in glob.glob(p)], lojas).items() if f == loja)
     m = m[m["Status"].astype(str).str.upper().isin({"APROVADA", "AUTORIZADA"})].copy()
     m["cent"] = m["cent"].astype(int)
     m = m.sort_values("dt").reset_index(drop=True)
@@ -95,25 +120,37 @@ def main():
 
     # Pares candidatos (venda da máquina × cupom) na janela [-30 min, +36 h]: exatos e "+10%" (cupom × 1,10 = máquina ±1 c).
     # Atribuição gulosa pelo tempo: o par mais próximo primeiro; o exato leva vantagem de 5 min sobre o +10% de mesmo instante.
-    c = c.copy(); c["cent110"] = (c["cent"] * (1 + TAXA_SERVICO)).round().astype(int)
-    ex = m.reset_index().merge(c.reset_index(), on="cent", suffixes=("_m", "_c")); ex["tipo"] = "exato"
-    tx = pd.concat([m.reset_index().merge(c.reset_index().assign(cent=lambda t: t["cent110"] + k), on="cent", suffixes=("_m", "_c")) for k in (-1, 0, 1)]); tx["tipo"] = "taxa"
+    c = c.copy()
+    if len(F):
+        # cupom presente no relatório por forma: as unidades são as linhas que passam na máquina (um cupom pode ter dois cartões);
+        # cupom só com dinheiro, online ou prazo não entra. Cupom ausente do relatório por forma: usa o total.
+        u = c.reset_index().merge(F, on=["Caixa", "Cupom", "Data"], how="left", suffixes=("", "_f"))
+        tem = u["cent_f"].notna()
+        u.loc[tem, "cent"] = u.loc[tem, "cent_f"]
+        u = u[~tem | u["maq"].fillna(False).astype(bool)].drop(columns=["cent_f", "maq"])
+        u["unid"] = range(len(u))
+    else:
+        u = c.reset_index(); u["unid"] = range(len(u))
+    u["cent"] = u["cent"].astype(int); u["cent_u"] = u["cent"]; u["cent110"] = (u["cent"] * (1 + TAXA_SERVICO)).round().astype(int)
+    ex = m.reset_index().merge(u, on="cent", suffixes=("_m", "_c")); ex["tipo"] = "exato"
+    tx = pd.concat([m.reset_index().merge(u.assign(cent=lambda t: t["cent110"] + k), on="cent", suffixes=("_m", "_c")) for k in (-1, 0, 1)]); tx["tipo"] = "taxa"
     pares = pd.concat([ex, tx], ignore_index=True)
     pares["delta"] = (pares["dt_c"] - pares["dt_m"]).dt.total_seconds() / 60
     # exato: comanda pode fechar até 36 h depois (virada de dia); +10%: a taxa é cobrada na hora do pagamento, o cupom fecha logo em seguida (até 2 h)
     pares = pares[(pares["delta"] >= -30) & (pares["delta"] <= 36 * 60) & ((pares["tipo"] == "exato") | (pares["delta"] <= 2 * 60))].copy()
     pares["ordem"] = pares["delta"].abs() + (pares["tipo"] == "taxa") * 5
     pares = pares.sort_values("ordem")
-    usados_c, usados_m, par, casos = set(), set(), {}, []
+    usados_u, usados_m, usados_c, par, casos, vcent = set(), set(), set(), {}, [], {}
     for _, r in pares.iterrows():
-        i, j = r["index_m"], r["index_c"]
-        if i in usados_m or j in usados_c:
+        i, j, k = r["index_m"], r["index_c"], r["unid"]
+        if i in usados_m or k in usados_u:
             continue
-        usados_m.add(i); usados_c.add(j)
+        usados_m.add(i); usados_u.add(k); usados_c.add(j)
         if r["tipo"] == "exato":
             par[i] = j
         else:
-            casos.append((i, j))
+            casos.append((i, j)); vcent[(i, j)] = int(r["cent_u"])
+    c = c.assign(cent_total=c["cent"])
     print(f"casamentos exatos: {len(par)} · cupons fechados sem a taxa: {len(casos)}")
 
     # terminal × caixa nos casamentos exatos (prova de exclusividade)
@@ -122,7 +159,7 @@ def main():
     A = ler_analitico(anal, loja)
     linhas = []
     for i, j in casos:
-        v, x = m.loc[i], c.loc[j]
+        v, x = m.loc[i], c.loc[j].copy(); x["cent"] = vcent.get((i, j), x["cent"])
         t = str(v["Número do terminal"]); usos = tc.loc[t] if t in tc.index else None
         if usos is not None and usos.sum() > 0:
             cx_term = f"{usos.idxmax()[-6:]} em {usos.max()} de {usos.sum()} casamentos exatos"

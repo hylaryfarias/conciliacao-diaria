@@ -50,19 +50,39 @@ def carrega_lojas() -> dict:
     return dict(zip(t["EC"].str.strip(), t["Filial"].str.strip()))
 
 
+def pares_mais_proximos(pdv: pd.DataFrame, maq: pd.DataFrame) -> dict:
+    """Pares (linha do PDV, venda da máquina) de mesmo valor, na janela, atribuídos do mais próximo no tempo para o
+    mais distante, cada lado usado uma vez. Evita que uma venda sem cupom no dia "roube" o cupom do dia seguinte
+    (que tem a própria venda) só porque foi processada antes. Retorna {índice PDV: índice máquina}."""
+    if not len(pdv) or not len(maq):
+        return {}
+    a = pdv[["cent", "dt_pdv"]].reset_index().rename(columns={"index": "ip"})
+    b = maq[["cent", "dt"]].reset_index().rename(columns={"index": "im"})
+    pares = a.merge(b, on="cent")
+    if not len(pares):
+        return {}
+    pares["dif"] = (pares["dt_pdv"] - pares["dt"]).dt.total_seconds() / 60
+    pares = pares[(pares["dif"] >= -JANELA_ANTES_MIN) & (pares["dif"] <= JANELA_DEPOIS_H * 60)]
+    pares = pares.assign(abs_=pares["dif"].abs()).sort_values(["abs_", "dt"])
+    usados_p, usados_m, out = set(), set(), {}
+    for ip, im in zip(pares["ip"], pares["im"]):
+        if ip in usados_p or im in usados_m:
+            continue
+        usados_p.add(ip); usados_m.add(im); out[ip] = im
+    return out
+
+
 def casa(pdv: pd.DataFrame, maq: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Casa linha a linha. Retorna (resultado por linha do PDV, linhas da máquina sem par)."""
+    """Casa linha a linha (pares mais próximos primeiro). Retorna (resultado por linha do PDV, linhas da máquina sem par)."""
     usados: set = set()
     linhas = []
     pdv = pdv.sort_values("dt_pdv")
-    for _, a in pdv.iterrows():
-        # mesmo valor; o cupom do PDV fecha de 30 min antes até 36 h depois do PIX na máquina
-        dif = (a["dt_pdv"] - maq["dt"]).dt.total_seconds() / 60
-        cand = maq[(maq["cent"] == a["cent"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~maq.index.isin(usados))]
-        if len(cand) == 0:
+    par = pares_mais_proximos(pdv, maq)   # mesmo valor; o cupom do PDV fecha de 30 min antes até 36 h depois do PIX na máquina
+    for ip, a in pdv.iterrows():
+        if ip not in par:
             linhas.append({**a.to_dict(), "Status": "SEM PAR NA MAQUININHA"})
             continue
-        j = (cand["dt"] - a["dt_pdv"]).abs().idxmin()
+        j = par[ip]
         usados.add(j)
         m = maq.loc[j]
         linhas.append({

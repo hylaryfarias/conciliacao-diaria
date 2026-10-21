@@ -87,14 +87,21 @@ def identifica(arq: str, lojas: dict):
 
 
 def main():
+    """Uso: ingesta.py <arquivos…> [--mes AAAA-MM]  · com --mes, aceita arquivos desse mês e guarda em entrada/<AAAA-MM>/."""
     lojas = carrega_lojas()
-    mes = pd.Timestamp.today().replace(day=1).date()
-    for arq in sys.argv[1:]:
+    args = sys.argv[1:]
+    mes_alvo = None
+    if "--mes" in args:
+        i = args.index("--mes"); mes_alvo = pd.Timestamp(args[i + 1] + "-01").date(); del args[i:i + 2]
+    mes = mes_alvo or pd.Timestamp.today().replace(day=1).date()
+    for arq in args:
         tipo, destino, desc, per = identifica(arq, lojas)
         if not tipo:
             print(f"✗ {desc}"); continue
-        if per and per[1] < mes:
+        if per and (per[1] < mes or (mes_alvo and per[0] > (mes + pd.offsets.MonthEnd(0)).date())):
             print(f"✗ FORA DO MÊS · {desc} · não guardado"); continue
+        if mes_alvo:   # mês anterior fica separado, para não entrar no cruzamento do mês corrente
+            destino = destino.replace("entrada/", f"entrada/{mes:%Y-%m}/", 1)
         dst = RAIZ / destino
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(arq, dst)

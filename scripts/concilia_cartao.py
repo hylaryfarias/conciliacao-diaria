@@ -16,7 +16,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-from concilia_pix import TAXA_SERVICO, TOLERANCIA_CENT, carrega_lojas  # noqa: E402
+from concilia_pix import TAXA_SERVICO, TOLERANCIA_CENT, carrega_lojas, pares_mais_proximos  # noqa: E402
 from pdv_pix import HORA_VIRADA, explica_sem_par  # noqa: E402
 from pdv_pix import ler_pdv  # noqa: E402
 from portal_sicredi import ler_portais  # noqa: E402
@@ -33,9 +33,9 @@ def casa(maq: pd.DataFrame, pdv: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
     usados: set = set()
     linhas = []
     pdv = pdv.sort_values("dt_pdv")
+    par = {im: ip for ip, im in pares_mais_proximos(pdv, maq).items()}   # pares mais próximos primeiro (ver concilia_pix)
     for i, m in maq.sort_values("dt").iterrows():
-        dif = (pdv["dt_pdv"] - m["dt"]).dt.total_seconds() / 60
-        c = pdv[(pdv["cent"] == m["cent"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~pdv.index.isin(usados))]
+        c = pdv.loc[[par[i]]] if i in par else pdv.iloc[0:0]
         base = {"Data": m["Data"], "Hora maq": m["dt"].strftime("%H:%M:%S"), "Bandeira": m["Bandeira"], "Canal": m["Canal"],
                 "Valor Bruto": m["Valor Bruto"], "MDR": m["Valor da taxa (MDR)"], "Líquido": m["Valor líquido"],
                 "Terminal": m["Número do terminal"], "Autorização": m["Cód. de autorização"], "cent": m["cent"], "dt": m["dt"]}
