@@ -138,3 +138,11 @@ python3 scripts/gera_painel.py entrada/<pdv_cupons>.xlsx --de 2026-10-08 --ate 2
 Lê as planilhas de `saida/` e grava `painel/index.html` (template em `painel/template.html`,
 cores e tipografia do Manual de Identidade Visual · Grupo Ragga). Publicado em
 https://claude.ai/artifact/8hmLnVrM6CiE3omwzP7oms — republicar a cada rodada.
+
+## Taxa de serviço sem o relatório por forma de pagamento
+
+`scripts/isaias_taxa.py --loja "ISAIAS 01 - MARINGA" --de 2026-10-01 --ate 2026-10-20` cruza o relatório de
+cupons (totais + operador, `entrada/pdv_totais_*.xlsx`) e o analítico (`entrada/pdv_analitico_*.xlsx`) com o
+Histórico de vendas da Sicredi, sem depender da forma de pagamento: casa valor exato (até 36 h, comanda virada)
+e cupom × 1,10 = máquina (até 2 h), o par mais próximo no tempo primeiro. Gera `saida/isaias_taxa_servico_<de>_a_<ate>.xlsx`
+com a prova par a par (terminal exclusivo do caixa, minutos até o fechamento, concorrentes livres).

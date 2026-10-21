@@ -61,6 +61,18 @@ def identifica(arq: str, lojas: dict):
         p = pd.to_datetime(df["Data do pagamento"], dayfirst=True).dt.date
         tipo = "detalhado" if "Data das vendas" in cab else "simplificado"
         return "antecipacao", f"entrada/antecipacao/antecipacao_{tipo}_{cod_loja(filial)}_pgto_{p.min():%Y-%m-%d}_a_{p.max():%Y-%m-%d}_{HOJE}.xlsx", f"Antecipação {tipo} · {filial} · pagamentos {p.min():%d/%m}–{p.max():%d/%m} · {len(df)} linhas", (p.min(), p.max())
+    if "Total Cupom" in cab and "Operador" in cab:
+        h = rows.index(next(r for r in rows if "Total Cupom" in r))
+        df = pd.DataFrame(rows[h + 1:], columns=[str(c) for c in rows[h]]); df = df[df["Filial"].astype(str).str.strip() != ""]
+        d = pd.to_datetime(df["Data"], dayfirst=True).dt.date
+        lj = df["Filial"].nunique(); tag = "todas" if lj > 1 else cod_loja(str(df["Filial"].iloc[0]))
+        return "pdv_totais", f"entrada/pdv_totais_{tag}_{d.min():%Y-%m-%d}_a_{d.max():%Y-%m-%d}.xlsx", f"PDV cupons (totais + operador) · {d.min():%d/%m}–{d.max():%d/%m} · {len(df)} cupons · {lj} loja(s)", (d.min(), d.max())
+    if "Nome do atendente" in cab and "Produto" in cab:
+        h = rows.index(next(r for r in rows if "Nome do atendente" in r))
+        df = pd.DataFrame(rows[h + 1:], columns=[str(c) for c in rows[h]]); df = df[df["Filial"].astype(str).str.strip() != ""]
+        d = pd.to_datetime(df["Data"], dayfirst=True).dt.date
+        lj = df["Filial"].nunique(); tag = "todas" if lj > 1 else cod_loja(str(df["Filial"].iloc[0]))
+        return "pdv_analitico", f"entrada/pdv_analitico_{tag}_{d.min():%Y-%m-%d}_a_{d.max():%Y-%m-%d}.xlsx", f"PDV analítico (itens + atendente) · {d.min():%d/%m}–{d.max():%d/%m} · {len(df)} linhas · {lj} loja(s)", (d.min(), d.max())
     if "Descrição" in cab and "Saldo após" in cab:
         h = rows.index(next(r for r in rows if "Descrição" in r))
         df = pd.DataFrame(rows[h + 1:], columns=rows[h])
