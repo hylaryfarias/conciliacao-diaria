@@ -527,6 +527,9 @@ function aplicaAjustes(){
     dia.fechado = f;
     for(const p of m.pendencias) if(p.data === f.data && !p.banco && !p.ajuste && !/AGUARDA/.test(p.status)) p.fechado = f;
   }
+  // pendências em ordem de data (e hora), independente da etapa que as gerou
+  const chave = p => `${p.data || "9999"} ${p.hora || "99:99"}`;
+  for(const l of D.lojas) for(const m of Object.values(l.mod)) m.pendencias.sort((a, b) => chave(a).localeCompare(chave(b)));
   // recorte "até": só os dias de movimento até a data escolhida (totais, lojas, tabela e pendências)
   if(ATE < D.ate){
     D.ate = ATE;
