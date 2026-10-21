@@ -31,6 +31,8 @@ Nas outras 15 lojas do grupo, no período de outubro e pelo mesmo critério, nã
 
 O cliente pagou o valor integral, com a taxa. A maquininha registrou e o banco creditou o valor integral na conta da empresa. O PDV registrou o valor sem a taxa. A diferença, R$ 3.853,14 no período (R$ 3.730,05 no ISAIAS 01 e R$ 123,09 no ISAIAS 02), não aparece na conferência de caixa da loja, porque a conferência compara o PDV com o que foi recebido pelas formas de pagamento, e nos dois o valor confere com o que foi digitado. A sobra só é visível no cruzamento com a maquininha, que é o controle que passou a ser feito diariamente.
 
+> **Observação importante.** O valor de R$ 3.853,14 é o que a maquininha cobrou a mais do que o PDV registrou. Ele entrou na conta da empresa pela Sicredi. O que não está apurado é a contrapartida: se, e em que medida, essa diferença foi retirada do caixa ou consumida de outra forma. Os relatórios do PDV e da Sicredi mostram a operação (cobrança com a taxa, cupom fechado sem ela), mas não mostram o destino do valor. Essa parte depende da conferência física de caixa de cada dia e de outros elementos fora destes relatórios. Portanto, o valor acima mede a diferença registrada, não necessariamente um prejuízo já consumado no mesmo montante.
+
 ## Evidências disponíveis
 
 Para cada cupom: data, hora de encerramento no PDV, número do cupom, caixa, operador, atendente, mesa, valor baixado no PDV, valor cobrado na máquina, diferença, hora da transação na máquina, terminal, código de autorização da Sicredi e a prova par a par. Fontes: relatório de cupons e relatório analítico do PDV, Histórico de vendas detalhado do portal Sicredi e extrato bancário.
