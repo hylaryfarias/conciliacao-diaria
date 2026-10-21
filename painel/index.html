@@ -254,11 +254,17 @@ function tabs(){
     const nErro = st.filter(x=>x.s==="erro").length, nOk = st.filter(x=>x.s==="ok").length;
     const badge = nErro ? `<span class="n" data-s="erro">${nErro} em aberto</span>` : nOk ? `<span class="n" data-s="ok">${nOk} ok</span>` : "";
     return `<button class="tab" role="tab" id="tab-${k}" data-tab="${k}" aria-selected="${k===tab}">${v}${badge}</button>`;
-  }).join("") + `<label class="ate">até <input type="date" id="ate" value="${ATE}" min="${D0.de}" max="${D0.ate}">${ATE < D0.ate ? `<button type="button" id="ate-tudo">todo o período</button>` : ""}</label>`;
+  }).join("") + `<label class="ate">de <input type="date" id="de" value="${DE}" min="${D0.de}" max="${ATE}"> até <input type="date" id="ate" value="${ATE}" min="${DE}" max="${D0.ate}">${(ATE < D0.ate || DE > D0.de) ? `<button type="button" id="ate-tudo">todo o período</button>` : ""}</label>`;
   document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => { tab = b.dataset.tab; try{localStorage.setItem("tab",tab)}catch(e){} render(); }));
-  const mudaAte = v => { if(!v || v < D0.de || v > D0.ate) v = D0.ate; ATE = v; try{localStorage.setItem("ate",ATE)}catch(e){} aplicaAjustes(); render(); stamp(); };
-  document.getElementById("ate").addEventListener("change", ev => mudaAte(ev.target.value));
-  const bt = document.getElementById("ate-tudo"); if(bt) bt.addEventListener("click", () => mudaAte(D0.ate));
+  const muda = (de, ate) => {
+    if(!ate || ate < D0.de || ate > D0.ate) ate = D0.ate;
+    if(!de || de < D0.de || de > D0.ate) de = D0.de;
+    if(de > ate) de = ate;
+    DE = de; ATE = ate; try{localStorage.setItem("ate",ATE); localStorage.setItem("de",DE)}catch(e){} aplicaAjustes(); render(); stamp();
+  };
+  document.getElementById("ate").addEventListener("change", ev => muda(DE, ev.target.value));
+  document.getElementById("de").addEventListener("change", ev => muda(ev.target.value, ATE));
+  const bt = document.getElementById("ate-tudo"); if(bt) bt.addEventListener("click", () => muda(D0.de, D0.ate));
   const nota = document.getElementById("nota");
   nota.hidden = tab === "pix";
   nota.textContent = tab === "credito"
@@ -492,8 +498,8 @@ const NOMES = {pix:"PIX", credito:"Crédito", debito:"Débito", voucher:"Voucher
 const slug = x => String(x).replace(/[^A-Za-z0-9_.~:@+-]+/g, "-");
 const idAjuste = a => a.id || `${slug(a.loja)}_${a.data}_${a.cupom}_${a.de}${a.aut ? "_" + slug(a.aut) : ""}`;   // um cupom pode ter duas linhas (dois vales): a autorização entra no id
 
-let ATE = D0.ate;   // "até" escolhido no topo: cartões, lista de lojas, dias e pendências só até esta data
-try{ const a = localStorage.getItem("ate"); if(a && a >= D0.de && a <= D0.ate) ATE = a; }catch(e){}
+let DE = D0.de, ATE = D0.ate;   // "de … até" escolhidos no topo: cartões, lista de lojas, dias e pendências só nesse recorte
+try{ const a = localStorage.getItem("ate"); if(a && a >= D0.de && a <= D0.ate) ATE = a; const d = localStorage.getItem("de"); if(d && d >= D0.de && d <= ATE) DE = d; }catch(e){}
 
 function aplicaAjustes(){
   D = JSON.parse(JSON.stringify(D0));
@@ -539,12 +545,12 @@ function aplicaAjustes(){
   // pendências em ordem de data (e hora), independente da etapa que as gerou
   const chave = p => `${p.data || "9999"} ${p.hora || "99:99"}`;
   for(const l of D.lojas) for(const m of Object.values(l.mod)) m.pendencias.sort((a, b) => chave(a).localeCompare(chave(b)));
-  // recorte "até": só os dias de movimento até a data escolhida (totais, lojas, tabela e pendências)
-  if(ATE < D.ate){
-    D.ate = ATE;
+  // recorte "de … até": só os dias de movimento dentro do intervalo escolhido (totais, lojas, tabela e pendências)
+  if(ATE < D.ate || DE > D.de){
+    D.ate = ATE; D.de = DE;
     for(const l of D.lojas) for(const m of Object.values(l.mod)){
-      m.dias = m.dias.filter(d => d.data <= ATE);
-      m.pendencias = m.pendencias.filter(p => !p.data || p.data <= ATE);
+      m.dias = m.dias.filter(d => d.data >= DE && d.data <= ATE);
+      m.pendencias = m.pendencias.filter(p => !p.data || (p.data >= DE && p.data <= ATE));
     }
   }
   function r(x){ return Math.round(x*100)/100; }
@@ -667,7 +673,7 @@ function ligaCliques(){
 function render(){ tabs(); kpis(); lojas(); detalhe(); ligaDias(); ligaAjustes(); }
 
 
-function stamp(){ document.getElementById("stamp").innerHTML = `<span>Período <b>${dBR(D.de)} a ${dBR(ATE)}/${ATE.slice(0,4)}</b>${ATE < D0.ate ? ` <small>(relatório vai até ${dBR(D0.ate)})</small>` : ""}</span><span>PDV lido até <b>${D.pdv_ate?dBR(D.pdv_ate):"—"}</b></span><span>Extrato lido até <b>${D.extrato_ate?dBR(D.extrato_ate):"—"}</b></span><span>Atualizado em ${D.gerado_em}</span>`; }
+function stamp(){ document.getElementById("stamp").innerHTML = `<span>Período <b>${dBR(DE)} a ${dBR(ATE)}/${ATE.slice(0,4)}</b>${(ATE < D0.ate || DE > D0.de) ? ` <small>(relatório: ${dBR(D0.de)} a ${dBR(D0.ate)})</small>` : ""}</span><span>PDV lido até <b>${D.pdv_ate?dBR(D.pdv_ate):"—"}</b></span><span>Extrato lido até <b>${D.extrato_ate?dBR(D.extrato_ate):"—"}</b></span><span>Atualizado em ${D.gerado_em}</span>`; }
 stamp();
 document.getElementById("rodape").textContent = `Gerado em ${D.gerado_em} · scripts/gera_painel.py`;
 try{ sel = localStorage.getItem("loja"); const t = localStorage.getItem("tab"); if(TABS[t]) tab = t; }catch(e){}
