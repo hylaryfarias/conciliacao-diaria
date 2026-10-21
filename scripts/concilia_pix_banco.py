@@ -102,11 +102,16 @@ def pdv_sem_par_pix() -> pd.DataFrame:
     return df
 
 
-def classifica_sobra(sobra: pd.DataFrame, vendas: pd.DataFrame, devol: pd.DataFrame) -> pd.DataFrame:
-    """Crédito sem venda própria: duplicidade (há venda de mesmo valor na loja, já paga por outro crédito),
-    devolvido (há DEVOLUCAO PIX do mesmo pagador e valor) ou outra natureza."""
+def classifica_sobra(sobra: pd.DataFrame, vendas: pd.DataFrame, devol: pd.DataFrame, res: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Crédito sem venda própria: devolvido (há DEVOLUCAO PIX do mesmo pagador e valor); máquina não registrou
+    (há baixa PIX no PDV sem par); duplicidade (o MESMO pagador já pagou uma venda de mesmo valor na loja);
+    PIX sem venda registrada (há venda de mesmo valor, mas paga por outro pagador: este cliente pagou e nem a
+    máquina nem o PDV registraram a venda dele); ou outra natureza."""
     sobra = sobra.copy()
     sobra["doc"] = sobra["Descrição"].str.extract(r"RECEBIMENTO PIX (\d+)")[0]
+    pagos = res[res["Status"].eq("CONCILIADO")].copy() if res is not None and len(res) else pd.DataFrame()
+    if len(pagos):
+        pagos["doc_pag"] = pagos["Pagador"].astype(str).str.extract(r"^(\d+)")[0]
     sp = pdv_sem_par_pix()
     usados_sp: set = set()
     cls, evid, cupons = [], [], []
@@ -123,7 +128,12 @@ def classifica_sobra(sobra: pd.DataFrame, vendas: pd.DataFrame, devol: pd.DataFr
             cls.append("PIX PAGO · MÁQUINA NÃO REGISTROU"); evid.append(f"baixa PIX no PDV: cupom {r['Cupom']} de {r['Data']:%d/%m} {str(r['Hora'])[:5]} ({r['Caixa']}), sem aprovação na máquina"); cupons.append(str(r["Cupom"]))
         elif len(v):
             r = v.iloc[0]
-            cls.append("PIX EM DUPLICIDADE · A DEVOLVER"); evid.append(f"venda de mesmo valor em {r['Data']:%d/%m} {r['dt']:%H:%M} ({r['Fonte']}, {r['Ref']}) já paga por outro crédito")
+            mesmo = pagos[(pagos["Filial"] == x["Loja"]) & (pagos["cent"] == x["cent"]) & (pagos["Data"].isin(dias)) & (pagos["doc_pag"] == str(x["doc"]))] if len(pagos) else pagos
+            if len(mesmo):
+                m = mesmo.iloc[0]
+                cls.append("PIX EM DUPLICIDADE · A DEVOLVER"); evid.append(f"o mesmo pagador já pagou a venda de {m['Data']:%d/%m} {m['dt']:%H:%M} ({m['Fonte']}, {m['Ref']}); este é o segundo PIX dele")
+            else:
+                cls.append("PIX SEM VENDA REGISTRADA"); evid.append(f"pagador sem venda na máquina nem cupom no PDV; a venda de mesmo valor em {r['Data']:%d/%m} {r['dt']:%H:%M} ({r['Fonte']}, {r['Ref']}) já está paga por outro pagador")
         else:
             cls.append("OUTRA NATUREZA"); evid.append("sem venda de mesmo valor na loja em 4 dias; pagador " + ("CNPJ" if len(str(x["doc"])) == 14 else "CPF"))
         if cls[-1] != "PIX PAGO · MÁQUINA NÃO REGISTROU":
@@ -203,7 +213,7 @@ def main() -> None:
     d0, d1 = v["Data"].min(), v["Data"].max()
     ex = ex[(ex["Data"] >= d0) & (ex["Loja"].isin(v["Filial"].unique()))]   # só o período e as lojas com venda
     res, sobra = casa_banco(v, ex, ext_ate)
-    sobra = classifica_sobra(sobra, v, ler_devolucoes(ex_arq, v["Filial"].unique()))
+    sobra = classifica_sobra(sobra, v, ler_devolucoes(ex_arq, v["Filial"].unique()), res)
 
     resumo = []
     for (f, d), g in res.groupby(["Filial", "Data"]):
