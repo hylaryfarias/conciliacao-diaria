@@ -144,17 +144,21 @@ https://claude.ai/artifact/8hmLnVrM6CiE3omwzP7oms — republicar a cada rodada.
 O mesmo `painel/index.html` roda fora do Claude em https://conciliacao-diaria.vercel.app.
 `vercel.json` publica só a pasta `painel/` (as planilhas de `entrada/` e `saida/` não vão
 pro site). Os ajustes, fechamentos e vistos ficam num Redis (Upstash) e passam por
-`api/dados.js`, protegido por senha. Configuração, uma vez só, no projeto da Vercel:
+`api/dados.js`. Configuração, uma vez só, no projeto da Vercel:
 
 1. Storage → Create Database → Upstash Redis (plano grátis) → Connect ao projeto. Isso
    cria as variáveis `KV_REST_API_URL` e `KV_REST_API_TOKEN`.
-2. Settings → Environment Variables → `PAINEL_SENHA` = a senha que o painel vai pedir.
-3. Deployments → Redeploy.
+2. Deployments → Redeploy.
+
+Sem senha por padrão: quem tiver o link vê e grava. Se um dia quiser proteger, basta
+criar a variável `PAINEL_SENHA` em Settings → Environment Variables e redeployar; o
+painel passa a pedir a senha uma vez e guarda no navegador.
 
 Na primeira abertura com o banco vazio, `api/dados.js` importa `ajustes/seed_painel.json`
 (cópia do que estava gravado no painel do Claude em 22/10). A partir daí, o que for
 gravado na Vercel fica na Vercel; o painel do Claude e o da Vercel não se sincronizam.
-A senha fica salva no navegador depois da primeira vez.
+Quem estiver com o painel aberto vê o que os outros gravam em até 5 s (o painel pergunta
+ao banco se a versão mudou e só baixa os dados quando mudou).
 
 ## Taxa de serviço sem o relatório por forma de pagamento
 

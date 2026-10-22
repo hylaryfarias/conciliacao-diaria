@@ -7,10 +7,11 @@
 // Variáveis de ambiente (Vercel → Settings → Environment Variables):
 //   KV_REST_API_URL / KV_REST_API_TOKEN        (criadas pelo Upstash Redis)
 //   ou UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN
-//   PAINEL_SENHA                                senha que o painel pede
+//   PAINEL_SENHA                                (opcional) senha que o painel pede
 //
 // Rotas:
-//   GET    /api/dados                 → {ajustes:{id:doc}, fechamentos:{}, vistos:{}}
+//   GET    /api/dados                 → {ajustes:{id:doc}, fechamentos:{}, vistos:{}, ver}
+//   GET    /api/dados?ver=N           → {same:true} se nada mudou desde a versão N
 //   PUT    /api/dados?c=<col>&id=<id> → grava o documento (corpo JSON)
 //   DELETE /api/dados?c=<col>&id=<id> → apaga o documento
 //
@@ -97,18 +98,14 @@ module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("Content-Type", "application/json; charset=utf-8");
 
-  const senha = process.env.PAINEL_SENHA;
-  if(!senha){
-    res.statusCode = 503;
-    return res.end(JSON.stringify({ erro: "Falta a variável PAINEL_SENHA na Vercel (Settings → Environment Variables)." }));
-  }
   const cfg = redisCfg();
   if(!cfg){
     res.statusCode = 503;
     return res.end(JSON.stringify({ erro: "Falta o banco: crie um Upstash Redis em Storage e conecte ao projeto (variáveis KV_REST_API_URL e KV_REST_API_TOKEN)." }));
   }
-  const dada = req.headers["x-senha"];
-  if(dada !== senha){
+  // Senha é opcional: só é exigida se PAINEL_SENHA estiver definida na Vercel.
+  const senha = process.env.PAINEL_SENHA;
+  if(senha && req.headers["x-senha"] !== senha){
     res.statusCode = 401;
     return res.end(JSON.stringify({ erro: "senha" }));
   }
@@ -117,8 +114,12 @@ module.exports = async (req, res) => {
   try{
     if(req.method === "GET"){
       await semearSePreciso(cfg);
+      // ?ver=N: o painel pergunta se mudou algo desde a versão N; se não, resposta curta
+      const ver = Number(await redis(cfg, ["GET", "painel:ver"])) || 0;
+      if(q.ver !== undefined && Number(q.ver) === ver) return res.end(JSON.stringify({ same: true, ver }));
       const dados = await lerTudo(cfg);
       dados.pode_escrever = true;
+      dados.ver = ver;
       return res.end(JSON.stringify(dados));
     }
     const c = q.c, id = q.id;
@@ -133,11 +134,13 @@ module.exports = async (req, res) => {
         return res.end(JSON.stringify({ erro: "corpo precisa ser um objeto JSON" }));
       }
       await redis(cfg, ["HSET", KEY(c), id, JSON.stringify(doc)]);
-      return res.end(JSON.stringify({ ok: true }));
+      const ver = await redis(cfg, ["INCR", "painel:ver"]);
+      return res.end(JSON.stringify({ ok: true, ver }));
     }
     if(req.method === "DELETE"){
       await redis(cfg, ["HDEL", KEY(c), id]);
-      return res.end(JSON.stringify({ ok: true }));
+      const ver = await redis(cfg, ["INCR", "painel:ver"]);
+      return res.end(JSON.stringify({ ok: true, ver }));
     }
     res.statusCode = 405;
     return res.end(JSON.stringify({ erro: "método" }));

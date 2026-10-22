@@ -625,26 +625,37 @@ async function ligaApi(){
   try{ dados = await chama("GET"); }
   catch(e){ avisoTopo(`Painel sem banco: ${e.message}`); return; }
   if(!dados) return;   // não está na Vercel (sem /api): segue só leitura
+  let ver = dados.ver || 0, ocupado = false;
   const ouvintes = {};
   const emite = c => { const docs = Object.entries(dados[c] || {}).map(([id, d]) => ({id, exists:true, data:() => d})); ouvintes[c]?.({docs}); };
   dbRef = {
     collection: c => ({
       onSnapshot: fn => { ouvintes[c] = fn; emite(c); },
       doc: id => ({
-        set: async d => { await chama("PUT", `?c=${c}&id=${encodeURIComponent(id)}`, d); (dados[c] ||= {})[id] = d; emite(c); },
-        delete: async () => { await chama("DELETE", `?c=${c}&id=${encodeURIComponent(id)}`); delete (dados[c] || {})[id]; emite(c); },
+        set: async d => { const r = await chama("PUT", `?c=${c}&id=${encodeURIComponent(id)}`, d); if(r?.ver) ver = r.ver; (dados[c] ||= {})[id] = d; emite(c); },
+        delete: async () => { const r = await chama("DELETE", `?c=${c}&id=${encodeURIComponent(id)}`); if(r?.ver) ver = r.ver; delete (dados[c] || {})[id]; emite(c); },
       }),
     }),
   };
   podeEscrever = dados.pode_escrever !== false; meuId = "vercel";
   for(const c of ["ajustes", "fechamentos", "vistos"]) dados[c] ||= {};
-  // quem abriu em outra aba ou outro computador: recarrega ao voltar pra janela (no máximo a cada 30 s)
-  let ultimo = Date.now();
-  window.addEventListener("focus", async () => {
-    if(Date.now() - ultimo < 30000) return;
-    ultimo = Date.now();
-    try{ const novo = await chama("GET"); if(novo){ for(const c of ["ajustes","fechamentos","vistos"]){ dados[c] = novo[c] || {}; emite(c); } } }catch(e){}
-  });
+  // tempo real: a cada 5 s pergunta ao banco se a versão mudou (resposta curta se não mudou);
+  // quando mudou, baixa tudo e redesenha. Pausa com a aba escondida e confere ao voltar.
+  const sincroniza = async () => {
+    if(ocupado || document.hidden) return;
+    ocupado = true;
+    try{
+      const novo = await chama("GET", `?ver=${ver}`);
+      if(novo && !novo.same){
+        ver = novo.ver || ver;
+        for(const c of ["ajustes","fechamentos","vistos"]){ dados[c] = novo[c] || {}; emite(c); }
+      }
+    }catch(e){}
+    ocupado = false;
+  };
+  setInterval(sincroniza, 5000);
+  document.addEventListener("visibilitychange", () => { if(!document.hidden) sincroniza(); });
+  window.addEventListener("focus", sincroniza);
 }
 
 function avisoTopo(msg){
