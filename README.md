@@ -139,6 +139,23 @@ Lê as planilhas de `saida/` e grava `painel/index.html` (template em `painel/te
 cores e tipografia do Manual de Identidade Visual · Grupo Ragga). Publicado em
 https://claude.ai/artifact/8hmLnVrM6CiE3omwzP7oms — republicar a cada rodada.
 
+### Painel na Vercel
+
+O mesmo `painel/index.html` roda fora do Claude em https://conciliacao-diaria.vercel.app.
+`vercel.json` publica só a pasta `painel/` (as planilhas de `entrada/` e `saida/` não vão
+pro site). Os ajustes, fechamentos e vistos ficam num Redis (Upstash) e passam por
+`api/dados.js`, protegido por senha. Configuração, uma vez só, no projeto da Vercel:
+
+1. Storage → Create Database → Upstash Redis (plano grátis) → Connect ao projeto. Isso
+   cria as variáveis `KV_REST_API_URL` e `KV_REST_API_TOKEN`.
+2. Settings → Environment Variables → `PAINEL_SENHA` = a senha que o painel vai pedir.
+3. Deployments → Redeploy.
+
+Na primeira abertura com o banco vazio, `api/dados.js` importa `ajustes/seed_painel.json`
+(cópia do que estava gravado no painel do Claude em 22/10). A partir daí, o que for
+gravado na Vercel fica na Vercel; o painel do Claude e o da Vercel não se sincronizam.
+A senha fica salva no navegador depois da primeira vez.
+
 ## Taxa de serviço sem o relatório por forma de pagamento
 
 `scripts/isaias_taxa.py --loja "ISAIAS 01 - MARINGA" --de 2026-10-01 --ate 2026-10-20` cruza o relatório de

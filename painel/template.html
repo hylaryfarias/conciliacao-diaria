@@ -101,7 +101,8 @@ table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:760px}
 th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-muted);font-weight:600;text-align:right;padding:8px 8px;border-bottom:1px solid var(--rule-strong);white-space:nowrap}
 th:first-child,td:first-child{text-align:left}
 td{padding:7px 8px;border-bottom:1px solid var(--rule);text-align:right;white-space:nowrap}
-tr.fim td{color:var(--ink-muted)} td.trf{color:var(--gestao);font-size:12.5px} td.dia{font-weight:600} td.dia small{color:var(--ink-muted);font-weight:400;margin-left:4px}
+tr.fim td{color:var(--ink-muted)} .aviso-banco{background:#fff3cd;color:#664d03;padding:10px 16px;font-size:13.5px;border-bottom:1px solid #ffe69c}
+td.trf{color:var(--gestao);font-size:12.5px} td.dia{font-weight:600} td.dia small{color:var(--ink-muted);font-weight:400;margin-left:4px}
 td .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
 .dot[data-s="ok"]{background:var(--ok)} .dot[data-s="erro"]{background:var(--erro)} .dot[data-s="pendente"]{background:var(--pendente)} .dot[data-s="aguarda"]{background:var(--ink-muted);opacity:.5}
 tfoot td{font-weight:700;border-top:2px solid var(--rule-strong);border-bottom:0}
@@ -566,12 +567,15 @@ function aplicaAjustes(){
 }
 
 async function ligaBanco(){
-  if(!window.claude?.use) return;
-  try{
-    dbRef = await claude.use("db");
-    userRef = await claude.use("user");
-    if(userRef){ podeEscrever = await userRef.can("data.write"); meuId = await userRef.id(); }
-  }catch(e){ dbRef = null; }
+  if(window.claude?.use){
+    try{
+      dbRef = await claude.use("db");
+      userRef = await claude.use("user");
+      if(userRef){ podeEscrever = await userRef.can("data.write"); meuId = await userRef.id(); }
+    }catch(e){ dbRef = null; }
+  }else{
+    await ligaApi();   // fora do Claude (Vercel): banco em /api/dados
+  }
   if(!dbRef){ render(); return; }
   dbRef.collection("ajustes").onSnapshot(snap => {
     AJ = {};
@@ -588,6 +592,65 @@ async function ligaBanco(){
     snap.docs.forEach(d => { if(d.exists) VI[d.id] = d.data(); });
     detalhe(); ligaDias(); ligaAjustes();
   }, err => { console.warn("vistos:", err); });
+}
+
+// Fora do Claude (painel hospedado na Vercel): o banco é /api/dados, protegido por senha.
+// Mesma interface que o painel usa (collection().onSnapshot / doc().set / doc().delete).
+async function ligaApi(){
+  if(location.protocol === "file:") return;
+  let senha = ""; try{ senha = localStorage.getItem("painel_senha") || ""; }catch(e){}
+  const guarda = () => { try{ localStorage.setItem("painel_senha", senha); }catch(e){} };
+  const pede = async r => {
+    const txt = await r.text().catch(() => "");
+    let msg = ""; try{ msg = JSON.parse(txt).erro || ""; }catch(e){ msg = txt; }
+    return msg || `erro ${r.status}`;
+  };
+  const chama = async (method, qs, body) => {
+    for(let tent = 0; tent < 3; tent++){
+      const r = await fetch("/api/dados" + (qs || ""), {method, cache:"no-store",
+        headers:{"content-type":"application/json", "x-senha": senha},
+        body: body === undefined ? undefined : JSON.stringify(body)});
+      if(r.status === 401){
+        const nova = prompt(tent ? "Senha incorreta. Senha do painel:" : "Senha do painel:");
+        if(nova === null) throw new Error("senha não informada");
+        senha = nova; guarda(); continue;
+      }
+      if(r.status === 404 && method === "GET") return null;
+      if(!r.ok) throw new Error(await pede(r));
+      return r.json();
+    }
+    throw new Error("senha incorreta");
+  };
+  let dados;
+  try{ dados = await chama("GET"); }
+  catch(e){ avisoTopo(`Painel sem banco: ${e.message}`); return; }
+  if(!dados) return;   // não está na Vercel (sem /api): segue só leitura
+  const ouvintes = {};
+  const emite = c => { const docs = Object.entries(dados[c] || {}).map(([id, d]) => ({id, exists:true, data:() => d})); ouvintes[c]?.({docs}); };
+  dbRef = {
+    collection: c => ({
+      onSnapshot: fn => { ouvintes[c] = fn; emite(c); },
+      doc: id => ({
+        set: async d => { await chama("PUT", `?c=${c}&id=${encodeURIComponent(id)}`, d); (dados[c] ||= {})[id] = d; emite(c); },
+        delete: async () => { await chama("DELETE", `?c=${c}&id=${encodeURIComponent(id)}`); delete (dados[c] || {})[id]; emite(c); },
+      }),
+    }),
+  };
+  podeEscrever = dados.pode_escrever !== false; meuId = "vercel";
+  for(const c of ["ajustes", "fechamentos", "vistos"]) dados[c] ||= {};
+  // quem abriu em outra aba ou outro computador: recarrega ao voltar pra janela (no máximo a cada 30 s)
+  let ultimo = Date.now();
+  window.addEventListener("focus", async () => {
+    if(Date.now() - ultimo < 30000) return;
+    ultimo = Date.now();
+    try{ const novo = await chama("GET"); if(novo){ for(const c of ["ajustes","fechamentos","vistos"]){ dados[c] = novo[c] || {}; emite(c); } } }catch(e){}
+  });
+}
+
+function avisoTopo(msg){
+  let el = document.getElementById("aviso-banco");
+  if(!el){ el = document.createElement("div"); el.id = "aviso-banco"; el.className = "aviso-banco"; document.body.prepend(el); }
+  el.textContent = msg;
 }
 
 async function salvaFechamento(f, botao){
