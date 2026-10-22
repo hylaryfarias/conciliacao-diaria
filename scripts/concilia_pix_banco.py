@@ -102,7 +102,7 @@ def pdv_sem_par_pix() -> pd.DataFrame:
     return df
 
 
-def classifica_sobra(sobra: pd.DataFrame, vendas: pd.DataFrame, devol: pd.DataFrame, res: pd.DataFrame | None = None) -> pd.DataFrame:
+def classifica_sobra(sobra: pd.DataFrame, vendas: pd.DataFrame, devol: pd.DataFrame, res: pd.DataFrame | None = None, antes: pd.DataFrame | None = None) -> pd.DataFrame:
     """Crédito sem venda própria: devolvido (há DEVOLUCAO PIX do mesmo pagador e valor); máquina não registrou
     (há baixa PIX no PDV sem par); duplicidade (o MESMO pagador já pagou uma venda de mesmo valor na loja);
     PIX sem venda registrada (há venda de mesmo valor, mas paga por outro pagador: este cliente pagou e nem a
@@ -121,8 +121,12 @@ def classifica_sobra(sobra: pd.DataFrame, vendas: pd.DataFrame, devol: pd.DataFr
         v = vendas[(vendas["Filial"] == x["Loja"]) & (vendas["cent"] == x["cent"]) & (vendas["Data"].isin(dias))]
         dv = devol[(devol["Loja"] == x["Loja"]) & (devol["cent"] == x["cent"]) & (devol["doc"] == x["doc"]) & (devol["Data"] >= d)]
         c = sp[(sp["Filial"] == x["Loja"]) & (sp["cent"] == x["cent"]) & (sp["Data"].isin(dias)) & (~sp.index.isin(usados_sp))] if len(sp) else sp
+        ant = antes[(antes["Filial"] == x["Loja"]) & (antes["cent"] == x["cent"]) & (pd.to_datetime(antes["dt"]) >= pd.Timestamp(d) - pd.Timedelta(days=1)) & (pd.to_datetime(antes["dt"]) <= pd.Timestamp(d) + pd.Timedelta(days=1))] if antes is not None and len(antes) else pd.DataFrame()
         if len(dv):
             cls.append("PIX EM DUPLICIDADE · DEVOLVIDO"); evid.append(f"devolvido em {dv['Data'].iloc[0]:%d/%m} ao mesmo pagador")
+        elif len(ant):
+            r = ant.iloc[0]
+            cls.append("VENDA ANTES DO PERÍODO"); evid.append(f"PIX de R$ {x['Valor']:.2f} na máquina em {pd.Timestamp(r['dt']):%d/%m %H:%M} (dia de movimento {pd.Timestamp(r['Data']):%d/%m}, antes do início do painel); caiu na conta já dentro do período")
         elif len(c):
             j = c.index[0]; usados_sp.add(j); r = sp.loc[j]
             cls.append("PIX PAGO · MÁQUINA NÃO REGISTROU"); evid.append(f"baixa PIX no PDV: cupom {r['Cupom']} de {r['Data']:%d/%m} {str(r['Hora'])[:5]} ({r['Caixa']}), sem aprovação na máquina"); cupons.append(str(r["Cupom"]))
@@ -207,14 +211,16 @@ def main() -> None:
     v = v[v["Filial"].isin(ex["Loja"].unique())]  # só lojas presentes no extrato
     if portais and de is None and ate is None:
         v = v[v["Fonte"] == "Maquininha"]        # período = o que o portal cobre
+    antes = pd.DataFrame()
     if de:
+        antes = v[(v["Fonte"] == "Maquininha") & (v["Data"] < de)].copy()   # vendas da máquina antes do período (madrugada do dia anterior cai no banco já dentro dele)
         v = v[(v["Data"] >= de) | (v["Fonte"].eq("PDV") & (v["Dia movimento"] >= de))]
     if ate:
         v = v[(v["Data"] <= ate) | (v["Fonte"].eq("PDV") & (v["Dia movimento"] <= ate))]
     d0, d1 = v["Data"].min(), v["Data"].max()
     ex = ex[(ex["Data"] >= d0) & (ex["Loja"].isin(v["Filial"].unique()))]   # só o período e as lojas com venda
     res, sobra = casa_banco(v, ex, ext_ate)
-    sobra = classifica_sobra(sobra, v, ler_devolucoes(ex_arq, v["Filial"].unique()), res)
+    sobra = classifica_sobra(sobra, v, ler_devolucoes(ex_arq, v["Filial"].unique()), res, antes)
 
     resumo = []
     for (f, d), g in res.groupby(["Filial", "Data"]):
