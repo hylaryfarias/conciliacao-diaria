@@ -4,9 +4,10 @@
 // Marketplace) e serve o painel em painel/index.html. Sem dependências:
 // fala com o Redis pela API REST.
 //
-// Variáveis de ambiente (Vercel → Settings → Environment Variables):
-//   KV_REST_API_URL / KV_REST_API_TOKEN        (criadas pelo Upstash Redis)
-//   ou UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN
+// Variáveis de ambiente (criadas ao conectar o banco ao projeto na Vercel):
+//   REDIS_URL                                   "Redis" do Marketplace (Redis Cloud, plano Free)
+//   ou KV_REST_API_URL / KV_REST_API_TOKEN     Upstash pelo Marketplace
+//   ou UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN   Upstash direto
 //   PAINEL_SENHA                                (opcional) senha que o painel pede
 //
 // Rotas:
@@ -21,14 +22,32 @@
 const COLS = ["ajustes", "fechamentos", "vistos"];
 const KEY = c => `painel:${c}`;
 
+// ---- acesso ao Redis: REDIS_URL (Redis Cloud, "Redis" no Marketplace da Vercel) ou REST (Upstash) ----
+
 function redisCfg(){
+  if(process.env.REDIS_URL) return { tipo: "url", url: process.env.REDIS_URL };
   const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  if(!url || !token) return null;
-  return { url: url.replace(/\/$/, ""), token };
+  if(url && token) return { tipo: "rest", url: url.replace(/\/$/, ""), token };
+  return null;
+}
+
+async function clienteUrl(cfg){
+  // reaproveita a conexão enquanto a função fica "quente" na Vercel
+  if(globalThis.__redisCliente && globalThis.__redisCliente.isOpen) return globalThis.__redisCliente;
+  const { createClient } = require("redis");
+  const c = createClient({ url: cfg.url, socket: { connectTimeout: 8000, reconnectStrategy: false } });
+  c.on("error", () => {});
+  await c.connect();
+  globalThis.__redisCliente = c;
+  return c;
 }
 
 async function redis(cfg, cmd){
+  if(cfg.tipo === "url"){
+    const c = await clienteUrl(cfg);
+    return c.sendCommand(cmd.map(String));
+  }
   const r = await fetch(cfg.url, {
     method: "POST",
     headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
@@ -40,6 +59,15 @@ async function redis(cfg, cmd){
 }
 
 async function redisPipeline(cfg, cmds){
+  if(cfg.tipo === "url"){
+    const c = await clienteUrl(cfg);
+    for(let i = 0; i < cmds.length; i += 100){
+      const m = c.multi();
+      for(const cmd of cmds.slice(i, i + 100)) m.addCommand(cmd.map(String));
+      await m.exec();
+    }
+    return;
+  }
   for(let i = 0; i < cmds.length; i += 100){
     const lote = cmds.slice(i, i + 100);
     const r = await fetch(`${cfg.url}/pipeline`, {
@@ -101,7 +129,7 @@ module.exports = async (req, res) => {
   const cfg = redisCfg();
   if(!cfg){
     res.statusCode = 503;
-    return res.end(JSON.stringify({ erro: "Falta o banco: crie um Upstash Redis em Storage e conecte ao projeto (variáveis KV_REST_API_URL e KV_REST_API_TOKEN)." }));
+    return res.end(JSON.stringify({ erro: "Falta o banco: em Storage, crie um Redis (plano Free) e conecte ao projeto; depois Redeploy." }));
   }
   // Senha é opcional: só é exigida se PAINEL_SENHA estiver definida na Vercel.
   const senha = process.env.PAINEL_SENHA;

@@ -143,11 +143,13 @@ https://claude.ai/artifact/8hmLnVrM6CiE3omwzP7oms — republicar a cada rodada.
 
 O mesmo `painel/index.html` roda fora do Claude em https://conciliacao-diaria.vercel.app.
 `vercel.json` publica só a pasta `painel/` (as planilhas de `entrada/` e `saida/` não vão
-pro site). Os ajustes, fechamentos e vistos ficam num Redis (Upstash) e passam por
-`api/dados.js`. Configuração, uma vez só, no projeto da Vercel:
+pro site). Os ajustes, fechamentos e vistos ficam num Redis e passam por `api/dados.js`.
+Configuração, uma vez só, no projeto da Vercel:
 
-1. Storage → Create Database → Upstash Redis (plano grátis) → Connect ao projeto. Isso
-   cria as variáveis `KV_REST_API_URL` e `KV_REST_API_TOKEN`.
+1. Storage → Create Database → **Redis** (Official Redis for Vercel) → plano **Free** (30 MB)
+   → Connect ao projeto `conciliacao-diaria`. Isso cria a variável `REDIS_URL`.
+   (Também funciona com Upstash: `KV_REST_API_URL`/`KV_REST_API_TOKEN` pelo Marketplace
+   ou `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` direto do site da Upstash.)
 2. Deployments → Redeploy.
 
 Sem senha por padrão: quem tiver o link vê e grava. Se um dia quiser proteger, basta

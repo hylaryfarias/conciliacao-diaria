@@ -1,0 +1,8 @@
+{
+  "name": "conciliacao-diaria",
+  "private": true,
+  "description": "Painel de conciliação · API na Vercel (api/dados.js)",
+  "dependencies": {
+    "redis": "^4.7.0"
+  }
+}
