@@ -20,7 +20,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
 from concilia_pix import HORA_VIRADA, carrega_lojas  # noqa: E402
-from pdv_pix import ler_pdv  # noqa: E402
+from pdv_pix import dia_movimento, ler_pdv  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
 DOW = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
@@ -288,10 +288,12 @@ def main() -> None:
                     item["detalhe"] = f"o cupom vizinho {str(q['Cupom igual']).replace('.0', '')} é idêntico (mesmo caixa, valor e minuto) e casou com a venda da máquina: ou a comanda foi fechada duas vezes, ou este pagamento não entrou"
                 if str(q["Status"]).startswith("PROVÁVEL FORMA ERRADA: VOUCHER"):
                     item.update(para="voucher", aut=str(q["Autorização"]), detalhe=f"{q.get('Modalidade maq')} {q.get('Bandeira maq')} · terminal {q['Terminal']} · aut. {q['Autorização']}")
-                mm = re.search(r"FORMA ERRADA: (Crédito|Débito) .* em (\d\d)/(\d\d)", str(q["Status"]))
+                mm = re.search(r"FORMA ERRADA: (Crédito|Débito) .* em (\d\d)/(\d\d) (\d\d):", str(q["Status"]))
                 if mm:
+                    # data_maq é o DIA DE MOVIMENTO da venda na máquina: a hora da status é calendário; antes das 10h é o dia anterior
+                    cal = pd.Timestamp(f"{q['Data'].year}-{mm.group(3)}-{mm.group(2)} {mm.group(4)}:00")
                     item.update(aut=str(q["Autorização"]), para="credito" if mm.group(1) == "Crédito" else "debito",
-                                data_maq=f"{q['Data'].year}-{mm.group(3)}-{mm.group(2)}")
+                                data_maq=dia_movimento(cal).isoformat())
                 pend.append(item)
         if len(e1m):
             for _, q in e1m[e1m["Filial"] == filial].iterrows():
