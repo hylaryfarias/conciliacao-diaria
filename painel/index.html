@@ -97,11 +97,11 @@ main .inner{padding-block:22px 48px;display:grid;gap:22px}
 .ponta .sub{font-size:12px;color:var(--ink-soft)}
 .ponta[data-tone="ok"]{border-color:var(--ok)} .ponta[data-tone="erro"]{border-color:var(--erro)} .ponta[data-tone="pendente"]{border-color:var(--pendente)}
 .tablewrap{overflow-x:auto;padding:6px 16px 14px}
-table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:620px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:760px}
 th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-muted);font-weight:600;text-align:right;padding:8px 8px;border-bottom:1px solid var(--rule-strong);white-space:nowrap}
 th:first-child,td:first-child{text-align:left}
 td{padding:7px 8px;border-bottom:1px solid var(--rule);text-align:right;white-space:nowrap}
-tr.fim td{color:var(--ink-muted)} td.dia{font-weight:600} td.dia small{color:var(--ink-muted);font-weight:400;margin-left:4px}
+tr.fim td{color:var(--ink-muted)} td.trf{color:var(--gestao);font-size:12.5px} td.dia{font-weight:600} td.dia small{color:var(--ink-muted);font-weight:400;margin-left:4px}
 td .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
 .dot[data-s="ok"]{background:var(--ok)} .dot[data-s="erro"]{background:var(--erro)} .dot[data-s="pendente"]{background:var(--pendente)} .dot[data-s="aguarda"]{background:var(--ink-muted);opacity:.5}
 tfoot td{font-weight:700;border-top:2px solid var(--rule-strong);border-bottom:0}
@@ -274,8 +274,9 @@ function tabs(){
 
 function kpis(){
   const todas = D.lojas, conc = todas.filter(l => M(l).tem_maq);
-  const pdvTot = sum(todas, l => sum(M(l).dias, d => d.pdv));
+  const pdvTot = sum(todas, l => sum(M(l).dias, rel));
   const pdvConc = sum(conc, l => sum(M(l).dias, d => d.pdv));
+  const transf = sum(todas, l => sum(M(l).dias, trf));
   const maq = sum(conc, l => sum(M(l).dias, d => d.maq));
   const st = todas.map(statusLoja);
   const semPar = sum(conc, l => sum(M(l).dias, d => abertoEf(d)));
@@ -284,7 +285,7 @@ function kpis(){
   const parcialTot = sum(conc, l => sum(M(l).dias, d => d.fechado ? 0 : parcial(d)));
   const k = [
     ["Lojas fechadas", `${st.filter(x=>x.s==="ok").length} de ${todas.length}`, `${st.filter(x=>x.s==="aguarda").length} aguardam relatório da maquininha`, st.filter(x=>x.s==="ok").length===todas.length?"ok":""],
-    [`${TABS[tab]} no PDV`, brl(pdvTot), `${brl(pdvConc)} nas lojas já cruzadas`, ""],
+    [`${TABS[tab]} no PDV`, brl(pdvTot), transf ? `${sinal(transf)} em transferências · conciliado ${brl(Math.round((pdvTot + transf)*100)/100)}` : `${brl(pdvConc)} nas lojas já cruzadas`, ""],
     [`${TABS[tab]} na maquininha`, brl(maq), `${conc.length} loja${conc.length===1?"":"s"} com Histórico de vendas`, ""],
   ];
   if(tab === "pix"){
@@ -305,7 +306,7 @@ function kpis(){
 function lojas(){
   const ul = document.getElementById("lojas");
   const ordem = {erro:0, pendente:1, ok:2, aguarda:3};
-  const lista = D.lojas.map(l => ({l, st:statusLoja(l), tot:sum(M(l).dias, d=>d.pdv)})).sort((a,b) => a.l.nome.localeCompare(b.l.nome));   // ordem fixa, igual nas três abas
+  const lista = D.lojas.map(l => ({l, st:statusLoja(l), tot:sum(M(l).dias, rel)})).sort((a,b) => a.l.nome.localeCompare(b.l.nome));   // ordem fixa, igual nas três abas
   document.getElementById("lojas-n").textContent = D.lojas.length;
   ul.innerHTML = lista.map(({l,st,tot}) => `<li><button class="loja" data-nome="${esc(l.nome)}" aria-pressed="${l.nome===sel}" style="--m:var(--${({ok:"ok",erro:"erro",pendente:"pendente"})[st.s] || "ink-muted"})">
     <span class="bar"></span><span class="nm">${esc(l.nome)}<small>${brl(tot)} em ${TABS[tab]} no PDV${l.ec?` · EC ${l.ec}`:""}</small></span><span class="chip" data-s="${st.s}">${st.t}</span></button></li>`).join("");
@@ -339,6 +340,9 @@ const EXPL = {
   "BANCO SEM VENDA": "Entrou um PIX na conta sem venda correspondente. Pode ser recebimento de outra natureza classificado como venda.",
   "CONCILIADO · VIRADA DE DIA": "O cliente pagou na máquina num dia de movimento e o caixa só fechou o cupom no PDV no dia de movimento seguinte (depois das 10h). Os dois lados casam; só o dia é diferente. Não é divergência: o Δ do dia da máquina fica negativo e o do dia seguinte, positivo, no mesmo valor.",
 };
+const rel = d => d.pdv_rel ?? d.pdv;          // PDV como está no relatório de cupons (Cloudfy)
+const trf = d => d.transf ?? 0;               // soma das transferências do dia (negativo = saiu desta forma, positivo = entrou)
+const sinal = x => (x > 0 ? "+" : "−") + brl(Math.abs(x));
 const neg = x => (x ? -x : 0);   // Δ exibido como máquina − PDV: positivo = entrou a mais, negativo = faltou
 const virada = d => Math.round((((d.virada_saiu ?? 0) - (d.virada_entrou ?? 0)))*100)/100;   // o que o Δ do dia deve à virada
 const quando = iso => iso ? new Date(iso).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
@@ -362,7 +366,7 @@ function detalhe(){
       ? `<div class="ponta" data-tone="${!m.tem_banco?"pendente":aberto>0.004?"erro":ag>0.004?"pendente":"ok"}"><div class="lbl">Banco</div><div class="val">${m.tem_banco?brl(banco):"—"}</div><div class="sub">${m.tem_banco?(ag>0.004?`${brl(ag)} aguarda extrato`:"tudo creditado"):"sem extrato"}</div></div>`
       : `<div class="ponta"><div class="lbl">Líquido previsto</div><div class="val">${brl(sum(m.dias,d=>d.liquido))}</div><div class="sub">MDR ${brl(sum(m.dias,d=>d.mdr))} · banco na etapa 2</div></div>`;
     html += `<div class="pontas">
-      <div class="ponta"><div class="lbl">PDV</div><div class="val">${brl(pdv)}</div><div class="sub">${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)} lançamentos</div></div>
+      <div class="ponta"><div class="lbl">PDV relatório</div><div class="val">${brl(sum(m.dias,rel))}</div><div class="sub">${sum(m.dias,trf) ? `${sinal(sum(m.dias,trf))} transf. · conciliado ${brl(pdv)}` : `${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)} lançamentos`}</div></div>
       <div class="ponta" data-tone="${Math.abs(pdv-maq)>0.004?"erro":"ok"}"><div class="lbl">Maquininha</div><div class="val">${brl(maq)}</div><div class="sub">Δ máquina − PDV ${brl(Math.round((maq-pdv)*100)/100)}</div></div>
       ${bancoPonta}
       <div class="ponta" data-tone="${aberto>TOL?"erro":"ok"}"><div class="lbl">Em aberto</div><div class="val">${brl(aberto)}</div><div class="sub">${nCasos} caso${nCasos===1?"":"s"}${nParcial?` · ${nParcial} de comanda parcial`:""}${nBanco?` · ${nBanco} PIX a mais no banco`:""}${nFech?` · ${nFech} dia${nFech===1?"":"s"} fechado${nFech===1?"":"s"} no caixa`:""}</div></div>
@@ -410,14 +414,14 @@ function tabela(m){
     const t = tone(d), fds = d.dow==="sáb"||d.dow==="dom"||d.feriado;
     const fim = (pix ? `<td>${f(d.banco)}</td>` : `<td>${f(d.mdr)}</td><td>${f(d.liquido)}</td>`) + `<td class="fech">${fech(d,i)}</td>`;
     return `<tr class="${fds?"fim":""}" data-i="${i}" data-open="false"><td class="dia"><span class="dot" data-s="${t}"></span><button type="button" data-i="${i}" aria-expanded="false">${dBR(d.data)}</button><small>${d.dow}${d.feriado?" · feriado":""}</small></td>
-      <td>${d.sem_pdv?"—":d.pdv_qtd}</td><td>${d.sem_pdv?`<span style="color:var(--ink-muted)">sem relatório</span>`:brl(d.pdv)}</td><td>${f(d.maq)}</td>
+      <td>${d.sem_pdv?"—":d.pdv_qtd}</td><td>${d.sem_pdv?`<span style="color:var(--ink-muted)">sem relatório</span>`:brl(rel(d))}</td><td class="trf">${trf(d)?sinal(trf(d)):"—"}</td><td>${d.sem_pdv?"—":brl(d.pdv)}</td><td>${f(d.maq)}</td>
       <td class="${Math.abs(d.delta??0)>0.004 && Math.abs((d.delta??0)+virada(d))>0.004?"neg":""}">${d.delta===undefined?"—":brl(neg(d.delta))}${virada(d)!==0?`<small class="vir" title="${esc(`${d.virada_saiu?brl(d.virada_saiu)+" pagos na máquina neste dia e fechados no PDV em outro dia":""}${d.virada_saiu&&d.virada_entrou?" · ":""}${d.virada_entrou?brl(d.virada_entrou)+" fechados no PDV neste dia e pagos na máquina em outro dia":""}`)}">virada de dia ${Math.abs((d.delta??0)+virada(d))<=0.004?"✓":brl(neg(Math.round(((d.delta??0)+virada(d))*100)/100))+" além"}</small>`:""}</td>${fim}</tr>`;
   }).join("");
   const T = g => brl(sum(m.dias,g));
   const fimH = (pix ? `<th>Banco R$</th>` : `<th>MDR R$</th><th>Líquido R$</th>`) + `<th>Fechamento</th>`;
   const fimT = (pix ? `<td>${m.tem_banco?T(d=>d.banco):"—"}</td>` : `<td>${m.tem_maq?T(d=>d.mdr):"—"}</td><td>${m.tem_maq?T(d=>d.liquido):"—"}</td>`) + `<td></td>`;
-  return `<div class="tablewrap"><table id="tab-dias"><thead><tr><th>Dia</th><th>PDV qtd</th><th>PDV R$</th><th>Maq ${pix?"":"bruto "}R$</th><th>Δ Maq−PDV</th>${fimH}</tr></thead>
-    <tbody>${rows}</tbody><tfoot><tr><td>Total</td><td>${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)}</td><td>${T(d=>d.pdv)}</td><td>${m.tem_maq?T(d=>d.maq):"—"}</td><td class="${Math.abs(sum(m.dias,d=>d.delta))>0.004?"neg":""}">${m.tem_maq?brl(neg(sum(m.dias,d=>d.delta))):"—"}</td>${fimT}</tr></tfoot></table></div>`;
+  return `<div class="tablewrap"><table id="tab-dias"><thead><tr><th>Dia</th><th>PDV qtd</th><th>PDV relatório</th><th>Transf.</th><th>PDV conciliado</th><th>Maq ${pix?"":"bruto "}R$</th><th>Δ Maq−PDV</th>${fimH}</tr></thead>
+    <tbody>${rows}</tbody><tfoot><tr><td>Total</td><td>${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)}</td><td>${T(rel)}</td><td class="trf">${sum(m.dias,trf)?sinal(sum(m.dias,trf)):"—"}</td><td>${T(d=>d.pdv)}</td><td>${m.tem_maq?T(d=>d.maq):"—"}</td><td class="${Math.abs(sum(m.dias,d=>d.delta))>0.004?"neg":""}">${m.tem_maq?brl(neg(sum(m.dias,d=>d.delta))):"—"}</td>${fimT}</tr></tfoot></table></div>`;
 }
 const autCurta = a => !a ? "—" : String(a).length > 14 ? "…" + String(a).slice(-10) : String(a);   // autorização de PIX tem 34 caracteres; a ponta final identifica
 function lancamentos(d){
@@ -479,7 +483,7 @@ function ligaDias(){
       if(isNaN(caixa)){ row.querySelector(".erro").textContent = "Informe o valor conferido no caixa."; return; }
       if(!just){ row.querySelector(".erro").textContent = "Escreva a justificativa."; return; }
       const f = {loja:l.nome, mod:tab, data:d.data, aberto:Math.round(aberto(d)*100)/100, caixa:Math.round(caixa*100)/100,
-                 pdv:d.pdv, maq:d.maq, justificativa:just, criado_em:new Date().toISOString(), por:meuId || null};
+                 pdv:d.pdv, pdv_rel:rel(d), transf:trf(d), maq:d.maq, justificativa:just, criado_em:new Date().toISOString(), por:meuId || null};
       salvaFechamento(f, ev.currentTarget);
     });
     row.querySelector('[data-f="just"]').focus();
@@ -513,6 +517,8 @@ function aplicaAjustes(){
       // origem: tira o lançamento das somas e marca a linha
       const li = (dia.lanc||[]).find(r => r.c === a.cupom && !String(r.s).startsWith("CONCILIADO") && !r.aj);
       if(li){ li.aj = true; li.s = `RECLASSIFICADO → ${NOMES[a.para]}`; }
+      if(dia.pdv_rel === undefined){ dia.pdv_rel = dia.pdv; dia.transf = 0; }   // PDV do relatório fica intocado; a transferência vai para a coluna própria
+      dia.transf = r(dia.transf - v);
       dia.pdv_qtd -= 1; dia.pdv = r(dia.pdv - v);
       if(dia.pdv_sem_par !== undefined) dia.pdv_sem_par = r(Math.max(0, dia.pdv_sem_par - v));
       if(dia.delta !== undefined) dia.delta = r(dia.delta - v);
@@ -522,6 +528,8 @@ function aplicaAjustes(){
     // destino: entra nas somas do dia da máquina (ou do PDV, se não houver par) e casa com a linha órfã
     if(!para) continue;
     const dd = para.dias.find(d => d.data === (a.data_maq || a.data)) || para.dias.find(d => d.data === a.data); if(!dd) continue;
+    if(dd.pdv_rel === undefined){ dd.pdv_rel = dd.pdv; dd.transf = 0; }
+    dd.transf = r(dd.transf + v);
     dd.pdv_qtd += 1; dd.pdv = r(dd.pdv + v);
     if(dd.delta !== undefined) dd.delta = r(dd.delta + v);
     const lm = a.aut ? (dd.lanc||[]).find(x => x.a === a.aut && x.s === "MAQUININHA SEM PAR NO PDV") : null;
