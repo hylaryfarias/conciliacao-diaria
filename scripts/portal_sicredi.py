@@ -61,8 +61,12 @@ def ler_portais(arquivos, lojas: dict) -> dict:
 
 
 def pix_do_portal(df: pd.DataFrame) -> pd.DataFrame:
-    """PIX vem como Modalidade 'Via QRCODE' (Produto/Bandeira = PIX), status 'Autorizada'."""
-    return df[df["Modalidade"].str.upper().str.contains("QRCODE|PIX")].copy()
+    """PIX no Histórico de vendas: Bandeira/Produto = PIX. A modalidade pode ser 'Via QRCODE' ou 'Via Aproximação'
+    (PIX por aproximação no celular); as duas são PIX e caem na conta do mesmo jeito."""
+    band = df["Bandeira"].astype(str).str.upper().str.strip() if "Bandeira" in df.columns else pd.Series("", index=df.index)
+    prod = df["Produto"].astype(str).str.upper().str.strip() if "Produto" in df.columns else pd.Series("", index=df.index)
+    mod = df["Modalidade"].astype(str).str.upper()
+    return df[(band == "PIX") | (prod == "PIX") | mod.str.contains("QRCODE|PIX")].copy()
 
 
 def ler_tef(caminho: str) -> pd.DataFrame:
