@@ -661,6 +661,23 @@ async function ligaApi(){
   setInterval(sincroniza, 5000);
   document.addEventListener("visibilitychange", () => { if(!document.hidden) sincroniza(); });
   window.addEventListener("focus", sincroniza);
+  // versão nova do painel publicada (push no repositório): recarrega sozinho, como dentro do Claude.
+  // Se houver formulário aberto ou texto sendo digitado, só avisa.
+  let marca = null;
+  const checaVersao = async () => {
+    if(document.hidden) return;
+    try{
+      const r = await fetch(location.pathname, {method:"HEAD", cache:"no-store"});
+      const m = r.headers.get("etag") || r.headers.get("last-modified");
+      if(!m) return;
+      if(marca === null){ marca = m; return; }
+      if(m === marca) return;
+      const editando = document.querySelector(".form-aj:not([hidden])") || /TEXTAREA|INPUT/.test(document.activeElement?.tagName || "");
+      if(editando) avisoTopo("Há uma versão nova do painel. Quando terminar, recarregue a página.");
+      else location.reload();
+    }catch(e){}
+  };
+  checaVersao(); setInterval(checaVersao, 30000);
 }
 
 function avisoTopo(msg){
