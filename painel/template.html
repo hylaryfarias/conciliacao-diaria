@@ -334,7 +334,6 @@ const EXPL = {
   "PIX SEM VENDA REGISTRADA": "Entrou no banco um PIX a mais do que as vendas de mesmo valor registradas na máquina e no PDV. O extrato não traz a hora e a máquina não traz o pagador, então o nome que aparece aqui é só o que sobrou na ordem do cruzamento, não é certeza de quem pagou sem registro. Para saber, abrir os comprovantes de PIX desse valor no app da Sicredi: o que tiver hora sem venda na máquina é o cliente da sobra. Não é devolução automática: pode ser venda sem registro ou cliente que pagou duas vezes (cartão aprovado e PIX).",
   "PIX PAGO · MÁQUINA NÃO REGISTROU": "A máquina recusou ou cancelou a tentativa, mas o PIX do cliente entrou na conta e o caixa baixou a venda como PIX. A venda está paga; só o portal não a mostra. O cupom fica conciliado contra o banco.",
   "CONCILIADO COM O BANCO": "Baixa PIX sem par na máquina, mas o PIX de mesmo valor entrou na conta. A máquina recusou ou cancelou a tentativa e o pagamento foi concluído mesmo assim.",
-  "VENDA ANTES DO PERÍODO": "PIX de uma venda da madrugada do dia anterior ao início do painel (dia de movimento anterior), que caiu na conta já dentro do período. É venda normal, só pertence ao fechamento do dia anterior. Nada a fazer.",
   "OUTRA NATUREZA": "Entrou um PIX na conta classificado como venda, mas sem venda de mesmo valor na loja. Provável recebimento de outra natureza, como B2B ou transferência. Reclassificar no painel de extratos.",
   "BANCO SEM VENDA": "Entrou um PIX na conta sem venda correspondente. Pode ser recebimento de outra natureza classificado como venda.",
   "CONCILIADO · VIRADA DE DIA": "O cliente pagou na máquina num dia de movimento e o caixa só fechou o cupom no PDV no dia de movimento seguinte (depois das 10h). Os dois lados casam; só o dia é diferente. Não é divergência: o Δ do dia da máquina fica negativo e o do dia seguinte, positivo, no mesmo valor.",
@@ -351,7 +350,7 @@ function detalhe(){
   const pdv = sum(m.dias,d=>d.pdv), maq = sum(m.dias,d=>d.maq), banco = sum(m.dias,d=>d.banco), ag = sum(m.dias,d=>d.aguarda);
   const aberto = sum(m.dias, d => abertoEf(d)), nFech = m.dias.filter(d => d.fechado).length;
   const nCasos = m.pendencias.filter(p=>p.status!=="AGUARDA EXTRATO" && !p.ajuste && !p.fechado && !p.comanda && !p.banco && p.valor > TOL && !/SEM PAR/.test(p.status)).length;
-  const nBanco = m.pendencias.filter(p=>p.banco && !/DEVOLVIDO|MÁQUINA NÃO REGISTROU|ANTES DO PERÍODO/.test(p.status)).length;
+  const nBanco = m.pendencias.filter(p=>p.banco && !/DEVOLVIDO|MÁQUINA NÃO REGISTROU/.test(p.status)).length;
   const nParcial = m.pendencias.filter(p=>/SEM PAR/.test(p.status) && !p.comanda && !p.fechado).length;
   let html = `<div class="det-head"><h3>${esc(l.nome)} · ${TABS[tab]}</h3><span class="meta">${l.ec?`EC ${l.ec} · `:""}${dBR(D.de)} a ${dBR(D.ate)} · <span class="chip" data-s="${st.s}">${st.t}</span></span></div>`;
   if(!m.tem_maq){
@@ -373,7 +372,7 @@ function detalhe(){
     const podeAjustar = !!dbRef && podeEscrever !== false;
     html += `<h2>Pendências · ${m.pendencias.length}</h2><ul class="pend" id="pend">` + m.pendencias.map((p,i) => {
       const key = Object.keys(EXPL).find(k => p.status.startsWith(k)) || "";
-      const s = (p.ajuste || p.fechado) ? "ajuste" : (p.comanda || p.valor <= TOL || /DEVOLVIDO|MÁQUINA NÃO REGISTROU|ANTES DO PERÍODO/.test(p.status)) ? "ok" : (/AGUARDA/.test(p.status) || /SEM PAR/.test(p.status) || p.banco) ? "pendente" : "erro";
+      const s = (p.ajuste || p.fechado) ? "ajuste" : (p.comanda || p.valor <= TOL || /DEVOLVIDO|MÁQUINA NÃO REGISTROU/.test(p.status)) ? "ok" : (/AGUARDA/.test(p.status) || /SEM PAR/.test(p.status) || p.banco) ? "pendente" : "erro";
       let acoes = "";
       if(p.ajuste){
         const a = p.ajuste, dt = a.criado_em ? new Date(a.criado_em).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
