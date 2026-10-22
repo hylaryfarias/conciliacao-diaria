@@ -110,8 +110,9 @@ def main() -> None:
         for p in pend:
             q = ferr.get((filial, m, d, str(p.get("cupom", ""))))
             if q is not None and p["status"].startswith("SEM PAR") and p["data"] == d.isoformat():
-                dm = pd.to_datetime(q["DataMaq"]).date()
-                p["status"] = f"PROVÁVEL FORMA ERRADA: {q['FormaMaq']}{'' if q['BandeiraMaq'] == q['FormaMaq'] else ' ' + str(q['BandeiraMaq'])} na máquina em {dm:%d/%m} {q['HoraMaq']}"
+                dcal = pd.to_datetime(q["DataMaq"]).date()
+                dm = (pd.Timestamp(f"{dcal} {str(q['HoraMaq'])[:5]}") - pd.Timedelta(hours=HORA_VIRADA)).date()   # dia de movimento da venda na máquina
+                p["status"] = f"PROVÁVEL FORMA ERRADA: {q['FormaMaq']}{'' if q['BandeiraMaq'] == q['FormaMaq'] else ' ' + str(q['BandeiraMaq'])} na máquina em {dcal:%d/%m} {q['HoraMaq']}"
                 p["detalhe"] = f"terminal {q['TerminalMaq']} · aut. {q['AutMaq']}"
                 p["aut"] = str(q["AutMaq"]); p["para"] = MODK[q["FormaMaq"]]; p["data_maq"] = dm.isoformat()
                 for r in row.get("lanc", []):
