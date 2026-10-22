@@ -20,7 +20,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
 from concilia_pix import HORA_VIRADA, carrega_lojas  # noqa: E402
-from pdv_pix import dia_movimento, ler_pdv  # noqa: E402
+from pdv_pix import ler_pdv  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
 DOW = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
@@ -293,7 +293,7 @@ def main() -> None:
                     # data_maq é o DIA DE MOVIMENTO da venda na máquina: a hora da status é calendário; antes das 10h é o dia anterior
                     cal = pd.Timestamp(f"{q['Data'].year}-{mm.group(3)}-{mm.group(2)} {mm.group(4)}:00")
                     item.update(aut=str(q["Autorização"]), para="credito" if mm.group(1) == "Crédito" else "debito",
-                                data_maq=dia_movimento(cal).isoformat())
+                                data_maq=(cal - pd.Timedelta(hours=HORA_VIRADA)).date().isoformat())
                 pend.append(item)
         if len(e1m):
             for _, q in e1m[e1m["Filial"] == filial].iterrows():
