@@ -590,7 +590,7 @@ async function ligaBanco(){
   dbRef.collection("vistos").onSnapshot(snap => {
     VI = {};
     snap.docs.forEach(d => { if(d.exists) VI[d.id] = d.data(); });
-    detalhe(); ligaDias(); ligaAjustes();
+    detalhe(); ligaDias(); ligaAjustes(); stamp();
   }, err => { console.warn("vistos:", err); });
 }
 
@@ -753,10 +753,11 @@ function ligaCliques(){
   });
 }
 
-function render(){ tabs(); kpis(); lojas(); detalhe(); ligaDias(); ligaAjustes(); }
+function render(){ tabs(); kpis(); lojas(); detalhe(); ligaDias(); ligaAjustes(); stamp(); }
 
 
-function stamp(){ document.getElementById("stamp").innerHTML = `<span>Período <b>${dBR(DE)} a ${dBR(ATE)}/${ATE.slice(0,4)}</b>${(ATE < D0.ate || DE > D0.de) ? ` <small>(relatório: ${dBR(D0.de)} a ${dBR(D0.ate)})</small>` : ""}</span><span>PDV lido até <b>${D.pdv_ate?dBR(D.pdv_ate):"—"}</b></span><span>Extrato lido até <b>${D.extrato_ate?dBR(D.extrato_ate):"—"}</b></span><span>Atualizado em ${D.gerado_em}</span>`; }
+function stamp(){ document.getElementById("stamp").innerHTML = `<span>Período <b>${dBR(DE)} a ${dBR(ATE)}/${ATE.slice(0,4)}</b>${(ATE < D0.ate || DE > D0.de) ? ` <small>(relatório: ${dBR(D0.de)} a ${dBR(D0.ate)})</small>` : ""}</span><span>PDV lido até <b>${D.pdv_ate?dBR(D.pdv_ate):"—"}</b></span><span>Extrato lido até <b>${D.extrato_ate?dBR(D.extrato_ate):"—"}</b></span><span>Atualizado em ${D.gerado_em}</span>${ultimoRegistro() ? `<span>Último registro gravado em ${ultimoRegistro()}</span>` : ""}`; }
+function ultimoRegistro(){ let m = ""; for(const col of [AJ, FE, VI]) for(const d of Object.values(col || {})) if(d && d.criado_em > m) m = d.criado_em; return m ? quando(m) : ""; }
 stamp();
 document.getElementById("rodape").textContent = `Gerado em ${D.gerado_em} · scripts/gera_painel.py`;
 try{ sel = localStorage.getItem("loja"); const t = localStorage.getItem("tab"); if(TABS[t]) tab = t; }catch(e){}
