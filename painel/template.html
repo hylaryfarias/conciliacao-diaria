@@ -124,7 +124,9 @@ table.lanc-t tr:last-child td{border-bottom:0}
 table.lanc-t td.st{font-size:11px;font-weight:600;white-space:nowrap} td.st[data-s="ok"]{color:var(--ok)} td.st[data-s="erro"]{color:var(--erro)} td.st[data-s="pdv"]{color:var(--ink-muted)} td.st[data-s="pendente"]{color:var(--pendente)}
 table.lanc-t td.mono{font-size:11.5px;color:var(--ink-soft)} table.lanc-t td.pg{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} table.lanc-t td{white-space:nowrap} table.lanc-t td.st{white-space:normal;min-width:110px}
 .lanc-vazio{padding:10px 12px;font-size:13px;color:var(--ink-muted)}
-td.neg{color:var(--erro)}
+td.neg{color:var(--erro)} td.pos{color:var(--ok)}
+table.fech-t td.just,table.fech-t th.just{white-space:normal;text-align:left;min-width:280px;max-width:520px;font-size:12.5px;color:var(--ink-soft)}
+table.fech-t{min-width:0}
 .vazio{padding:18px 16px 22px;color:var(--ink-soft);font-size:14px;max-width:62ch}
 .vazio b{color:var(--ink)}
 
@@ -155,7 +157,7 @@ td small.vir{display:block;font-size:10.5px;color:var(--ink-muted);font-weight:5
 .btn.mini.quieto{color:var(--ink-muted);border-color:var(--rule)} .btn.mini.quieto:hover{color:var(--ink);border-color:var(--rule-strong)}
 .fech-nota{margin:10px 12px 4px;padding:10px 12px;border-left:3px solid var(--ok);background:var(--ok-soft);border-radius:0 6px 6px 0}
 .fech-nota .acoes{display:flex;gap:8px;margin-top:8px}
-.fech-pad{padding:4px 12px 6px} .form-fech{margin-top:6px} .form-fech input{font:inherit;font-size:13.5px;padding:7px 9px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);max-width:220px}
+.fech-pad{padding:4px 12px 6px} .form-fech{margin-top:6px} .form-fech select{font:inherit;font-size:13.5px;padding:7px 9px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink)} .form-fech input{font:inherit;font-size:13.5px;padding:7px 9px;border:1px solid var(--rule-strong);border-radius:6px;background:var(--card);color:var(--ink);max-width:220px}
 td.st[data-s="ajuste"]{color:var(--gestao)}
 .pend .expl{font-size:13px;color:var(--ink-soft);margin-top:6px}
 
@@ -260,7 +262,7 @@ function tabs(){
     const nErro = st.filter(x=>x.s==="erro").length, nOk = st.filter(x=>x.s==="ok").length;
     const badge = nErro ? `<span class="n" data-s="erro">${nErro} em aberto</span>` : nOk ? `<span class="n" data-s="ok">${nOk} ok</span>` : "";
     return `<button class="tab" role="tab" id="tab-${k}" data-tab="${k}" aria-selected="${k===tab}">${v}${badge}</button>`;
-  }).join("") + `<label class="ate">de <input type="date" id="de" value="${DE}" min="${D0.de}" max="${ATE}"> até <input type="date" id="ate" value="${ATE}" min="${DE}" max="${D0.ate}">${(ATE < D0.ate || DE > D0.de) ? `<button type="button" id="ate-tudo">todo o período</button>` : ""}</label>`;
+  }).join("") + (() => { const n = fechLista().length; return `<button class="tab" role="tab" id="tab-fech" data-tab="fech" aria-selected="${tab==="fech"}">Fechamentos${n?`<span class="n">${n}</span>`:""}</button>`; })() + `<label class="ate">de <input type="date" id="de" value="${DE}" min="${D0.de}" max="${ATE}"> até <input type="date" id="ate" value="${ATE}" min="${DE}" max="${D0.ate}">${(ATE < D0.ate || DE > D0.de) ? `<button type="button" id="ate-tudo">todo o período</button>` : ""}</label>`;
   document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => { tab = b.dataset.tab; try{localStorage.setItem("tab",tab)}catch(e){} render(); }));
   const muda = (de, ate) => {
     if(!ate || ate < D0.de || ate > D0.ate) ate = D0.ate;
@@ -275,6 +277,8 @@ function tabs(){
   nota.hidden = tab === "pix";
   nota.textContent = tab === "credito"
     ? "Crédito · etapa 1: PDV × maquininha, pelo valor bruto, cupom a cupom. A ponta do banco (D+1 útil, MDR e antecipação automática) entra na etapa 2."
+    : tab === "fech"
+    ? "Fechamentos · o que já foi decidido no caixa, dia a dia. Diferença = máquina − PDV conciliado: positiva é sobra na máquina, negativa é falta no caixa. A taxa de serviço cobrada na máquina e não baixada aparece separada, e a diferença da coluna seguinte já vem sem ela."
     : "Débito · etapa 1: PDV × maquininha, pelo valor bruto, cupom a cupom. A ponta do banco (D+1 útil, descontado o MDR) entra na etapa 2.";
 }
 
@@ -352,8 +356,77 @@ const sinal = x => (x > 0 ? "+" : "−") + brl(Math.abs(x));
 const neg = x => (x ? -x : 0);   // Δ exibido como máquina − PDV: positivo = entrou a mais, negativo = faltou
 const virada = d => Math.round((((d.virada_saiu ?? 0) - (d.virada_entrou ?? 0)))*100)/100;   // o que o Δ do dia deve à virada
 const quando = iso => iso ? new Date(iso).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
+// ---- aba Fechamentos: o que já foi decidido no caixa ----
+const MOTIVOS = {bateu:"Bateu", sobra:"Sobra na máquina", falta:"Falta no caixa", taxa:"Taxa de serviço não baixada", outro:"Outro"};
+const r2 = x => Math.round((x || 0)*100)/100;
+function servicoDe(f){
+  if(f.servico !== undefined) return r2(f.servico);
+  const l = D.lojas.find(x => x.nome === f.loja), m = l && l.mod[f.mod], d = m && m.dias.find(x => x.data === f.data);
+  return r2(d ? d.servico : 0);
+}
+const difDe = f => f.delta !== undefined ? r2(f.delta) : r2((f.maq ?? 0) - (f.pdv ?? 0));   // máquina − PDV conciliado no dia do fechamento
+const difSemTaxa = f => r2(difDe(f) - servicoDe(f));
+function motivoCalc(dif, servico){ return dif < -TOL ? "falta" : dif > TOL ? "sobra" : servico > TOL ? "taxa" : "bateu"; }
+const motivoAuto = d => motivoCalc(r2((d.maq ?? 0) - (d.pdv ?? 0) - (d.servico ?? 0)), r2(d.servico ?? 0));
+const motivoDe = f => (f.motivo && MOTIVOS[f.motivo]) ? f.motivo : motivoCalc(difSemTaxa(f), servicoDe(f));   // sem motivo gravado: deduzido dos números
+const fechLista = () => Object.values(FE).filter(f => f.data >= DE && f.data <= ATE && D.lojas.some(l => l.nome === f.loja)).sort((a,b) => a.loja.localeCompare(b.loja) || a.data.localeCompare(b.data) || a.mod.localeCompare(b.mod));
+function fechTotais(lista){
+  const t = {n:lista.length, bateu:0, sobra:0, falta:0, taxa:0, liq:0};
+  for(const f of lista){ const s = difSemTaxa(f); t.taxa = r2(t.taxa + servicoDe(f)); t.liq = r2(t.liq + difDe(f)); if(s > TOL) t.sobra = r2(t.sobra + s); else if(s < -TOL) t.falta = r2(t.falta + s); else t.bateu++; }
+  return t;
+}
+const brlS = x => Math.abs(x) <= 0.004 ? "—" : sinal(x);
+const tdS = x => `<td class="${x > TOL ? "pos" : x < -TOL ? "neg" : ""}">${brlS(x)}</td>`;
+function fechKpis(){
+  const t = fechTotais(fechLista());
+  const comMaq = D.lojas.reduce((a,l) => a + Object.values(l.mod).reduce((b,m) => b + m.dias.filter(d => d.maq !== undefined).length, 0), 0);
+  const k = [
+    ["Dias fechados", `${t.n}`, `de ${comMaq} loja-dia-forma com máquina no período · ${t.bateu} bateram`, ""],
+    ["Sobra na máquina", brl(t.sobra), "sem a taxa de serviço", t.sobra > TOL ? "pendente" : "ok"],
+    ["Falta no caixa", brl(Math.abs(t.falta)), "PDV baixou e a máquina não tem", t.falta < -TOL ? "erro" : "ok"],
+    ["Taxa de serviço", brl(t.taxa), "cobrada na máquina, não baixada no PDV", ""],
+    ["Líquido", brlS(t.liq), "máquina − PDV nos dias fechados", ""],
+  ];
+  document.getElementById("kpis").innerHTML = k.map(([l,v,s,t]) => `<div class="kpi" data-tone="${t}"><div class="lbl">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join("");
+}
+function fechLojas(){
+  const ul = document.getElementById("lojas"), lista = fechLista();
+  document.getElementById("lojas-n").textContent = D.lojas.length;
+  ul.innerHTML = [...D.lojas].sort((a,b) => a.nome.localeCompare(b.nome)).map(l => {
+    const t = fechTotais(lista.filter(f => f.loja === l.nome));
+    const s = !t.n ? "aguarda" : t.falta < -TOL ? "erro" : t.sobra > TOL || t.taxa > TOL ? "aviso" : "ok";
+    const txt = !t.n ? "sem fechamento" : t.falta < -TOL ? `falta ${brl(Math.abs(t.falta))}` : t.sobra > TOL ? `sobra ${brl(t.sobra)}` : t.taxa > TOL ? `taxa ${brl(t.taxa)}` : "batem";
+    return `<li><button class="loja" data-nome="${esc(l.nome)}" aria-pressed="${l.nome===sel}" style="--m:var(--${({ok:"ok",erro:"erro",aviso:"aviso"})[s] || "ink-muted"})">
+    <span class="bar"></span><span class="nm">${esc(l.nome)}<small>${t.n} dia${t.n===1?"":"s"} fechado${t.n===1?"":"s"}${t.n?` · líquido ${brlS(t.liq)}`:""}</small></span><span class="chip" data-s="${s}">${txt}</span></button></li>`;
+  }).join("");
+  ul.querySelectorAll(".loja").forEach(b => b.addEventListener("click", () => { sel = b.dataset.nome; try{localStorage.setItem("loja",sel)}catch(e){} fechLojas(); fechDetalhe(); }));
+}
+function fechDetalhe(){
+  const el = document.getElementById("detalhe"), lista = fechLista();
+  const linha = (nome, t) => `<tr><td>${esc(nome)}</td><td>${t.n}</td><td>${t.bateu}</td>${tdS(t.sobra)}${tdS(t.falta)}<td>${t.taxa > TOL ? brl(t.taxa) : "—"}</td>${tdS(t.liq)}</tr>`;
+  const cab = `<thead><tr><th>Loja</th><th>Dias</th><th>Bateram</th><th>Sobra</th><th>Falta</th><th>Taxa serviço</th><th>Líquido</th></tr></thead>`;
+  const porLoja = [...D.lojas].sort((a,b) => a.nome.localeCompare(b.nome)).map(l => linha(l.nome, fechTotais(lista.filter(f => f.loja === l.nome)))).join("");
+  const porForma = Object.entries(TABS).map(([k,v]) => linha(v, fechTotais(lista.filter(f => f.mod === k)))).join("");
+  const tot = fechTotais(lista);
+  let html = `<div class="det-head"><h3>Fechamentos · todas as lojas</h3><span class="meta">${dBR(DE)} a ${dBR(ATE)} · ${tot.n} dia${tot.n===1?"":"s"} fechado${tot.n===1?"":"s"}</span></div>
+    <div class="tablewrap"><table class="fech-t">${cab}<tbody>${porLoja}</tbody><tfoot>${linha("Total", tot)}</tfoot></table></div>
+    <div class="tablewrap"><table class="fech-t">${cab.replace("Loja", "Forma")}<tbody>${porForma}</tbody></table></div>`;
+  const l = D.lojas.find(x => x.nome === sel);
+  if(l){
+    const minha = lista.filter(f => f.loja === l.nome), t = fechTotais(minha);
+    html += `<div class="det-head"><h3>${esc(l.nome)}</h3><span class="meta">${t.n} dia${t.n===1?"":"s"} fechado${t.n===1?"":"s"} · sobra ${brl(t.sobra)} · falta ${brl(Math.abs(t.falta))} · taxa ${brl(t.taxa)} · líquido ${brlS(t.liq)}</span></div>`;
+    html += minha.length
+      ? `<div class="tablewrap"><table class="fech-t"><thead><tr><th>Dia</th><th>Forma</th><th>PDV conc.</th><th>Máquina</th><th>Taxa serviço</th><th>Diferença</th><th>Motivo</th><th class="just">Justificativa</th><th>Registrado</th></tr></thead><tbody>` +
+        minha.sort((a,b) => a.data.localeCompare(b.data) || a.mod.localeCompare(b.mod)).map(f => { const s = difSemTaxa(f), mo = motivoDe(f); return `<tr><td>${dBR(f.data)}</td><td>${TABS[f.mod] || f.mod}</td><td>${brl(f.pdv)}</td><td>${brl(f.maq)}</td><td>${servicoDe(f) > TOL ? brl(servicoDe(f)) : "—"}</td>${tdS(s)}<td><span class="chip" data-s="${mo==="falta"?"erro":mo==="sobra"||mo==="taxa"?"aviso":mo==="bateu"?"ok":"aguarda"}">${MOTIVOS[mo]}${f.motivo ? "" : " ·"}</span></td><td class="just">${esc(f.justificativa)}</td><td>${quando(f.criado_em)}</td></tr>`; }).join("") +
+        `</tbody></table></div><p class="vazio" style="padding-top:0">Motivo com “·” foi deduzido dos números, porque o dia foi fechado antes de existir o campo. Para trocar, reabra o dia na aba da forma e feche de novo.</p>`
+      : `<p class="vazio">Nenhum dia fechado nesta loja no período.</p>`;
+  }
+  el.innerHTML = html;
+  el.querySelectorAll("[data-por]").forEach(q => nomeDe(q.dataset.por).then(n => { if(n) q.textContent = ` por ${n}`; }));
+}
 const notaFech = (f, comBotao) => `<div class="ajuste-nota fech-nota"><b>Dia fechado no caixa</b> · conferido ${brl(f.caixa)} no caixa físico contra ${brl(f.aberto)} em aberto no painel.<br>${esc(f.justificativa)}<br><small>registrado em ${quando(f.criado_em)}<span data-por="${esc(f.por||"")}"></span></small>${comBotao && dbRef && podeEscrever !== false ? `<div class="acoes"><button type="button" class="btn" data-act="reabrir" data-id="${esc(idFech(f))}">Reabrir dia</button></div>` : ""}</div>`;
 function detalhe(){
+  if(tab === "fech"){ fechDetalhe(); return; }
   const el = document.getElementById("detalhe");
   const l = D.lojas.find(x => x.nome===sel);
   if(!l){ el.innerHTML = `<h2>Detalhe da loja</h2><p class="vazio">Escolha uma loja ao lado.</p>`; return; }
@@ -456,12 +529,14 @@ function formFechar(l, d){
   return `<div class="form-aj form-fech">
     <div class="ajuste-nota"><b>${esc(l.nome)} · ${TABS[tab]} · ${dBR(d.data)}</b> · PDV ${brl(d.pdv)} · máquina ${brl(d.maq)} · em aberto no painel: ${brl(ab)}${(d.servico??0)>0.004?` (inclui ${brl(d.servico)} de serviço não baixado)`:""}</div>
     <label>Conferido no caixa físico (R$ · sobra positiva, falta negativa)<input type="number" step="0.01" data-f="caixa" value="${ab.toFixed(2)}"></label>
+    <label>Motivo<select data-f="motivo">${Object.entries(MOTIVOS).map(([k,v]) => `<option value="${k}" ${k===motivoAuto(d)?"selected":""}>${v}</option>`).join("")}</select></label>
     <label>Justificativa<textarea data-f="just">${esc(just)}</textarea></label>
     <div class="acoes"><button type="button" class="btn primario" data-act="confirmar">Fechar o dia</button><button type="button" class="btn" data-act="cancelar">Cancelar</button><span class="erro"></span></div>
   </div>`;
 }
 let abertos = new Set();
 function ligaDias(){
+  if(tab === "fech") return;
   const l = D.lojas.find(x => x.nome===sel); if(!l) return;
   const m = M(l);
   document.querySelectorAll("#tab-dias td.dia button").forEach(b => b.addEventListener("click", () => {
@@ -489,7 +564,8 @@ function ligaDias(){
       if(isNaN(caixa)){ row.querySelector(".erro").textContent = "Informe o valor conferido no caixa."; return; }
       if(!just){ row.querySelector(".erro").textContent = "Escreva a justificativa."; return; }
       const f = {loja:l.nome, mod:tab, data:d.data, aberto:Math.round(aberto(d)*100)/100, caixa:Math.round(caixa*100)/100,
-                 pdv:d.pdv, pdv_rel:rel(d), transf:trf(d), maq:d.maq, justificativa:just, criado_em:new Date().toISOString(), por:meuId || null};
+                 pdv:d.pdv, pdv_rel:rel(d), transf:trf(d), maq:d.maq, delta:Math.round(((d.maq ?? 0) - (d.pdv ?? 0))*100)/100, servico:Math.round((d.servico ?? 0)*100)/100,
+                 motivo:row.querySelector('[data-f="motivo"]').value, justificativa:just, criado_em:new Date().toISOString(), por:meuId || null};
       salvaFechamento(f, ev.currentTarget);
     });
     row.querySelector('[data-f="just"]').focus();
@@ -779,14 +855,14 @@ function ligaCliques(){
   });
 }
 
-function render(){ tabs(); kpis(); lojas(); detalhe(); ligaDias(); ligaAjustes(); stamp(); }
+function render(){ tabs(); if(tab === "fech"){ fechKpis(); fechLojas(); fechDetalhe(); stamp(); return; } kpis(); lojas(); detalhe(); ligaDias(); ligaAjustes(); stamp(); }
 
 
 function stamp(){ document.getElementById("stamp").innerHTML = `<span>Período <b>${dBR(DE)} a ${dBR(ATE)}/${ATE.slice(0,4)}</b>${(ATE < D0.ate || DE > D0.de) ? ` <small>(relatório: ${dBR(D0.de)} a ${dBR(D0.ate)})</small>` : ""}</span><span>PDV lido até <b>${D.pdv_ate?dBR(D.pdv_ate):"—"}</b></span><span>Extrato lido até <b>${D.extrato_ate?dBR(D.extrato_ate):"—"}</b></span><span>Atualizado em ${D.gerado_em}</span>${ultimoRegistro() ? `<span>Último registro gravado em ${ultimoRegistro()}</span>` : ""}`; }
 function ultimoRegistro(){ let m = ""; for(const col of [AJ, FE, VI]) for(const d of Object.values(col || {})) if(d && d.criado_em > m) m = d.criado_em; return m ? quando(m) : ""; }
 stamp();
 document.getElementById("rodape").textContent = `Gerado em ${D.gerado_em} · scripts/gera_painel.py`;
-try{ sel = localStorage.getItem("loja"); const t = localStorage.getItem("tab"); if(TABS[t]) tab = t; }catch(e){}
+try{ sel = localStorage.getItem("loja"); const t = localStorage.getItem("tab"); if(TABS[t] || t === "fech") tab = t; }catch(e){}
 if(!D.lojas.some(l=>l.nome===sel)) sel = (D.lojas.find(l=>l.mod.pix.tem_maq) || D.lojas[0] || {}).nome || null;
 ligaCliques();
 render();
