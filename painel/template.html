@@ -359,14 +359,20 @@ const quando = iso => iso ? new Date(iso).toLocaleString("pt-BR",{day:"2-digit",
 // ---- aba Fechamentos: o que já foi decidido no caixa ----
 const MOTIVOS = {bateu:"Bateu", sobra:"Sobra na máquina", falta:"Falta no caixa", outro:"Outro"};
 const r2 = x => Math.round((x || 0)*100)/100;
-const difDe = f => f.delta !== undefined ? r2(f.delta) : r2((f.maq ?? 0) - (f.pdv ?? 0));   // máquina − PDV conciliado no dia do fechamento
+// Os números do fechamento são os do dia como está hoje no painel (o gravado fica congelado no clique e uma
+// correção posterior, como a virada de dia, pode mudar o dia); quando diferem, a lista avisa.
+const diaDe = f => { const l = D.lojas.find(x => x.nome === f.loja), m = l && l.mod[f.mod]; return m && m.dias.find(d => d.data === f.data); };
+const pdvDe = f => { const d = diaDe(f); return r2(d ? d.pdv : f.pdv); };
+const maqDe = f => { const d = diaDe(f); return r2(d && d.maq !== undefined ? d.maq : f.maq); };
+const difDe = f => r2(maqDe(f) - pdvDe(f));   // máquina − PDV conciliado
+const mudou = f => { const d = diaDe(f); return !!d && (Math.abs((f.maq ?? 0) - (d.maq ?? 0)) > 0.004 || Math.abs((f.pdv ?? 0) - d.pdv) > 0.004); };
 const motivoCalc = dif => dif < -TOL ? "falta" : dif > TOL ? "sobra" : "bateu";
 const motivoAuto = d => motivoCalc(r2((d.maq ?? 0) - (d.pdv ?? 0)));
 const motivoDe = f => (f.motivo && MOTIVOS[f.motivo]) ? f.motivo : motivoCalc(difDe(f));   // sem motivo gravado: deduzido dos números
 const fechLista = () => Object.values(FE).filter(f => f.data >= DE && f.data <= ATE && D.lojas.some(l => l.nome === f.loja)).sort((a,b) => a.loja.localeCompare(b.loja) || a.data.localeCompare(b.data) || a.mod.localeCompare(b.mod));
 function fechTotais(lista){
   const t = {n:lista.length, bateu:0, pdv:0, maq:0, sobra:0, falta:0, liq:0};
-  for(const f of lista){ const s = difDe(f); t.pdv = r2(t.pdv + (f.pdv ?? 0)); t.maq = r2(t.maq + (f.maq ?? 0)); t.liq = r2(t.liq + s); if(s > TOL) t.sobra = r2(t.sobra + s); else if(s < -TOL) t.falta = r2(t.falta + s); else t.bateu++; }
+  for(const f of lista){ const s = difDe(f); t.pdv = r2(t.pdv + pdvDe(f)); t.maq = r2(t.maq + maqDe(f)); t.liq = r2(t.liq + s); if(s > TOL) t.sobra = r2(t.sobra + s); else if(s < -TOL) t.falta = r2(t.falta + s); else t.bateu++; }
   return t;
 }
 const brlS = x => Math.abs(x) <= 0.004 ? "—" : sinal(x);
@@ -394,9 +400,10 @@ function fechKpis(){
     (() => {   // banco: só o PIX tem a ponta do extrato cruzada dia a dia (crédito e débito entram na etapa 2)
       const pixF = lista.filter(f => f.mod === "pix");
       const dia = f => { const l = D.lojas.find(x => x.nome === f.loja); return l && l.mod.pix.dias.find(d => d.data === f.data); };
-      const banco = r2(pixF.reduce((a,f) => a + ((dia(f) || {}).banco ?? 0), 0)), maqPix = r2(pixF.reduce((a,f) => a + (f.maq ?? 0), 0)), ag = r2(pixF.reduce((a,f) => a + ((dia(f) || {}).aguarda ?? 0), 0));
+      const banco = r2(pixF.reduce((a,f) => a + ((dia(f) || {}).banco ?? 0), 0)), maqPix = r2(pixF.reduce((a,f) => a + maqDe(f), 0)), ag = r2(pixF.reduce((a,f) => a + ((dia(f) || {}).aguarda ?? 0), 0));
       const dif = r2(banco - maqPix);
-      return ["Caiu no banco", pixF.length ? brl(banco) : "—", !pixF.length ? "nenhum dia de PIX fechado" : Math.abs(dif) <= 0.004 ? "PIX · igual à máquina, centavo a centavo" : `PIX · ${sinal(dif)} contra a máquina${ag > 0.004 ? ` · ${brl(ag)} aguarda extrato` : ""}`, pixF.length && Math.abs(dif) > 0.004 && ag <= 0.004 ? "erro" : pixF.length ? "ok" : ""];
+      const semV = bancoLista().filter(p => p.grupo === "sem venda"), extra = semV.length ? ` · entraram também ${brl(somaV(semV))} em ${semV.length} PIX sem venda identificada` : "";
+      return ["Caiu no banco", pixF.length ? brl(banco) : "—", (!pixF.length ? "nenhum dia de PIX fechado" : Math.abs(dif) <= 0.004 ? "PIX · igual à máquina" : `PIX · ${sinal(dif)} contra a máquina${ag > 0.004 ? ` · ${brl(ag)} aguarda extrato` : ""}`) + extra, pixF.length && Math.abs(dif) > 0.004 && ag <= 0.004 ? "erro" : pixF.length ? "ok" : ""];
     })(),
     ["Sobra na máquina", brl(t.sobra), "a máquina recebeu mais do que o PDV registrou", t.sobra > TOL ? "pendente" : "ok"],
     ["Falta no caixa", brl(Math.abs(t.falta)), "o PDV registrou mais do que a máquina recebeu", t.falta < -TOL ? "erro" : "ok"],
@@ -451,7 +458,7 @@ function fechDetalhe(){
     html += `<div class="det-head"><h3>${esc(l.nome)}</h3><span class="meta">${t.n} dia${t.n===1?"":"s"} fechado${t.n===1?"":"s"} · PDV ${brl(t.pdv)} · máquina ${brl(t.maq)} · sobra ${brl(t.sobra)} · falta ${brl(Math.abs(t.falta))} · líquido ${brlS(t.liq)}</span></div>`;
     html += minha.length
       ? `<div class="tablewrap"><table class="fech-t"><thead><tr><th>Dia</th><th>Forma</th><th>PDV conc.</th><th>Máquina</th><th>Diferença</th><th>Motivo</th><th class="just">Justificativa</th><th>Registrado</th></tr></thead><tbody>` +
-        minha.sort((a,b) => a.data.localeCompare(b.data) || a.mod.localeCompare(b.mod)).map(f => { const s = difDe(f), mo = motivoDe(f); return `<tr><td>${dBR(f.data)}</td><td>${TABS[f.mod] || f.mod}</td><td>${brl(f.pdv)}</td><td>${brl(f.maq)}</td>${tdS(s)}<td><span class="chip" data-s="${mo==="falta"?"erro":mo==="sobra"?"aviso":mo==="bateu"?"ok":"aguarda"}">${MOTIVOS[mo]}</span></td><td class="just">${esc(f.justificativa)}</td><td>${quando(f.criado_em)}</td></tr>`; }).join("") +
+        minha.sort((a,b) => a.data.localeCompare(b.data) || a.mod.localeCompare(b.mod)).map(f => { const s = difDe(f), mo = motivoDe(f); return `<tr><td>${dBR(f.data)}</td><td>${TABS[f.mod] || f.mod}</td><td>${brl(pdvDe(f))}</td><td>${brl(maqDe(f))}</td>${tdS(s)}<td><span class="chip" data-s="${mo==="falta"?"erro":mo==="sobra"?"aviso":mo==="bateu"?"ok":"aguarda"}">${MOTIVOS[mo]}</span>${mudou(f) ? ` <span class="chip" data-s="pendente" title="Fechado com PDV ${brl(f.pdv)} e máquina ${brl(f.maq)}; os dados do dia mudaram depois do fechamento. Vale reabrir e conferir.">dados mudaram</span>` : ""}</td><td class="just">${esc(f.justificativa)}</td><td>${quando(f.criado_em)}</td></tr>`; }).join("") +
         `</tbody></table></div>`
       : `<p class="vazio">Nenhum dia fechado nesta loja no período.</p>`;
   }
