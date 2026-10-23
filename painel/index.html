@@ -278,7 +278,7 @@ function tabs(){
   nota.textContent = tab === "credito"
     ? "Crédito · etapa 1: PDV × maquininha, pelo valor bruto, cupom a cupom. A ponta do banco (D+1 útil, MDR e antecipação automática) entra na etapa 2."
     : tab === "fech"
-    ? "Fechamentos · o que já foi decidido no caixa, dia a dia. Diferença = máquina − PDV conciliado: positiva é sobra na máquina, negativa é falta no caixa. A taxa de serviço cobrada na máquina e não baixada aparece separada, e a diferença da coluna seguinte já vem sem ela."
+    ? "Fechamentos · o que já foi decidido no caixa, dia a dia. Diferença = máquina − PDV conciliado: positiva é sobra na máquina, negativa é falta no caixa."
     : "Débito · etapa 1: PDV × maquininha, pelo valor bruto, cupom a cupom. A ponta do banco (D+1 útil, descontado o MDR) entra na etapa 2.";
 }
 
@@ -357,22 +357,16 @@ const neg = x => (x ? -x : 0);   // Δ exibido como máquina − PDV: positivo =
 const virada = d => Math.round((((d.virada_saiu ?? 0) - (d.virada_entrou ?? 0)))*100)/100;   // o que o Δ do dia deve à virada
 const quando = iso => iso ? new Date(iso).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
 // ---- aba Fechamentos: o que já foi decidido no caixa ----
-const MOTIVOS = {bateu:"Bateu", sobra:"Sobra na máquina", falta:"Falta no caixa", taxa:"Taxa de serviço não baixada", outro:"Outro"};
+const MOTIVOS = {bateu:"Bateu", sobra:"Sobra na máquina", falta:"Falta no caixa", outro:"Outro"};
 const r2 = x => Math.round((x || 0)*100)/100;
-function servicoDe(f){
-  if(f.servico !== undefined) return r2(f.servico);
-  const l = D.lojas.find(x => x.nome === f.loja), m = l && l.mod[f.mod], d = m && m.dias.find(x => x.data === f.data);
-  return r2(d ? d.servico : 0);
-}
 const difDe = f => f.delta !== undefined ? r2(f.delta) : r2((f.maq ?? 0) - (f.pdv ?? 0));   // máquina − PDV conciliado no dia do fechamento
-const difSemTaxa = f => r2(difDe(f) - servicoDe(f));
-function motivoCalc(dif, servico){ return dif < -TOL ? "falta" : dif > TOL ? "sobra" : servico > TOL ? "taxa" : "bateu"; }
-const motivoAuto = d => motivoCalc(r2((d.maq ?? 0) - (d.pdv ?? 0) - (d.servico ?? 0)), r2(d.servico ?? 0));
-const motivoDe = f => (f.motivo && MOTIVOS[f.motivo]) ? f.motivo : motivoCalc(difSemTaxa(f), servicoDe(f));   // sem motivo gravado: deduzido dos números
+const motivoCalc = dif => dif < -TOL ? "falta" : dif > TOL ? "sobra" : "bateu";
+const motivoAuto = d => motivoCalc(r2((d.maq ?? 0) - (d.pdv ?? 0)));
+const motivoDe = f => (f.motivo && MOTIVOS[f.motivo]) ? f.motivo : motivoCalc(difDe(f));   // sem motivo gravado: deduzido dos números
 const fechLista = () => Object.values(FE).filter(f => f.data >= DE && f.data <= ATE && D.lojas.some(l => l.nome === f.loja)).sort((a,b) => a.loja.localeCompare(b.loja) || a.data.localeCompare(b.data) || a.mod.localeCompare(b.mod));
 function fechTotais(lista){
-  const t = {n:lista.length, bateu:0, sobra:0, falta:0, taxa:0, liq:0};
-  for(const f of lista){ const s = difSemTaxa(f); t.taxa = r2(t.taxa + servicoDe(f)); t.liq = r2(t.liq + difDe(f)); if(s > TOL) t.sobra = r2(t.sobra + s); else if(s < -TOL) t.falta = r2(t.falta + s); else t.bateu++; }
+  const t = {n:lista.length, bateu:0, sobra:0, falta:0, liq:0};
+  for(const f of lista){ const s = difDe(f); t.liq = r2(t.liq + s); if(s > TOL) t.sobra = r2(t.sobra + s); else if(s < -TOL) t.falta = r2(t.falta + s); else t.bateu++; }
   return t;
 }
 const brlS = x => Math.abs(x) <= 0.004 ? "—" : sinal(x);
@@ -382,10 +376,9 @@ function fechKpis(){
   const comMaq = D.lojas.reduce((a,l) => a + Object.values(l.mod).reduce((b,m) => b + m.dias.filter(d => d.maq !== undefined).length, 0), 0);
   const k = [
     ["Dias fechados", `${t.n}`, `de ${comMaq} loja-dia-forma com máquina no período · ${t.bateu} bateram`, ""],
-    ["Sobra na máquina", brl(t.sobra), "sem a taxa de serviço", t.sobra > TOL ? "pendente" : "ok"],
-    ["Falta no caixa", brl(Math.abs(t.falta)), "PDV baixou e a máquina não tem", t.falta < -TOL ? "erro" : "ok"],
-    ["Taxa de serviço", brl(t.taxa), "cobrada na máquina, não baixada no PDV", ""],
-    ["Líquido", brlS(t.liq), "máquina − PDV nos dias fechados", ""],
+    ["Sobra na máquina", brl(t.sobra), "a máquina recebeu mais do que o PDV registrou", t.sobra > TOL ? "pendente" : "ok"],
+    ["Falta no caixa", brl(Math.abs(t.falta)), "o PDV registrou mais do que a máquina recebeu", t.falta < -TOL ? "erro" : "ok"],
+    ["Líquido", brlS(t.liq), "sobra − falta nos dias fechados", ""],
   ];
   document.getElementById("kpis").innerHTML = k.map(([l,v,s,t]) => `<div class="kpi" data-tone="${t}"><div class="lbl">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join("");
 }
@@ -394,8 +387,8 @@ function fechLojas(){
   document.getElementById("lojas-n").textContent = D.lojas.length;
   ul.innerHTML = [...D.lojas].sort((a,b) => a.nome.localeCompare(b.nome)).map(l => {
     const t = fechTotais(lista.filter(f => f.loja === l.nome));
-    const s = !t.n ? "aguarda" : t.falta < -TOL ? "erro" : t.sobra > TOL || t.taxa > TOL ? "aviso" : "ok";
-    const txt = !t.n ? "sem fechamento" : t.falta < -TOL ? `falta ${brl(Math.abs(t.falta))}` : t.sobra > TOL ? `sobra ${brl(t.sobra)}` : t.taxa > TOL ? `taxa ${brl(t.taxa)}` : "batem";
+    const s = !t.n ? "aguarda" : t.falta < -TOL ? "erro" : t.sobra > TOL ? "aviso" : "ok";
+    const txt = !t.n ? "sem fechamento" : t.falta < -TOL ? `falta ${brl(Math.abs(t.falta))}` : t.sobra > TOL ? `sobra ${brl(t.sobra)}` : "batem";
     return `<li><button class="loja" data-nome="${esc(l.nome)}" aria-pressed="${l.nome===sel}" style="--m:var(--${({ok:"ok",erro:"erro",aviso:"aviso"})[s] || "ink-muted"})">
     <span class="bar"></span><span class="nm">${esc(l.nome)}<small>${t.n} dia${t.n===1?"":"s"} fechado${t.n===1?"":"s"}${t.n?` · líquido ${brlS(t.liq)}`:""}</small></span><span class="chip" data-s="${s}">${txt}</span></button></li>`;
   }).join("");
@@ -403,8 +396,8 @@ function fechLojas(){
 }
 function fechDetalhe(){
   const el = document.getElementById("detalhe"), lista = fechLista();
-  const linha = (nome, t) => `<tr><td>${esc(nome)}</td><td>${t.n}</td><td>${t.bateu}</td>${tdS(t.sobra)}${tdS(t.falta)}<td>${t.taxa > TOL ? brl(t.taxa) : "—"}</td>${tdS(t.liq)}</tr>`;
-  const cab = `<thead><tr><th>Loja</th><th>Dias</th><th>Bateram</th><th>Sobra</th><th>Falta</th><th>Taxa serviço</th><th>Líquido</th></tr></thead>`;
+  const linha = (nome, t) => `<tr><td>${esc(nome)}</td><td>${t.n}</td><td>${t.bateu}</td>${tdS(t.sobra)}${tdS(t.falta)}${tdS(t.liq)}</tr>`;
+  const cab = `<thead><tr><th>Loja</th><th>Dias</th><th>Bateram</th><th>Sobra</th><th>Falta</th><th>Líquido</th></tr></thead>`;
   const porLoja = [...D.lojas].sort((a,b) => a.nome.localeCompare(b.nome)).map(l => linha(l.nome, fechTotais(lista.filter(f => f.loja === l.nome)))).join("");
   const porForma = Object.entries(TABS).map(([k,v]) => linha(v, fechTotais(lista.filter(f => f.mod === k)))).join("");
   const tot = fechTotais(lista);
@@ -414,10 +407,10 @@ function fechDetalhe(){
   const l = D.lojas.find(x => x.nome === sel);
   if(l){
     const minha = lista.filter(f => f.loja === l.nome), t = fechTotais(minha);
-    html += `<div class="det-head"><h3>${esc(l.nome)}</h3><span class="meta">${t.n} dia${t.n===1?"":"s"} fechado${t.n===1?"":"s"} · sobra ${brl(t.sobra)} · falta ${brl(Math.abs(t.falta))} · taxa ${brl(t.taxa)} · líquido ${brlS(t.liq)}</span></div>`;
+    html += `<div class="det-head"><h3>${esc(l.nome)}</h3><span class="meta">${t.n} dia${t.n===1?"":"s"} fechado${t.n===1?"":"s"} · sobra ${brl(t.sobra)} · falta ${brl(Math.abs(t.falta))} · líquido ${brlS(t.liq)}</span></div>`;
     html += minha.length
-      ? `<div class="tablewrap"><table class="fech-t"><thead><tr><th>Dia</th><th>Forma</th><th>PDV conc.</th><th>Máquina</th><th>Taxa serviço</th><th>Diferença</th><th>Motivo</th><th class="just">Justificativa</th><th>Registrado</th></tr></thead><tbody>` +
-        minha.sort((a,b) => a.data.localeCompare(b.data) || a.mod.localeCompare(b.mod)).map(f => { const s = difSemTaxa(f), mo = motivoDe(f); return `<tr><td>${dBR(f.data)}</td><td>${TABS[f.mod] || f.mod}</td><td>${brl(f.pdv)}</td><td>${brl(f.maq)}</td><td>${servicoDe(f) > TOL ? brl(servicoDe(f)) : "—"}</td>${tdS(s)}<td><span class="chip" data-s="${mo==="falta"?"erro":mo==="sobra"||mo==="taxa"?"aviso":mo==="bateu"?"ok":"aguarda"}">${MOTIVOS[mo]}${f.motivo ? "" : " ·"}</span></td><td class="just">${esc(f.justificativa)}</td><td>${quando(f.criado_em)}</td></tr>`; }).join("") +
+      ? `<div class="tablewrap"><table class="fech-t"><thead><tr><th>Dia</th><th>Forma</th><th>PDV conc.</th><th>Máquina</th><th>Diferença</th><th>Motivo</th><th class="just">Justificativa</th><th>Registrado</th></tr></thead><tbody>` +
+        minha.sort((a,b) => a.data.localeCompare(b.data) || a.mod.localeCompare(b.mod)).map(f => { const s = difDe(f), mo = motivoDe(f); return `<tr><td>${dBR(f.data)}</td><td>${TABS[f.mod] || f.mod}</td><td>${brl(f.pdv)}</td><td>${brl(f.maq)}</td>${tdS(s)}<td><span class="chip" data-s="${mo==="falta"?"erro":mo==="sobra"?"aviso":mo==="bateu"?"ok":"aguarda"}">${MOTIVOS[mo]}${f.motivo ? "" : " ·"}</span></td><td class="just">${esc(f.justificativa)}</td><td>${quando(f.criado_em)}</td></tr>`; }).join("") +
         `</tbody></table></div><p class="vazio" style="padding-top:0">Motivo com “·” foi deduzido dos números, porque o dia foi fechado antes de existir o campo. Para trocar, reabra o dia na aba da forma e feche de novo.</p>`
       : `<p class="vazio">Nenhum dia fechado nesta loja no período.</p>`;
   }
@@ -564,7 +557,7 @@ function ligaDias(){
       if(isNaN(caixa)){ row.querySelector(".erro").textContent = "Informe o valor conferido no caixa."; return; }
       if(!just){ row.querySelector(".erro").textContent = "Escreva a justificativa."; return; }
       const f = {loja:l.nome, mod:tab, data:d.data, aberto:Math.round(aberto(d)*100)/100, caixa:Math.round(caixa*100)/100,
-                 pdv:d.pdv, pdv_rel:rel(d), transf:trf(d), maq:d.maq, delta:Math.round(((d.maq ?? 0) - (d.pdv ?? 0))*100)/100, servico:Math.round((d.servico ?? 0)*100)/100,
+                 pdv:d.pdv, pdv_rel:rel(d), transf:trf(d), maq:d.maq, delta:Math.round(((d.maq ?? 0) - (d.pdv ?? 0))*100)/100,
                  motivo:row.querySelector('[data-f="motivo"]').value, justificativa:just, criado_em:new Date().toISOString(), por:meuId || null};
       salvaFechamento(f, ev.currentTarget);
     });
