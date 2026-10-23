@@ -372,10 +372,12 @@ function fechTotais(lista){
 const brlS = x => Math.abs(x) <= 0.004 ? "—" : sinal(x);
 const tdS = x => `<td class="${x > TOL ? "pos" : x < -TOL ? "neg" : ""}">${brlS(x)}</td>`;
 function fechKpis(){
-  const t = fechTotais(fechLista());
+  const lista = fechLista(), t = fechTotais(lista);
   const comMaq = D.lojas.reduce((a,l) => a + Object.values(l.mod).reduce((b,m) => b + m.dias.filter(d => d.maq !== undefined).length, 0), 0);
+  const nLojas = new Set(lista.map(f => f.loja)).size, nDias = new Set(lista.map(f => f.data)).size, formas = Object.keys(TABS).filter(k => lista.some(f => f.mod === k)).map(k => TABS[k]).join(", ");
+  const resumo = t.n ? `${t.n} fechamento${t.n===1?"":"s"}: ${nLojas} loja${nLojas===1?"":"s"}, ${nDias} dia${nDias===1?"":"s"}, ${formas}${comMaq > t.n ? ` · faltam ${comMaq - t.n} (loja × dia × forma) para fechar tudo` : " · tudo fechado"}` : "nenhum dia fechado no período";
   const k = [
-    ["PDV nos dias fechados", brl(t.pdv), `${t.n} dia${t.n===1?"":"s"} fechado${t.n===1?"":"s"} de ${comMaq} loja-dia-forma com máquina no período`, ""],
+    ["PDV nos dias fechados", brl(t.pdv), resumo, ""],
     ["Máquina nos dias fechados", brl(t.maq), "o que a maquininha registrou nesses dias", ""],
     ["Sobra na máquina", brl(t.sobra), "a máquina recebeu mais do que o PDV registrou", t.sobra > TOL ? "pendente" : "ok"],
     ["Falta no caixa", brl(Math.abs(t.falta)), "o PDV registrou mais do que a máquina recebeu", t.falta < -TOL ? "erro" : "ok"],
