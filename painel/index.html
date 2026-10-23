@@ -544,10 +544,14 @@ function aplicaAjustes(){
       if(a.data !== dd.data) lm.dp = a.data;
       if(dd.maq_sem_par !== undefined) dd.maq_sem_par = r(Math.max(0, dd.maq_sem_par - v));
       const pj = para.pendencias.findIndex(p => p.status === "MAQUININHA SEM PAR NO PDV" && String(p.ref).includes(`aut. ${a.aut}`));
-      if(pj >= 0) para.pendencias.splice(pj, 1);
+      if(pj >= 0){
+        if(de) para.pendencias.splice(pj, 1);   // a origem tem aba: o card da transferência fica lá
+        else { const p = para.pendencias[pj]; p.ajuste = a; p.status = `RECLASSIFICADO ← ${NOMES[a.de] || a.de}`; p.cupom = a.cupom; p.hora = a.hora; }   // origem sem aba (voucher, dinheiro): o card fica no destino
+      }
     } else {
       (dd.lanc ||= []).push({h:a.hora, c:a.cupom, cx:a.caixa, f:`${a.forma} → ${NOMES[a.para]}`, v, vp:v, s:"RECLASSIFICADO (sem par na máquina)", aj:true});
       if(dd.pdv_sem_par !== undefined) dd.pdv_sem_par = r(dd.pdv_sem_par + v);
+      if(!de) para.pendencias.push({data: dd.data, valor: v, cupom: a.cupom, hora: a.hora, ref: `cupom ${a.cupom} · ${a.hora} · ${a.caixa}`, status: `RECLASSIFICADO ← ${NOMES[a.de] || a.de}`, ajuste: a});
     }
   }
   for(const f of Object.values(FE)){
