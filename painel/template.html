@@ -411,8 +411,8 @@ function fechDetalhe(){
     html += `<div class="det-head"><h3>${esc(l.nome)}</h3><span class="meta">${t.n} dia${t.n===1?"":"s"} fechado${t.n===1?"":"s"} · PDV ${brl(t.pdv)} · máquina ${brl(t.maq)} · sobra ${brl(t.sobra)} · falta ${brl(Math.abs(t.falta))} · líquido ${brlS(t.liq)}</span></div>`;
     html += minha.length
       ? `<div class="tablewrap"><table class="fech-t"><thead><tr><th>Dia</th><th>Forma</th><th>PDV conc.</th><th>Máquina</th><th>Diferença</th><th>Motivo</th><th class="just">Justificativa</th><th>Registrado</th></tr></thead><tbody>` +
-        minha.sort((a,b) => a.data.localeCompare(b.data) || a.mod.localeCompare(b.mod)).map(f => { const s = difDe(f), mo = motivoDe(f); return `<tr><td>${dBR(f.data)}</td><td>${TABS[f.mod] || f.mod}</td><td>${brl(f.pdv)}</td><td>${brl(f.maq)}</td>${tdS(s)}<td><span class="chip" data-s="${mo==="falta"?"erro":mo==="sobra"?"aviso":mo==="bateu"?"ok":"aguarda"}">${MOTIVOS[mo]}${f.motivo ? "" : " ·"}</span></td><td class="just">${esc(f.justificativa)}</td><td>${quando(f.criado_em)}</td></tr>`; }).join("") +
-        `</tbody></table></div><p class="vazio" style="padding-top:0">Motivo com “·” foi deduzido dos números, porque o dia foi fechado antes de existir o campo. Para trocar, reabra o dia na aba da forma e feche de novo.</p>`
+        minha.sort((a,b) => a.data.localeCompare(b.data) || a.mod.localeCompare(b.mod)).map(f => { const s = difDe(f), mo = motivoDe(f); return `<tr><td>${dBR(f.data)}</td><td>${TABS[f.mod] || f.mod}</td><td>${brl(f.pdv)}</td><td>${brl(f.maq)}</td>${tdS(s)}<td><span class="chip" data-s="${mo==="falta"?"erro":mo==="sobra"?"aviso":mo==="bateu"?"ok":"aguarda"}">${MOTIVOS[mo]}</span></td><td class="just">${esc(f.justificativa)}</td><td>${quando(f.criado_em)}</td></tr>`; }).join("") +
+        `</tbody></table></div>`
       : `<p class="vazio">Nenhum dia fechado nesta loja no período.</p>`;
   }
   el.innerHTML = html;
