@@ -370,6 +370,19 @@ function fechTotais(lista){
   return t;
 }
 const brlS = x => Math.abs(x) <= 0.004 ? "—" : sinal(x);
+// PIX que entrou na conta sem par direto com uma venda do PDV no dia (etapa 2, lado do banco)
+const BANCO_CLASSES = {
+  "PIX SEM VENDA REGISTRADA": ["sem venda", "entrou a mais que as vendas registradas de mesmo valor"],
+  "PIX EM DUPLICIDADE · A DEVOLVER": ["sem venda", "o mesmo cliente pagou duas vezes; devolver"],
+  "PIX EM DUPLICIDADE · DEVOLVIDO": ["sem venda", "pago duas vezes e já devolvido ao pagador"],
+  "OUTRA NATUREZA": ["sem venda", "sem venda de mesmo valor na loja; provável B2B ou transferência"],
+  "BANCO SEM VENDA": ["sem venda", "crédito sem venda correspondente"],
+  "PIX PAGO · MÁQUINA NÃO REGISTROU": ["venda", "venda do PDV; a máquina recusou ou cancelou e o PIX entrou"],
+  "VENDA ANTES DO PERÍODO": ["venda", "venda da madrugada do dia anterior ao início do painel"],
+};
+const classeBanco = p => Object.keys(BANCO_CLASSES).find(k => p.status.startsWith(k)) || p.status.split("·")[0].trim();
+const bancoLista = () => D.lojas.flatMap(l => (l.mod.pix.pendencias || []).filter(p => p.banco).map(p => ({...p, loja: l.nome, classe: classeBanco(p), grupo: (BANCO_CLASSES[classeBanco(p)] || ["sem venda"])[0]})));
+const somaV = arr => r2(arr.reduce((a,p) => a + p.valor, 0));
 const tdS = x => `<td class="${x > TOL ? "pos" : x < -TOL ? "neg" : ""}">${brlS(x)}</td>`;
 function fechKpis(){
   const lista = fechLista(), t = fechTotais(lista);
@@ -382,6 +395,8 @@ function fechKpis(){
     ["Falta no caixa", brl(Math.abs(t.falta)), "o PDV registrou mais do que a máquina recebeu", t.falta < -TOL ? "erro" : "ok"],
     ["Líquido", brlS(t.liq), "sobra − falta nos dias fechados", ""],
   ];
+  const bl = bancoLista(), semVenda = bl.filter(p => p.grupo === "sem venda"), venda = bl.filter(p => p.grupo === "venda");
+  k.push(["PIX na conta sem venda", brl(somaV(semVenda)), `${semVenda.length} PIX${venda.length ? ` · mais ${brl(somaV(venda))} em ${venda.length} PIX de vendas que a máquina não mostra` : ""}`, somaV(semVenda) > TOL ? "pendente" : "ok"]);
   document.getElementById("kpis").innerHTML = k.map(([l,v,s,t]) => `<div class="kpi" data-tone="${t}"><div class="lbl">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join("");
 }
 function fechLojas(){
@@ -406,8 +421,25 @@ function fechDetalhe(){
   let html = `<div class="det-head"><h3>Fechamentos · todas as lojas</h3><span class="meta">${dBR(DE)} a ${dBR(ATE)} · ${tot.n} dia${tot.n===1?"":"s"} fechado${tot.n===1?"":"s"}</span></div>
     <div class="tablewrap"><table class="fech-t">${cab}<tbody>${porLoja}</tbody><tfoot>${linha("Total", tot)}</tfoot></table></div>
     <div class="tablewrap"><table class="fech-t">${cab.replace("Loja", "Forma")}<tbody>${porForma}</tbody></table></div>`;
+  const bl = bancoLista();
+  if(bl.length){
+    const classes = Object.keys(BANCO_CLASSES).filter(k => bl.some(p => p.classe === k)).concat([...new Set(bl.map(p => p.classe))].filter(k => !BANCO_CLASSES[k]));
+    const grupoTxt = g => g === "sem venda" ? `<span class="chip" data-s="pendente">não é venda do PDV</span>` : `<span class="chip" data-s="ok">venda do PDV</span>`;
+    const porClasse = classes.map(k => { const q = bl.filter(p => p.classe === k); return `<tr><td>${esc(k)}</td><td>${grupoTxt(q[0].grupo)}</td><td>${q.length}</td><td>${brl(somaV(q))}</td><td class="just">${esc((BANCO_CLASSES[k] || ["",""])[1])}</td></tr>`; }).join("");
+    const porLoja = [...D.lojas].sort((a,b) => a.nome.localeCompare(b.nome)).map(l => { const q = bl.filter(p => p.loja === l.nome), sv = q.filter(p => p.grupo === "sem venda"), vd = q.filter(p => p.grupo === "venda"); return q.length ? `<tr><td>${esc(l.nome)}</td><td>${sv.length ? brl(somaV(sv)) : "—"}</td><td>${sv.length || "—"}</td><td>${vd.length ? brl(somaV(vd)) : "—"}</td><td>${vd.length || "—"}</td></tr>` : ""; }).join("");
+    const sv = bl.filter(p => p.grupo === "sem venda"), vd = bl.filter(p => p.grupo === "venda");
+    html += `<div class="det-head"><h3>PIX na conta sem venda no PDV</h3><span class="meta">entrou pela Sicredi sem par direto com uma venda do dia · ${bl.length} PIX · ${brl(somaV(bl))}</span></div>
+      <div class="tablewrap"><table class="fech-t"><thead><tr><th>Classificação</th><th>O que é</th><th>Qtd</th><th>Valor</th><th class="just">Significado</th></tr></thead><tbody>${porClasse}</tbody></table></div>
+      <div class="tablewrap"><table class="fech-t"><thead><tr><th>Loja</th><th>Não é venda do PDV</th><th>Qtd</th><th>Venda do PDV</th><th>Qtd</th></tr></thead><tbody>${porLoja}</tbody><tfoot><tr><td>Total</td><td>${brl(somaV(sv))}</td><td>${sv.length}</td><td>${brl(somaV(vd))}</td><td>${vd.length}</td></tr></tfoot></table></div>`;
+  }
   const l = D.lojas.find(x => x.nome === sel);
   if(l){
+    const meus = bl.filter(p => p.loja === l.nome);
+    if(meus.length){
+      html += `<div class="det-head"><h3>${esc(l.nome)} · PIX na conta sem venda</h3><span class="meta">${meus.length} PIX · ${brl(somaV(meus))}</span></div>
+        <div class="tablewrap"><table class="fech-t"><thead><tr><th>Dia</th><th class="just">Pagador</th><th>Valor</th><th>Classificação</th><th class="just">Detalhe</th></tr></thead><tbody>` +
+        meus.sort((a,b) => a.data.localeCompare(b.data)).map(p => `<tr><td>${dBR(p.data)}</td><td class="just">${esc(String(p.ref || "").replace(/^RECEBIMENTO PIX /, ""))}</td><td>${brl(p.valor)}</td><td><span class="chip" data-s="${p.grupo === "sem venda" ? "pendente" : "ok"}">${esc(p.classe)}</span></td><td class="just">${esc(p.detalhe || "")}</td></tr>`).join("") + `</tbody></table></div>`;
+    }
     const minha = lista.filter(f => f.loja === l.nome), t = fechTotais(minha);
     html += `<div class="det-head"><h3>${esc(l.nome)}</h3><span class="meta">${t.n} dia${t.n===1?"":"s"} fechado${t.n===1?"":"s"} · PDV ${brl(t.pdv)} · máquina ${brl(t.maq)} · sobra ${brl(t.sobra)} · falta ${brl(Math.abs(t.falta))} · líquido ${brlS(t.liq)}</span></div>`;
     html += minha.length
