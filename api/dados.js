@@ -113,6 +113,35 @@ async function semearSePreciso(cfg){
   return true;
 }
 
+// Registros gravados no repositório (ajustes/importar.json) entram no banco uma vez, por conteúdo do arquivo.
+// É o caminho para o Claude lançar transferências e fechamentos sem acesso direto ao banco: ele faz o push,
+// a Vercel publica, e na próxima leitura o painel importa. HSETNX: nunca sobrescreve o que já está gravado
+// (o que a Hylary fez no painel vence); "remover" apaga ids listados. Cada versão do arquivo é aplicada uma vez.
+async function importarRepositorio(cfg){
+  let imp, texto;
+  try{ imp = require("../ajustes/importar.json"); texto = JSON.stringify(imp); }catch(e){ return false; }
+  const hash = require("crypto").createHash("sha1").update(texto).digest("hex").slice(0, 16);
+  const chave = `painel:import:${hash}`;
+  if(await redis(cfg, ["GET", chave])) return false;
+  const cmds = [];
+  for(const c of COLS){
+    for(const [id, doc] of Object.entries(imp[c] || {})) cmds.push(["HSETNX", KEY(c), id, JSON.stringify(doc)]);
+    for(const id of (imp.remover && imp.remover[c]) || []) cmds.push(["HDEL", KEY(c), id]);
+  }
+  cmds.push(["SET", chave, new Date().toISOString()], ["INCR", "painel:ver"]);
+  await redisPipeline(cfg, cmds);
+  return true;
+}
+
+// Semeadura e importação rodam uma vez por instância "quente" da função: a consulta de versão (a cada 5 s
+// em cada painel aberto) fica em um único comando no Redis.
+async function preparar(cfg){
+  if(globalThis.__painelPronto) return;
+  await semearSePreciso(cfg);
+  await importarRepositorio(cfg);
+  globalThis.__painelPronto = true;
+}
+
 function corpo(req){
   if(req.body === undefined || req.body === null) return null;
   if(typeof req.body === "string"){ try{ return JSON.parse(req.body); }catch(e){ return null; } }
@@ -141,7 +170,7 @@ module.exports = async (req, res) => {
   const q = req.query || {};
   try{
     if(req.method === "GET"){
-      await semearSePreciso(cfg);
+      await preparar(cfg);
       // ?ver=N: o painel pergunta se mudou algo desde a versão N; se não, resposta curta
       const ver = Number(await redis(cfg, ["GET", "painel:ver"])) || 0;
       if(q.ver !== undefined && Number(q.ver) === ver) return res.end(JSON.stringify({ same: true, ver }));

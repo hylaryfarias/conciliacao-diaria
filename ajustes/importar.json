@@ -1,0 +1,45 @@
+{
+ "ajustes": {
+  "ISAIAS-02---ALPHAVILLE_2026-10-01_40893_voucher_SE001000000000GFMZ38VE7MS0APO6YBZV": {
+   "loja": "ISAIAS 02 - ALPHAVILLE",
+   "de": "voucher",
+   "para": "pix",
+   "data": "2026-10-01",
+   "cupom": "40893",
+   "caixa": "001 - IS02 - PDV 01",
+   "hora": "17:20",
+   "forma": "VOUCHER",
+   "valor": 37.7,
+   "data_maq": "2026-10-01",
+   "criado_em": "2026-10-23T13:30:00.000Z",
+   "por": null,
+   "aut": "SE001000000000GFMZ38VE7MS0APO6YBZV",
+   "justificativa": "Baixa incorreta no PDV: cupom 40893 (R$ 188,50, 5 pessoas a R$ 37,70) lançado inteiro como VOUCHER às 17:20. Na máquina Sicredi (terminal APTC7F80, 12:40 a 12:43) entraram 3 vales de R$ 37,70 e 2 PIX de R$ 37,70; os dois PIX caíram na conta em 01/10. Transferidos R$ 75,40 do voucher para PIX (um ajuste por PIX: aut. SE001000000000GFMZ38VE7MS0APO6YBZV, 12:42:13).",
+   "id": "ISAIAS-02---ALPHAVILLE_2026-10-01_40893_voucher_SE001000000000GFMZ38VE7MS0APO6YBZV"
+  },
+  "ISAIAS-02---ALPHAVILLE_2026-10-01_40893_voucher_SE001000000000HAPGXMN7S7QAB1GGRX0I": {
+   "loja": "ISAIAS 02 - ALPHAVILLE",
+   "de": "voucher",
+   "para": "pix",
+   "data": "2026-10-01",
+   "cupom": "40893",
+   "caixa": "001 - IS02 - PDV 01",
+   "hora": "17:20",
+   "forma": "VOUCHER",
+   "valor": 37.7,
+   "data_maq": "2026-10-01",
+   "criado_em": "2026-10-23T13:30:00.000Z",
+   "por": null,
+   "aut": "SE001000000000HAPGXMN7S7QAB1GGRX0I",
+   "justificativa": "Baixa incorreta no PDV: cupom 40893 (R$ 188,50, 5 pessoas a R$ 37,70) lançado inteiro como VOUCHER às 17:20. Na máquina Sicredi (terminal APTC7F80, 12:40 a 12:43) entraram 3 vales de R$ 37,70 e 2 PIX de R$ 37,70; os dois PIX caíram na conta em 01/10. Transferidos R$ 75,40 do voucher para PIX (um ajuste por PIX: aut. SE001000000000HAPGXMN7S7QAB1GGRX0I, 12:42:59).",
+   "id": "ISAIAS-02---ALPHAVILLE_2026-10-01_40893_voucher_SE001000000000HAPGXMN7S7QAB1GGRX0I"
+  }
+ },
+ "fechamentos": {},
+ "vistos": {},
+ "remover": {
+  "ajustes": [],
+  "fechamentos": [],
+  "vistos": []
+ }
+}

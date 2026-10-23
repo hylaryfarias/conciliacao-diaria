@@ -162,6 +162,11 @@ gravado na Vercel fica na Vercel; o painel do Claude e o da Vercel não se sincr
 Quem estiver com o painel aberto vê o que os outros gravam em até 5 s (o painel pergunta
 ao banco se a versão mudou e só baixa os dados quando mudou).
 
+`ajustes/importar.json` é o caminho do Claude para gravar no banco sem acesso direto a ele:
+ajustes, fechamentos e vistos listados ali entram no banco na primeira leitura depois do
+deploy (cada versão do arquivo é aplicada uma vez; nunca sobrescreve o que já está gravado;
+`remover` apaga ids). Depois de importado, o conteúdo pode ser substituído pelo lote seguinte.
+
 ## Taxa de serviço sem o relatório por forma de pagamento
 
 `scripts/isaias_taxa.py --loja "ISAIAS 01 - MARINGA" --de 2026-10-01 --ate 2026-10-20` cruza o relatório de
