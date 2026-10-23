@@ -391,6 +391,13 @@ function fechKpis(){
   const k = [
     ["PDV nos dias fechados", brl(t.pdv), resumo, ""],
     ["Máquina nos dias fechados", brl(t.maq), "o que a maquininha registrou nesses dias", ""],
+    (() => {   // banco: só o PIX tem a ponta do extrato cruzada dia a dia (crédito e débito entram na etapa 2)
+      const pixF = lista.filter(f => f.mod === "pix");
+      const dia = f => { const l = D.lojas.find(x => x.nome === f.loja); return l && l.mod.pix.dias.find(d => d.data === f.data); };
+      const banco = r2(pixF.reduce((a,f) => a + ((dia(f) || {}).banco ?? 0), 0)), maqPix = r2(pixF.reduce((a,f) => a + (f.maq ?? 0), 0)), ag = r2(pixF.reduce((a,f) => a + ((dia(f) || {}).aguarda ?? 0), 0));
+      const dif = r2(banco - maqPix);
+      return ["Caiu no banco", pixF.length ? brl(banco) : "—", !pixF.length ? "nenhum dia de PIX fechado" : Math.abs(dif) <= 0.004 ? "PIX · igual à máquina, centavo a centavo" : `PIX · ${sinal(dif)} contra a máquina${ag > 0.004 ? ` · ${brl(ag)} aguarda extrato` : ""}`, pixF.length && Math.abs(dif) > 0.004 && ag <= 0.004 ? "erro" : pixF.length ? "ok" : ""];
+    })(),
     ["Sobra na máquina", brl(t.sobra), "a máquina recebeu mais do que o PDV registrou", t.sobra > TOL ? "pendente" : "ok"],
     ["Falta no caixa", brl(Math.abs(t.falta)), "o PDV registrou mais do que a máquina recebeu", t.falta < -TOL ? "erro" : "ok"],
     ["Líquido", brlS(t.liq), "sobra − falta nos dias fechados", ""],
