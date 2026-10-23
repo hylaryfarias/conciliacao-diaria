@@ -35,7 +35,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-from pdv_pix import HORA_VIRADA, explica_sem_par, ler_pdv, pix_do_pdv  # noqa: E402
+from pdv_pix import HORA_VIRADA, com_base_mesa, explica_sem_par, ler_pdv, pix_do_pdv  # noqa: E402
 from portal_sicredi import ler_portais, ler_tef, pix_do_portal  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -119,22 +119,40 @@ def _subconjunto(alvo: int, cand: pd.DataFrame, ref_dt) -> list | None:
     return None
 
 
+def alvos_servico(cent: int, cent_mesa: int = 0) -> set:
+    """Valores que a máquina cobra quando o PDV fecha sem a taxa de serviço: o cupom inteiro + 10%, ou, quando
+    só parte do cupom veio de mesa (o resto foi lançado direto no caixa, sem taxa), o cupom + 10% dos itens da mesa.
+    Ex.: ISAIAS 01 cupom 42819 de 01/10: mesa R$ 78,00 + bombons R$ 8,50 = R$ 86,50 no PDV; máquina R$ 94,30 = 85,80 + 8,50."""
+    alvos = {int(round(cent * (1 + TAXA_SERVICO)))}
+    if 0 < cent_mesa < cent:
+        parcial = cent + int(round(cent_mesa * TAXA_SERVICO))
+        alvos.update({parcial - 1, parcial, parcial + 1})   # ±1 centavo de arredondamento
+    return alvos
+
+
+def texto_servico(cent_maq: int, cent: int, cent_mesa: int = 0) -> str:
+    if cent_maq == int(round(cent * (1 + TAXA_SERVICO))):
+        return f"SERVIÇO NÃO BAIXADO · máquina cobrou R$ {cent_maq/100:.2f} (+{TAXA_SERVICO:.0%}), PDV fechou sem a taxa"
+    return (f"SERVIÇO NÃO BAIXADO · máquina cobrou R$ {cent_maq/100:.2f} (+{TAXA_SERVICO:.0%} sobre R$ {cent_mesa/100:.2f} da mesa; "
+            f"R$ {(cent - cent_mesa)/100:.2f} lançado no caixa sem taxa), PDV fechou sem a taxa")
+
+
 def casa_servico(res: pd.DataFrame, sobra: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Cupom sem par cujo valor × (1 + TAXA_SERVICO) bate exato com um PIX sem par na janela."""
+    """Cupom sem par cujo valor + taxa de serviço (inteira ou só sobre a parte da mesa) bate com um PIX sem par na janela."""
     if not len(res) or not len(sobra):
         return res, sobra
     usados: set = set()
     for i, a in res[res["Status"] == "SEM PAR NA MAQUININHA"].iterrows():
-        alvo = int(round(a["cent"] * (1 + TAXA_SERVICO)))
+        alvos = alvos_servico(int(a["cent"]), int(a.get("cent_mesa", 0) or 0))
         dif = (a["dt_pdv"] - sobra["dt"]).dt.total_seconds() / 60
-        cand = sobra[(sobra["cent"] == alvo) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados))]
+        cand = sobra[sobra["cent"].isin(alvos) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados))]
         if len(cand) == 0:
             continue
         j = (cand["dt"] - a["dt_pdv"]).abs().idxmin()
         usados.add(j)
         m = sobra.loc[j]
         res.loc[i, ["Status", "Hora maq", "Dia maq", "Autorização", "Terminal", "Comprovante", "Canal", "Dif. hora (min)", "Serviço (R$)"]] = [
-            f"SERVIÇO NÃO BAIXADO · máquina cobrou R$ {m['cent']/100:.2f} (+{TAXA_SERVICO:.0%}), PDV fechou sem a taxa", m["dt"].strftime("%H:%M:%S"), m["Data"],
+            texto_servico(int(m["cent"]), int(a["cent"]), int(a.get("cent_mesa", 0) or 0)), m["dt"].strftime("%H:%M:%S"), m["Data"],
             str(m["Cód. de autorização"]), str(m["Número do terminal"]), str(m["Comprovante de venda"]), str(m["Canal"]),
             round((a["dt_pdv"] - m["dt"]).total_seconds() / 60), (m["cent"] - a["cent"]) / 100]
     return res, sobra[~sobra.index.isin(usados)]
@@ -241,7 +259,7 @@ def main() -> None:
     pdv_arq, portais = args[0], args[1:]
     lojas = carrega_lojas()
 
-    bruto = ler_pdv(pdv_arq)
+    bruto = com_base_mesa(ler_pdv(pdv_arq))   # cent_mesa: parte do cupom que veio de mesa (base da taxa de serviço)
     bruto["dt_pdv"] = pd.to_datetime(bruto["Data"].astype(str) + " " + bruto["Hora"].astype(str).str[:5])
     madrugada = bruto["dt_pdv"].dt.hour < HORA_VIRADA
     bruto.loc[madrugada, "dt_pdv"] += pd.Timedelta(days=1)

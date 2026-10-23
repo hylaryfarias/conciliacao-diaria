@@ -89,10 +89,61 @@ def explica_sem_par(sobra: pd.DataFrame, maq_tudo: pd.DataFrame, pdv_loja: pd.Da
     return sobra
 
 
+def ler_analitico_mesa(caminhos=None) -> pd.DataFrame:
+    """Relatório analítico do PDV (itens por cupom): quanto de cada cupom veio de mesa/comanda.
+    A taxa de serviço (10%) incide só sobre os itens da mesa; o que é lançado direto no caixa
+    (bombom, bebida avulsa) entra sem taxa. Sem caminhos, usa entrada/pdv_analitico_*.xlsx.
+    Retorna uma linha por (Filial, Caixa, Cupom) com cent_mesa (centavos dos itens com mesa)."""
+    import glob
+    raiz = Path(__file__).resolve().parent.parent
+    arqs = caminhos or sorted(glob.glob(str(raiz / "entrada" / "pdv_analitico_*.xlsx")))
+    partes = []
+    for a in arqs:
+        wb = CalamineWorkbook.from_path(a)
+        rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
+        try:
+            idx = next(i for i, r in enumerate(rows) if "Nr. mesa/comanda" in r and "Cupom" in r)
+        except StopIteration:
+            continue
+        cab, vistos = [], {}
+        for c in rows[idx]:   # "Total" aparece duas vezes (cupom e item): a segunda vira "Total.1", como o pandas faz
+            n = vistos.get(c, 0); vistos[c] = n + 1
+            cab.append(c if n == 0 else f"{c}.{n}")
+        t = pd.DataFrame(rows[idx + 1 :], columns=cab)
+        partes.append(t[["Filial", "Caixa", "Cupom", "Item", "Total.1", "Nr. mesa/comanda"]])
+    if not partes:
+        return pd.DataFrame(columns=["Filial", "Caixa", "Cupom", "cent_mesa"])
+    t = pd.concat(partes, ignore_index=True)
+    t = t[t["Filial"].astype(str).str.strip() != ""]
+    t["Cupom"] = pd.to_numeric(t["Cupom"], errors="coerce")
+    t = t.dropna(subset=["Cupom"]).drop_duplicates(subset=["Filial", "Caixa", "Cupom", "Item"])
+    t["Cupom"] = t["Cupom"].astype(int)
+    mesa = t["Nr. mesa/comanda"].astype(str).str.strip().replace({"": None, "None": None, "nan": None}).notna()
+    t["cent_item"] = (pd.to_numeric(t["Total.1"], errors="coerce").fillna(0) * 100).round().astype(int)
+    t["cent_mesa"] = t["cent_item"].where(mesa, 0)
+    return t.groupby(["Filial", "Caixa", "Cupom"], as_index=False)["cent_mesa"].sum()
+
+
+def com_base_mesa(bruto: pd.DataFrame, analitico: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Acrescenta cent_mesa às linhas do relatório de cupons (0 quando o cupom não tem itens de mesa ou o
+    analítico não cobre o cupom)."""
+    a = ler_analitico_mesa() if analitico is None else analitico
+    if not len(a):
+        bruto["cent_mesa"] = 0
+        return bruto
+    b = bruto.copy()
+    b["Cupom"] = pd.to_numeric(b["Cupom"], errors="coerce")
+    b = b.merge(a, on=["Filial", "Caixa", "Cupom"], how="left")
+    b["cent_mesa"] = b["cent_mesa"].fillna(0).astype(int)
+    b["Cupom"] = bruto["Cupom"].values
+    b.index = bruto.index
+    return b
+
+
 def pix_do_pdv(df: pd.DataFrame) -> pd.DataFrame:
     pix = df[df["Desc. pagam."].str.upper().isin(FORMAS_PIX)].copy()
     cols = ["Filial", "Caixa", "Data", "Hora", "Cupom", "Desc. pagam.", "Vl. pagamento", "cent", "Chave"]
-    cols += [c for c in ("dt_pdv", "Dia movimento") if c in pix.columns]
+    cols += [c for c in ("dt_pdv", "Dia movimento", "cent_mesa") if c in pix.columns]
     return pix[cols].sort_values(["Filial", "Data", "Hora", "Cupom"]).reset_index(drop=True)
 
 
