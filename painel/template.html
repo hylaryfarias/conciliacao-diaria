@@ -527,7 +527,7 @@ function detalhe(){
       ? `<div class="ponta" data-tone="${!m.tem_banco?"pendente":aberto>0.004?"erro":ag>0.004?"pendente":"ok"}"><div class="lbl">Banco</div><div class="val">${m.tem_banco?brl(banco):"—"}</div><div class="sub">${m.tem_banco?(ag>0.004?`${brl(ag)} aguarda extrato`:"tudo creditado"):"sem extrato"}</div></div>`
       : (() => { const rt = recebTotais(recebLotes(m)); const tone = !rt.n ? "pendente" : rt.div ? "erro" : (rt.agExt || rt.agPort) ? "pendente" : "ok";
           const sub = !rt.n ? `a receber ${brl(sum(m.dias,d=>d.liquido))} · sem extrato`
-            : `esperado ${brl(rt.esperado)}<br>${Math.abs(rt.delta) > 0.004 ? `Δ ${sinalS(rt.delta)} contra o esperado` : "bateu com o esperado"}${rt.aReceber > 0.004 ? `<br>${brl(rt.aReceber)} ainda a cair${rt.agPort ? " · reexportar o portal" : ""}` : ""}${rt.fora > 0.004 ? `<br>o lote de ${dBR(rt.foraEm)} tem ${brl(rt.fora)} de vendas de antes do recorte, fora da conta` : ""}`;
+            : `esperado ${brl(rt.esperado)}<br>${Math.abs(rt.delta) > 0.004 ? `Δ ${sinalS(rt.delta)} contra o esperado` : "bateu com o esperado"}${rt.aReceber > 0.004 ? `<br>${brl(rt.aReceber)} ainda a cair${rt.agPort ? " · reexportar o portal" : ""}` : ""}${rt.fora > 0.004 ? `<br>o lote de ${dBR(rt.foraEm)} tem ${brl(rt.fora)} de vendas fora do recorte, fora da conta` : ""}`;
           return `<div class="ponta" data-tone="${tone}"><div class="lbl">Banco · caiu</div><div class="val">${rt.recebido ? brl(rt.recebido) : "—"}</div><div class="sub">${sub}</div></div>`; })();
     const taxasPonta = tab === "pix" ? "" : (() => {
       const rt = recebTotais(recebLotes(m)); const mdr = sum(m.dias, d => d.mdr), bruto = sum(m.dias, d => d.maq);
