@@ -98,6 +98,17 @@ def main() -> None:
     for (fil, d), cent in alug.items():
         if de <= d <= ate:
             aluguel_de.setdefault(fil, []).append({"data": d.isoformat(), "valor": cent / 100})
+    # parte do aluguel abatida fora de crédito/débito (ex.: de um voucher), pelo relatório de recebimentos
+    aluguel_outros = {}
+    try:
+        from concilia_cartao_banco import ler_recebimentos
+        rec = ler_recebimentos(sorted(glob.glob(str(RAIZ / "entrada" / "recebimentos" / "*.xlsx"))), carrega_lojas())
+        for fil, por in rec["comp"].items():
+            for (d, prod), bands in por.items():
+                if prod not in ("debito", "credito") and de <= d <= ate:
+                    aluguel_outros.setdefault(fil, []).append({"data": d.isoformat(), "valor": sum(bands.values()) / 100, "de": prod})
+    except Exception:
+        pass
     MODK = {"PIX": "pix", "Crédito": "credito", "Débito": "debito"}
     cupL = le("concilia_cupom.xlsx", "Linhas")
     cupR = le("concilia_cupom.xlsx", "Cupons resolvidos")
@@ -398,7 +409,7 @@ def main() -> None:
                             row["pago_em"] = str(q["Pago em"]); row["receb_st"] = str(q["Status"]); row["liq_pago"] = r2(q["Líquido (R$)"])
             mods[m] = {"tem_maq": any("maq" in r for r in dias), "tem_banco": any(x["recebido"] is not None for x in receb), "dias": dias, "pendencias": sorted(pend, key=lambda q: q["data"]), "receb": receb}
 
-        lojas.append({"nome": filial, "marca": marca(filial), "ec": ec_de.get(filial), "aluguel": sorted(aluguel_de.get(filial, []), key=lambda a: a["data"]), "mod": mods})
+        lojas.append({"nome": filial, "marca": marca(filial), "ec": ec_de.get(filial), "aluguel": sorted(aluguel_de.get(filial, []), key=lambda a: a["data"]), "aluguel_outros": aluguel_outros.get(filial, []), "mod": mods})
 
     dados = {"gerado_em": datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M"), "de": de.isoformat(), "ate": ate.isoformat(),
              "extrato_ate": extrato_ate.isoformat() if extrato_ate else None, "pdv_ate": pdv_ate.isoformat(), "lojas": lojas}

@@ -538,12 +538,14 @@ function detalhe(){
       // aluguel: cobrado uma vez no mês (Histórico de aluguel); pode sair do débito, do crédito ou dos dois
       const cobr = (l.aluguel || []).filter(a => a.data >= DE && a.data <= ATE), cobrado = sum(cobr, a => a.valor);
       const outro = tab === "credito" ? "debito" : "credito", noOutro = recebTotais(recebLotes(l.mod[outro] || {})).aluguel;
-      const resto = Math.round((cobrado - rt.aluguel - noOutro)*100)/100;
+      const outros = l.aluguel_outros || [], emOutros = sum(outros, a => a.valor);
+      const resto = Math.round((cobrado - rt.aluguel - noOutro - emOutros)*100)/100;
       if(cobrado > 0.004){
         let a = `aluguel das máquinas ${brl(cobrado)} · cobrado ${cobr.map(x => dBR(x.data)).join(" e ")}`;
         if(rt.aluguel > 0.004 && Math.abs(rt.aluguel - cobrado) <= 0.004) a += ` · descontado do ${TABS[tab].toLowerCase()}`;
         else if(rt.aluguel > 0.004) a += ` · ${brl(rt.aluguel)} saiu do ${TABS[tab].toLowerCase()}${noOutro > 0.004 ? `, ${brl(noOutro)} do ${TABS[outro].toLowerCase()}` : ""}`;
         else if(noOutro > 0.004) a += ` · saiu do ${TABS[outro].toLowerCase()}`;
+        if(emOutros > 0.004) a += ` · ${brl(emOutros)} de ${outros.map(o => `${o.de} em ${dBR(o.data)}`).join(", ")}`;
         if(resto > 0.05) a += ` · ${brl(resto)} ainda sem par no extrato`;
         partes.push(a);
       } else if(rt.aluguel > 0.004) partes.push(`aluguel das máquinas ${brl(rt.aluguel)} · ${rt.alugEm.map(dBR).join(" e ")}`);

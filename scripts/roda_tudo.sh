@@ -10,5 +10,5 @@ python3 scripts/concilia_cartao.py "$PDV" entrada/portal/*.xlsx > /dev/null
 python3 scripts/concilia_pix_banco.py "$EXT" "$PDV" entrada/portal/*.xlsx --tef "$TEF" --de "$DE" --ate "$ATE" > /dev/null
 python3 scripts/concilia_cupom.py > /dev/null
 rm -f saida/concilia_cartao_banco_*.xlsx
-python3 scripts/concilia_cartao_banco.py "$EXT" entrada/portal/*detalhado*.xlsx --de "$DE" --ate "$ATE" --aluguel "entrada/aluguel/*.xlsx" > /dev/null
+python3 scripts/concilia_cartao_banco.py "$EXT" entrada/portal/*detalhado*.xlsx --de "$DE" --ate "$ATE" --aluguel "entrada/aluguel/*.xlsx" --recebimentos "entrada/recebimentos/*.xlsx" > /dev/null
 python3 scripts/gera_painel.py "$PDV" --de "$DE" --ate "$ATE"

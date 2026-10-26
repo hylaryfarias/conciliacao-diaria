@@ -170,7 +170,7 @@ deploy (cada versão do arquivo é aplicada uma vez; nunca sobrescreve o que já
 ## Cartão · etapa 2: o que a Sicredi devia pagar × o que caiu na conta
 
 ```bash
-python3 scripts/concilia_cartao_banco.py "entrada/extrato_todas_*.xlsx" entrada/portal/*detalhado*.xlsx --de 2026-10-01 --ate 2026-10-18 --aluguel "entrada/aluguel/*.xlsx"
+python3 scripts/concilia_cartao_banco.py "entrada/extrato_todas_*.xlsx" entrada/portal/*detalhado*.xlsx --de 2026-10-01 --ate 2026-10-18 --aluguel "entrada/aluguel/*.xlsx" --recebimentos "entrada/recebimentos/*.xlsx"
 ```
 
 Chave: (loja, data de pagamento, produto, bandeira). O portal informa, venda a venda, o líquido
@@ -180,6 +180,11 @@ Débito bate centavo a centavo. Crédito desconta a antecipação automática, c
 próprio extrato (as bandeiras concordam entre si). Parte da ELO cai fora da antecipação, em D+2, pelo
 líquido exato. O aluguel das máquinas é descontado da liquidação do dia da cobrança: o Histórico de
 aluguel do portal (um arquivo por EC, `entrada/aluguel/aluguel_<EC>_<AAAA-MM>.xlsx`) entra no cálculo.
+Melhor ainda é o **Relatório Detalhado de Recebimentos Pagos** (portal Sicredi, Meus Domicílios, um por EC,
+`entrada/recebimentos/recebimentos_<EC>_<de>_a_<ate>.xlsx`): cada "Código de pagamento" é uma linha do extrato
+e traz, venda a venda, o desconto de antecipação exato e as linhas "compensado por UR - Cobrança de Aluguel"
+que mostram de qual liquidação (e bandeira) o aluguel saiu. Com ele o lote fecha sem deduzir taxa nem ratear
+aluguel por tentativa (medido: ROBS, R$ 918,00 saíram em 02/10, 05/10 e de um voucher em 15/10).
 Status por lote: CONCILIADO, DIVERGENTE, SEM CRÉDITO, AGUARDA EXTRATO, AGUARDA PORTAL (venda ainda sem
 data efetiva no Histórico exportado; reexportar resolve), VENDA ANTES DO PERÍODO. Saída em
 `saida/concilia_cartao_banco_<de>_a_<ate>.xlsx`; o painel lê as abas Recebimentos e Por dia de venda.
