@@ -103,6 +103,9 @@ def main() -> None:
     try:
         from concilia_cartao_banco import ler_recebimentos
         rec = ler_recebimentos(sorted(glob.glob(str(RAIZ / "entrada" / "recebimentos" / "*.xlsx"))), carrega_lojas())
+        for fil, por in rec["cobranca"].items():   # loja sem Histórico de aluguel: a cobrança vem do relatório de recebimentos
+            if fil not in aluguel_de:
+                aluguel_de[fil] = [{"data": d.isoformat(), "valor": cent / 100} for d, cent in por.items() if de <= d <= ate]
         for fil, por in rec["comp"].items():
             for (d, prod), bands in por.items():
                 if prod not in ("debito", "credito") and de <= d <= ate:

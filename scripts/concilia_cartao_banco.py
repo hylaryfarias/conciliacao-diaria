@@ -122,10 +122,10 @@ def ler_recebimentos(caminhos, lojas: dict) -> dict:
     extrato; dentro dele vêm as vendas e, quando há aluguel, linhas 'compensado por UR - Cobrança de Aluguel' negativas
     que a Sicredi abate daquela liquidação (medido: ROBS, R$ 918,00 saíram em 02/10, 05/10 e 15/10, repartidos entre
     débito, antecipação de crédito por bandeira e um voucher). Devolve
-    {"comp": {filial: {(data, prod): {(tipo, band): cent}}}, "antec": {filial: {(data, band): cent}}}, com prod também
+    {"comp": {filial: {(data, prod): {(tipo, band): cent}}}, "antec": {filial: {(data, band): cent}}, "cobranca": {filial: {data: cent}}}, com prod também
     "voucher" quando o abate saiu de um vale (fora da conciliação de cartão, mas conta no aluguel do mês)."""
     from python_calamine import CalamineWorkbook
-    comp_out, antec_out = {}, {}
+    comp_out, antec_out, cobr_out = {}, {}, {}
     for arq in caminhos:
         wb = CalamineWorkbook.from_path(arq)
         rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
@@ -141,6 +141,10 @@ def ler_recebimentos(caminhos, lojas: dict) -> dict:
         t["comp"] = t["Produto"].astype(str).str.contains("Aluguel")
         t["filial"] = t["Número do estabelecimento"].astype(str).str.strip().map(lojas)
         t["band"] = t["Bandeira"].map(lambda b: BAND.get(str(b), str(b).upper().split()[0] if str(b).strip() else ""))
+        # a própria cobrança do mês ("Cobrança de Aluguel - Outubro", negativa) diz quanto foi cobrado e quando:
+        # dispensa o Histórico de aluguel quando este relatório existe
+        for (filial, d), g in t[t["Produto"].astype(str).str.startswith("Cobrança de Aluguel") & t["filial"].notna()].groupby(["filial", "d"]):
+            cobr_out.setdefault(filial, {})[d] = cobr_out.get(filial, {}).get(d, 0) + int(-g["Valor líquido"].sum())
         vendas_cred = t[~t["comp"] & t["filial"].notna() & (t["Produto"].map(PROD) == "credito")]
         for (filial, d, band), g in vendas_cred.groupby(["filial", "d", "band"]):
             antec_out.setdefault(filial, {})[(d, band)] = int(g["Desconto antecipação"].sum())
@@ -156,7 +160,7 @@ def ler_recebimentos(caminhos, lojas: dict) -> dict:
             tipo = "ANTEC" if str(vendas.iloc[0]["Tipo de pagamento"]).startswith("Antecipa") else ("DEBITO" if prod == "debito" else "CREDITO")
             chave = comp_out.setdefault(filial, {}).setdefault((vendas.iloc[0]["d"], prod), {})
             chave[(tipo, band)] = chave.get((tipo, band), 0) + int(-comp["Valor líquido"].sum())
-    return {"comp": comp_out, "antec": antec_out}
+    return {"comp": comp_out, "antec": antec_out, "cobranca": cobr_out}
 
 
 def com_compensacao(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_ate, comp: dict, antec_exata=None) -> dict:
