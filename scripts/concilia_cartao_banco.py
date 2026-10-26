@@ -169,9 +169,6 @@ def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_at
             por_band.append(f"{b}: recebido R$ {int(x[x['band']==b]['cent'].sum())/100:.2f} sem venda prevista")
         out["Antecipação (R$)"] = (liq - esperado) / 100
         out["Taxa antecipação (%)"] = round(taxa * 100, 4)
-    if aluguel_cent:
-        esperado -= aluguel_cent
-        por_band = [p for p in por_band if not (prod == "debito" and p.startswith("MASTER"))]   # o aluguel sai do débito Master; a diferença por bandeira é o próprio aluguel
     out["Esperado na conta (R$)"] = esperado / 100
     out["Δ recebido − esperado (R$)"] = (recebido - esperado) / 100
     fecha = abs(recebido - esperado) <= tol(esperado)
@@ -186,6 +183,38 @@ def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_at
         out["Status"] = "DIVERGENTE"
     out["Detalhe"] = "; ".join(por_band)
     return out
+
+
+def aplica_aluguel(lotes_dia: list, aluguel_cent: int) -> None:
+    """A Sicredi desconta o aluguel do dia da liquidação, repartido entre débito e crédito como couber (medido:
+    BIGGS 01 inteiro no débito; BIGGS 10 e 13 inteiros no crédito; BIGGS 11 R$ 912,64 no débito e R$ 164,36 no
+    crédito). Se as faltas dos lotes do dia somam o aluguel, cada lote recebe a sua parte e fecha."""
+    if not aluguel_cent or not lotes_dia:
+        return
+    pagos = [l for l in lotes_dia if l["Recebido (R$)"] is not None and l["Esperado na conta (R$)"] is not None and l["Status"] not in ("AGUARDA EXTRATO", "VENDA ANTES DO PERÍODO")]
+    if not pagos:
+        return
+    falta = {id(l): int(round(-l["Δ recebido − esperado (R$)"] * 100)) for l in pagos}
+    total = sum(max(0, f) for f in falta.values())
+    folga = max(TOL_CENT * len(pagos), int(aluguel_cent * 0.001))
+    if abs(total - aluguel_cent) <= folga and total > 0:
+        resto = aluguel_cent
+        for l in sorted(pagos, key=lambda l: -falta[id(l)]):
+            parte = min(max(0, falta[id(l)]), resto); resto -= parte
+            if parte <= 0:
+                continue
+            esperado = int(round(l["Esperado na conta (R$)"] * 100)) - parte
+            recebido = int(round(l["Recebido (R$)"] * 100))
+            l["Aluguel (R$)"] = parte / 100; l["Esperado na conta (R$)"] = esperado / 100; l["Δ recebido − esperado (R$)"] = (recebido - esperado) / 100
+            l["Status"] = "CONCILIADO" if abs(recebido - esperado) <= tol(esperado) else l["Status"]
+            l["Detalhe"] = f"aluguel das máquinas de R$ {parte/100:.2f} descontado desta liquidação" + (f" (de R$ {aluguel_cent/100:.2f} no dia)" if parte != aluguel_cent else "")
+    else:
+        # não explica tudo: registra o aluguel no lote com maior falta e deixa a diferença aparecer
+        alvo = max(pagos, key=lambda l: falta[id(l)])
+        esperado = int(round(alvo["Esperado na conta (R$)"] * 100)) - aluguel_cent; recebido = int(round(alvo["Recebido (R$)"] * 100))
+        alvo["Aluguel (R$)"] = aluguel_cent / 100; alvo["Esperado na conta (R$)"] = esperado / 100; alvo["Δ recebido − esperado (R$)"] = (recebido - esperado) / 100
+        alvo["Status"] = "CONCILIADO" if abs(recebido - esperado) <= tol(esperado) else alvo["Status"]
+        alvo["Detalhe"] = (f"aluguel das máquinas de R$ {aluguel_cent/100:.2f} descontado; " + str(alvo["Detalhe"])).strip("; ")
 
 
 def main() -> None:
@@ -217,15 +246,15 @@ def main() -> None:
         for d in datas:
             if d < de:
                 continue
-            alug = aluguel.get((filial, d), 0)
+            do_dia = []
             for prod in ("debito", "credito"):
                 vv = v[(v["pagto"] == d) & (v["prod"] == prod)]
                 xx = xl[(xl["Data"] == d) & (xl["prod"] == prod)]
                 if not len(vv) and not len(xx):
                     continue
-                lotes.append(lote(filial, d, prod, vv, xx, extrato_ate, alug if len(vv) else 0))
-                if len(vv):
-                    alug = 0   # o aluguel do dia sai uma vez só: do lote de débito, se houver; senão do de crédito
+                do_dia.append(lote(filial, d, prod, vv, xx, extrato_ate))
+            aplica_aluguel(do_dia, aluguel.get((filial, d), 0))
+            lotes.extend(do_dia)
         # por dia de venda: para onde foi o líquido de cada dia e se chegou
         st = {(l["Pagamento"], l["Produto"]): l["Status"] for l in lotes if l["Filial"] == filial}
         for (d, prod), g in v.groupby(["Data", "prod"]):
