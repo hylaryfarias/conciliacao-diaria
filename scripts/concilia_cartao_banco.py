@@ -211,12 +211,23 @@ def aplica_aluguel(lotes_dia: list, aluguel_cent: int) -> None:
             l["Status"] = "CONCILIADO" if abs(recebido - esperado) <= tol(esperado) else l["Status"]
             l["Detalhe"] = f"aluguel das máquinas de R$ {parte/100:.2f} descontado desta liquidação" + (f" (de R$ {aluguel_cent/100:.2f} no dia)" if parte != aluguel_cent else "")
     else:
-        # não explica tudo: registra o aluguel no lote com maior falta e deixa a diferença aparecer
-        alvo = max(pagos, key=lambda l: falta[id(l)])
-        esperado = int(round(alvo["Esperado na conta (R$)"] * 100)) - aluguel_cent; recebido = int(round(alvo["Recebido (R$)"] * 100))
-        alvo["Aluguel (R$)"] = aluguel_cent / 100; alvo["Esperado na conta (R$)"] = esperado / 100; alvo["Δ recebido − esperado (R$)"] = (recebido - esperado) / 100
-        alvo["Status"] = "CONCILIADO" if abs(recebido - esperado) <= tol(esperado) else alvo["Status"]
-        alvo["Detalhe"] = (f"aluguel das máquinas de R$ {aluguel_cent/100:.2f} descontado; " + str(alvo["Detalhe"])).strip("; ")
+        # as faltas do dia não somam o aluguel: cobre só o que falta (até o valor do aluguel) e registra o resto,
+        # que a Sicredi deve ter descontado de outra liquidação (ex.: a de 01/10, que paga 30/09, fora do período)
+        resto = aluguel_cent
+        for l in sorted(pagos, key=lambda l: -falta[id(l)]):
+            parte = min(max(0, falta[id(l)]), resto)
+            if parte <= 0:
+                continue
+            esperado = int(round(l["Esperado na conta (R$)"] * 100)) - parte; recebido = int(round(l["Recebido (R$)"] * 100))
+            if abs(recebido - esperado) > tol(esperado):
+                continue   # a falta não é o aluguel: deixa o lote como está
+            resto -= parte
+            l["Aluguel (R$)"] = parte / 100; l["Esperado na conta (R$)"] = esperado / 100; l["Δ recebido − esperado (R$)"] = (recebido - esperado) / 100
+            l["Status"] = "CONCILIADO"; l["Detalhe"] = f"aluguel das máquinas de R$ {parte/100:.2f} descontado desta liquidação (de R$ {aluguel_cent/100:.2f} cobrados no dia)"
+        if resto > 0:
+            nota = f"R$ {resto/100:.2f} do aluguel de R$ {aluguel_cent/100:.2f} cobrado neste dia não aparecem descontados dos lotes do dia; provável desconto em outra liquidação (ex.: 01/10, que paga vendas de 30/09)"
+            for l in pagos:
+                l["Detalhe"] = (str(l["Detalhe"]) + "; " + nota).strip("; ") if l["Status"] != "CONCILIADO" or not l["Detalhe"] else l["Detalhe"]
 
 
 def main() -> None:
