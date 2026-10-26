@@ -84,6 +84,23 @@
    "aut": "3O9LQI",
    "justificativa": "Baixa incorreta no PDV: cupom 35919 (R$ 21,90) lançado como DINHEIRO às 22:12; o pagamento foi em crédito Visa na máquina Sicredi no mesmo minuto, 22:12 (aut. 3O9LQI, terminal APTC5E11). Transferido para Crédito.",
    "id": "BIGGS-02---SANTOS-DUMONT_2026-10-01_35919_dinheiro_3O9LQI"
+  },
+  "BIGGS-02---SANTOS-DUMONT_2026-10-01_35915_ifood_963394": {
+   "id": "BIGGS-02---SANTOS-DUMONT_2026-10-01_35915_ifood_963394",
+   "loja": "BIGGS 02 - SANTOS DUMONT",
+   "de": "ifood",
+   "para": "credito",
+   "data": "2026-10-01",
+   "data_maq": "2026-10-01",
+   "cupom": "35915",
+   "caixa": "001 - BG02 - PDV 001",
+   "hora": "22:07",
+   "forma": "IFOOD",
+   "valor": 44.8,
+   "aut": "963394",
+   "justificativa": "Baixa incorreta no PDV: cupom 35915 (R$ 44,80) baixado como IFOOD às 22:07, mas o pagamento foi em crédito Mastercard na maquininha do caixa PDV 001 no mesmo minuto (aut. 963394, terminal APTC5E17), entre o vale do cupom 35914 e o PIX do cupom 35916. Pedido pago no cartão: o operador deveria ter baixado como crédito. Transferido para Crédito.",
+   "criado_em": "2026-10-26T13:00:00.000Z",
+   "por": null
   }
  },
  "fechamentos": {
@@ -267,7 +284,6 @@
  "vistos": {},
  "remover": {
   "ajustes": [
-   "BIGGS-02---SANTOS-DUMONT_2026-10-01_35915_ifood_963394",
    "BIGGS-07---JAMIL-E-ACAI_2026-10-02_95607_pix_067851"
   ],
   "fechamentos": [],
