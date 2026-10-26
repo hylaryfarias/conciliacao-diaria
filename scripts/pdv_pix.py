@@ -40,7 +40,8 @@ def ler_pdv(caminho: str) -> pd.DataFrame:
     for i, p in enumerate(partes):
         p["_arq"] = i
     df = pd.concat(partes, ignore_index=True)
-    df = df[df["Filial"].astype(str).str.strip() != ""]
+    df["Filial"] = df["Filial"].astype(str).str.strip()   # o relatório às vezes vem com espaço no fim ("BIGGS 04 - WINSTON ")
+    df = df[df["Filial"] != ""]
     chave = [c for c in ("Filial", "Caixa", "Data", "Hora", "Cupom", "Desc. pagam.", "Vl. pagamento") if c in df.columns]
     df["_seq"] = df.groupby(["_arq"] + chave).cumcount()
     df = df.drop_duplicates(subset=chave + ["_seq"]).drop(columns=["_arq", "_seq"])
@@ -114,7 +115,8 @@ def ler_analitico_mesa(caminhos=None) -> pd.DataFrame:
     if not partes:
         return pd.DataFrame(columns=["Filial", "Caixa", "Cupom", "cent_mesa"])
     t = pd.concat(partes, ignore_index=True)
-    t = t[t["Filial"].astype(str).str.strip() != ""]
+    t["Filial"] = t["Filial"].astype(str).str.strip()
+    t = t[t["Filial"] != ""]
     t["Cupom"] = pd.to_numeric(t["Cupom"], errors="coerce")
     t = t.dropna(subset=["Cupom"]).drop_duplicates(subset=["Filial", "Caixa", "Cupom", "Item"])
     t["Cupom"] = t["Cupom"].astype(int)

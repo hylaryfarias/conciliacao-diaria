@@ -170,7 +170,7 @@ deploy (cada versão do arquivo é aplicada uma vez; nunca sobrescreve o que já
 ## Cartão · etapa 2: o que a Sicredi devia pagar × o que caiu na conta
 
 ```bash
-python3 scripts/concilia_cartao_banco.py "entrada/extrato_todas_*.xlsx" entrada/portal/*detalhado*.xlsx --de 2026-10-01 --ate 2026-10-18 --aluguel "entrada/aluguel/*.xlsx" --recebimentos "entrada/recebimentos/*.xlsx"
+python3 scripts/concilia_cartao_banco.py "entrada/extrato_todas_*.xlsx" entrada/portal/*detalhado*.xlsx --de 2026-10-01 --ate 2026-10-25 --aluguel "entrada/aluguel/*.xlsx" --recebimentos "entrada/recebimentos/*.xlsx"
 ```
 
 Chave: (loja, data de pagamento, produto, bandeira). O portal informa, venda a venda, o líquido
