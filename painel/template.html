@@ -396,6 +396,8 @@ const trf = d => d.transf ?? 0;               // soma das transferências do dia
 const sinal = x => (x > 0 ? "+" : "−") + brl(Math.abs(x));
 const neg = x => (x ? -x : 0);   // Δ exibido como máquina − PDV: positivo = entrou a mais, negativo = faltou
 const virada = d => Math.round((((d.virada_saiu ?? 0) - (d.virada_entrou ?? 0)))*100)/100;   // o que o Δ do dia deve à virada
+// só vale como explicação quando reduz o Δ do dia; se o dia já fechou por transferência (ou o par está fora do período), a nota sumiria o Δ de mentira
+const viradaUtil = d => { const v = virada(d), dl = d.delta ?? 0; return v && Math.abs(Math.round((dl + v)*100)/100) < Math.abs(dl) ? v : 0; };
 const quando = iso => iso ? new Date(iso).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
 // ---- aba Fechamentos: o que já foi decidido no caixa ----
 const MOTIVOS = {bateu:"Bateu", sobra:"Sobra na máquina", falta:"Falta no caixa", outro:"Outro"};
@@ -405,7 +407,11 @@ const r2 = x => Math.round((x || 0)*100)/100;
 const diaDe = f => { const l = D.lojas.find(x => x.nome === f.loja), m = l && l.mod[f.mod]; return m && m.dias.find(d => d.data === f.data); };
 const pdvDe = f => { const d = diaDe(f); return r2(d ? d.pdv : f.pdv); };
 const maqDe = f => { const d = diaDe(f); return r2(d && d.maq !== undefined ? d.maq : f.maq); };
-const difDe = f => r2(maqDe(f) - pdvDe(f));   // máquina − PDV conciliado
+// virada de dia: o mesmo pagamento passou na máquina num dia e foi fechado no PDV no outro. Só entra na conta quando
+// explica a diferença do dia (a tira ou a reduz); quando o dia já fechou por transferência ou o par está fora do
+// período, a virada não é sobra nem falta e fica de fora.
+const viradaDe = f => { const d = diaDe(f); return d ? viradaUtil(d) : 0; };
+const difDe = f => r2(maqDe(f) - pdvDe(f) - viradaDe(f));   // máquina − PDV conciliado, descontada a virada que explica o dia
 const mudou = f => { const d = diaDe(f); return !!d && (Math.abs((f.maq ?? 0) - (d.maq ?? 0)) > 0.004 || Math.abs((f.pdv ?? 0) - d.pdv) > 0.004); };
 const motivoCalc = dif => dif < -TOL ? "falta" : dif > TOL ? "sobra" : "bateu";
 const motivoAuto = d => motivoCalc(r2((d.maq ?? 0) - (d.pdv ?? 0)));
@@ -443,7 +449,7 @@ function fechKpis(){
       const dia = f => { const l = D.lojas.find(x => x.nome === f.loja); return l && l.mod.pix.dias.find(d => d.data === f.data); };
       const banco = r2(pixF.reduce((a,f) => a + ((dia(f) || {}).banco ?? 0), 0)), maqPix = r2(pixF.reduce((a,f) => a + maqDe(f), 0)), ag = r2(pixF.reduce((a,f) => a + ((dia(f) || {}).aguarda ?? 0), 0));
       const dif = r2(banco - maqPix);
-      const semV = bancoLista().filter(p => p.grupo === "sem venda"), extra = semV.length ? ` · entraram também ${brl(somaV(semV))} em ${semV.length} PIX sem venda identificada` : "";
+      const semV = bancoLista().filter(p => p.grupo === "sem venda"), extra = semV.length ? ` · no período entraram também ${brl(somaV(semV))} em ${semV.length} PIX sem venda identificada` : "";
       return ["Caiu no banco", pixF.length ? brl(banco) : "—", (!pixF.length ? "nenhum dia de PIX fechado" : Math.abs(dif) <= 0.004 ? "PIX · igual à máquina" : `PIX · ${sinal(dif)} contra a máquina${ag > 0.004 ? ` · ${brl(ag)} aguarda extrato` : ""}`) + extra, pixF.length && Math.abs(dif) > 0.004 && ag <= 0.004 ? "erro" : pixF.length ? "ok" : ""];
     })(),
     ["Sobra na máquina", brl(t.sobra), "a máquina recebeu mais do que o PDV registrou", t.sobra > TOL ? "pendente" : "ok"],
@@ -462,7 +468,7 @@ function fechLojas(){
     const s = !t.n ? "aguarda" : t.falta < -TOL ? "erro" : t.sobra > TOL ? "aviso" : "ok";
     const txt = !t.n ? "sem fechamento" : t.falta < -TOL ? `falta ${brl(Math.abs(t.falta))}` : t.sobra > TOL ? `sobra ${brl(t.sobra)}` : "batem";
     return `<li><button class="loja" data-nome="${esc(l.nome)}" aria-pressed="${l.nome===sel}" style="--m:var(--${({ok:"ok",erro:"erro",aviso:"aviso"})[s] || "ink-muted"})">
-    <span class="bar"></span><span class="nm">${esc(l.nome)}<small>${t.n} dia${t.n===1?"":"s"} fechado${t.n===1?"":"s"}${t.n?` · líquido ${brlS(t.liq)}`:""}</small></span><span class="chip" data-s="${s}">${txt}</span></button></li>`;
+    <span class="bar"></span><span class="nm">${esc(l.nome)}<small>${t.n} fechamento${t.n===1?"":"s"}${t.n?` · líquido ${brlS(t.liq)}`:""}</small></span><span class="chip" data-s="${s}">${txt}</span></button></li>`;
   }).join("");
   ul.querySelectorAll(".loja").forEach(b => b.addEventListener("click", () => { sel = b.dataset.nome; try{localStorage.setItem("loja",sel)}catch(e){} fechLojas(); fechDetalhe(); vaiAoDetalhe(); }));
 }
@@ -473,7 +479,7 @@ function fechDetalhe(){
   const porLoja = [...D.lojas].sort((a,b) => a.nome.localeCompare(b.nome)).map(l => linha(l.nome, fechTotais(lista.filter(f => f.loja === l.nome)))).join("");
   const porForma = Object.entries(TABS).map(([k,v]) => linha(v, fechTotais(lista.filter(f => f.mod === k)))).join("");
   const tot = fechTotais(lista);
-  let html = `<div class="det-head"><h3>Fechamentos · todas as lojas</h3><span class="meta">${dBR(DE)} a ${dBR(ATE)} · ${tot.n} dia${tot.n===1?"":"s"} fechado${tot.n===1?"":"s"}</span></div>
+  let html = `<div class="det-head"><h3>Fechamentos · todas as lojas</h3><span class="meta">${dBR(DE)} a ${dBR(ATE)} · ${tot.n} fechamento${tot.n===1?"":"s"} (loja × forma × dia)</span></div>
     <div class="tablewrap"><table class="fech-t">${cab}<tbody>${porLoja}</tbody><tfoot>${linha("Total", tot)}</tfoot></table></div>
     <div class="tablewrap"><table class="fech-t">${cab.replace("Loja", "Forma")}<tbody>${porForma}</tbody></table></div>`;
   const bl = bancoLista();
@@ -496,10 +502,10 @@ function fechDetalhe(){
         meus.sort((a,b) => a.data.localeCompare(b.data)).map(p => `<tr><td>${dBR(p.data)}</td><td class="just">${esc(String(p.ref || "").replace(/^RECEBIMENTO PIX /, ""))}</td><td>${brl(p.valor)}</td><td><span class="chip" data-s="${p.grupo === "sem venda" ? "pendente" : "ok"}">${esc(p.classe)}</span></td><td class="just">${esc(p.detalhe || "")}</td></tr>`).join("") + `</tbody></table></div>`;
     }
     const minha = lista.filter(f => f.loja === l.nome), t = fechTotais(minha);
-    html += `<div class="det-head"><h3>${esc(l.nome)}</h3><span class="meta">${t.n} dia${t.n===1?"":"s"} fechado${t.n===1?"":"s"} · PDV ${brl(t.pdv)} · máquina ${brl(t.maq)} · sobra ${brl(t.sobra)} · falta ${brl(Math.abs(t.falta))} · líquido ${brlS(t.liq)}</span></div>`;
+    html += `<div class="det-head"><h3>${esc(l.nome)}</h3><span class="meta">${t.n} fechamento${t.n===1?"":"s"} · PDV ${brl(t.pdv)} · máquina ${brl(t.maq)} · sobra ${brl(t.sobra)} · falta ${brl(Math.abs(t.falta))} · líquido ${brlS(t.liq)}</span></div>`;
     html += minha.length
       ? `<div class="tablewrap"><table class="fech-t"><thead><tr><th>Dia</th><th>Forma</th><th>PDV conc.</th><th>Máquina</th><th>Diferença</th><th>Motivo</th><th class="just">Justificativa</th><th>Registrado</th></tr></thead><tbody>` +
-        minha.sort((a,b) => a.data.localeCompare(b.data) || a.mod.localeCompare(b.mod)).map(f => { const s = difDe(f), mo = motivoDe(f); return `<tr><td>${dBR(f.data)}</td><td>${TABS[f.mod] || f.mod}</td><td>${brl(pdvDe(f))}</td><td>${brl(maqDe(f))}</td>${tdS(s)}<td><span class="chip" data-s="${mo==="falta"?"erro":mo==="sobra"?"aviso":mo==="bateu"?"ok":"aguarda"}">${MOTIVOS[mo]}</span>${mudou(f) ? ` <span class="chip" data-s="pendente" title="Fechado com PDV ${brl(f.pdv)} e máquina ${brl(f.maq)}; os dados do dia mudaram depois do fechamento. Vale reabrir e conferir.">dados mudaram</span>` : ""}</td><td class="just">${esc(f.justificativa)}</td><td>${quando(f.criado_em)}</td></tr>`; }).join("") +
+        minha.sort((a,b) => a.data.localeCompare(b.data) || a.mod.localeCompare(b.mod)).map(f => { const s = difDe(f), mo = motivoDe(f), vi = viradaDe(f); return `<tr><td>${dBR(f.data)}</td><td>${TABS[f.mod] || f.mod}</td><td>${brl(pdvDe(f))}</td><td>${brl(maqDe(f))}</td>${tdS(s).replace("</td>", `${vi ? `<small class="vir" title="${esc(`máquina − PDV ${sinal(r2(maqDe(f)-pdvDe(f)))}, dos quais ${sinal(vi)} é virada de dia: pago na máquina num dia e fechado no PDV no outro`)}">virada de dia ${sinal(vi)}</small>` : ""}</td>`)}<td><span class="chip" data-s="${mo==="falta"?"erro":mo==="sobra"?"aviso":mo==="bateu"?"ok":"aguarda"}">${MOTIVOS[mo]}</span>${mudou(f) ? ` <span class="chip" data-s="pendente" title="Fechado com PDV ${brl(f.pdv)} e máquina ${brl(f.maq)}; os dados do dia mudaram depois do fechamento. Vale reabrir e conferir.">dados mudaram</span>` : ""}</td><td class="just">${esc(f.justificativa)}</td><td>${quando(f.criado_em)}</td></tr>`; }).join("") +
         `</tbody></table></div>`
       : `<p class="vazio">Nenhum dia fechado nesta loja no período.</p>`;
   }
@@ -604,7 +610,7 @@ function tabela(m){
     const fim = (pix ? `<td>${f(d.banco)}</td>` : `<td>${f(d.mdr)}${mdrPct}</td><td>${f(d.liquido)}${recSt}</td>`) + `<td class="fech">${fech(d,i)}</td>`;
     return `<tr class="${fds?"fim":""}" data-i="${i}" data-open="false"><td class="dia"><span class="dot" data-s="${t}"></span><button type="button" data-i="${i}" aria-expanded="false">${dBR(d.data)}</button><small>${d.dow}${d.feriado?" · feriado":""}</small></td>
       <td>${d.sem_pdv?"—":d.pdv_qtd}</td><td>${d.sem_pdv?`<span style="color:var(--ink-muted)">sem relatório</span>`:brl(rel(d))}</td><td class="trf">${trf(d)?sinal(trf(d)):"—"}</td><td>${d.sem_pdv?"—":brl(d.pdv)}</td><td>${f(d.maq)}</td>
-      <td class="${Math.abs(d.delta??0)>0.004 && Math.abs((d.delta??0)+virada(d))>0.004?"neg":""}">${d.delta===undefined?"—":brl(neg(d.delta))}${virada(d)!==0?`<small class="vir" title="${esc(`${d.virada_saiu?brl(d.virada_saiu)+" pagos na máquina neste dia e fechados no PDV em outro dia":""}${d.virada_saiu&&d.virada_entrou?" · ":""}${d.virada_entrou?brl(d.virada_entrou)+" fechados no PDV neste dia e pagos na máquina em outro dia":""}`)}">virada de dia ${Math.abs((d.delta??0)+virada(d))<=0.004?"✓":brl(neg(Math.round(((d.delta??0)+virada(d))*100)/100))+" além"}</small>`:""}</td>${fim}</tr>`;
+      <td class="${Math.abs(d.delta??0)>0.004 && Math.abs((d.delta??0)+viradaUtil(d))>0.004?"neg":""}">${d.delta===undefined?"—":brl(neg(d.delta))}${viradaUtil(d)!==0?`<small class="vir" title="${esc(`${d.virada_saiu?brl(d.virada_saiu)+" pagos na máquina neste dia e fechados no PDV em outro dia":""}${d.virada_saiu&&d.virada_entrou?" · ":""}${d.virada_entrou?brl(d.virada_entrou)+" fechados no PDV neste dia e pagos na máquina em outro dia":""}`)}">virada de dia ${Math.abs((d.delta??0)+viradaUtil(d))<=0.004?"✓":brl(neg(Math.round(((d.delta??0)+viradaUtil(d))*100)/100))+" além"}</small>`:""}</td>${fim}</tr>`;
   }).join("");
   const T = g => brl(sum(m.dias,g));
   const fimH = (pix ? `<th>Banco R$</th>` : `<th>MDR R$</th><th>Líquido R$</th>`) + `<th>Fechamento</th>`;
