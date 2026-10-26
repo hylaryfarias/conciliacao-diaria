@@ -125,7 +125,7 @@ def ler_recebimentos(caminhos, lojas: dict) -> dict:
     {"comp": {filial: {(data, prod): {(tipo, band): cent}}}, "antec": {filial: {(data, band): cent}}, "cobranca": {filial: {data: cent}}}, com prod também
     "voucher" quando o abate saiu de um vale (fora da conciliação de cartão, mas conta no aluguel do mês)."""
     from python_calamine import CalamineWorkbook
-    comp_out, antec_out, cobr_out = {}, {}, {}
+    comp_out, antec_out, cobr_out, vendas_out = {}, {}, {}, {}
     for arq in caminhos:
         wb = CalamineWorkbook.from_path(arq)
         rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
@@ -145,6 +145,20 @@ def ler_recebimentos(caminhos, lojas: dict) -> dict:
         # dispensa o Histórico de aluguel quando este relatório existe
         for (filial, d), g in t[t["Produto"].astype(str).str.startswith("Cobrança de Aluguel") & t["filial"].notna()].groupby(["filial", "d"]):
             cobr_out.setdefault(filial, {})[d] = cobr_out.get(filial, {}).get(d, 0) + int(-g["Valor líquido"].sum())
+        vend = t[~t["comp"] & t["filial"].notna() & t["Produto"].isin(PROD)].copy()
+        if len(vend):
+            from portal_sicredi import dia_movimento
+            vend["prod"] = vend["Produto"].map(PROD)
+            vend["dt"] = pd.to_datetime(vend["Data da venda"].astype(str) + " " + vend["Hora da venda"].astype(str).str.strip(), dayfirst=True, errors="coerce")
+            vend["Data"] = dia_movimento(vend["dt"])
+            vend["pago_em"] = vend["d"]; vend["pagto"] = vend["d"]
+            vend["bruto_cent"] = (pd.to_numeric(vend["Valor bruto"], errors="coerce").fillna(0) * 100).round().astype(int)
+            vend["mdr_cent"] = (pd.to_numeric(vend["Desconto MDR"], errors="coerce").fillna(0) * 100).round().astype(int)
+            vend["liq_cent"] = vend["bruto_cent"] - vend["mdr_cent"]   # líquido antes da antecipação, como no Histórico
+            vend["Cód. de autorização"] = vend["Código de autorização"].astype(str).str.strip()
+            cols = ["d", "prod", "band", "dt", "Data", "pago_em", "pagto", "bruto_cent", "mdr_cent", "liq_cent", "Cód. de autorização"]
+            for filial, g in vend.groupby("filial"):
+                vendas_out[filial] = pd.concat([vendas_out[filial], g[cols]], ignore_index=True) if filial in vendas_out else g[cols].reset_index(drop=True)
         vendas_cred = t[~t["comp"] & t["filial"].notna() & (t["Produto"].map(PROD) == "credito")]
         for (filial, d, band), g in vendas_cred.groupby(["filial", "d", "band"]):
             antec_out.setdefault(filial, {})[(d, band)] = int(g["Desconto antecipação"].sum())
@@ -160,7 +174,7 @@ def ler_recebimentos(caminhos, lojas: dict) -> dict:
             tipo = "ANTEC" if str(vendas.iloc[0]["Tipo de pagamento"]).startswith("Antecipa") else ("DEBITO" if prod == "debito" else "CREDITO")
             chave = comp_out.setdefault(filial, {}).setdefault((vendas.iloc[0]["d"], prod), {})
             chave[(tipo, band)] = chave.get((tipo, band), 0) + int(-comp["Valor líquido"].sum())
-    return {"comp": comp_out, "antec": antec_out, "cobranca": cobr_out}
+    return {"comp": comp_out, "antec": antec_out, "cobranca": cobr_out, "vendas": vendas_out}
 
 
 def com_compensacao(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_ate, comp: dict, antec_exata=None) -> dict:
@@ -339,6 +353,11 @@ def main() -> None:
             do_dia = []
             for prod in ("debito", "credito"):
                 vv = v[(v["pagto"] == d) & (v["prod"] == prod)]
+                rv = recebimentos["vendas"].get(filial)
+                if rv is not None:
+                    extra = rv[(rv["d"] == d) & (rv["prod"] == prod) & ~rv["Cód. de autorização"].isin(set(vv["Cód. de autorização"].astype(str).str.strip()))]
+                    if len(extra):
+                        vv = pd.concat([vv, extra.drop(columns=["d"])], ignore_index=True)   # venda paga nesse dia que o Histórico lido não traz (ex.: venda de antes do período)
                 xx = xl[(xl["Data"] == d) & (xl["prod"] == prod)]
                 if not len(vv) and not len(xx):
                     continue
