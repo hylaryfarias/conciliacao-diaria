@@ -119,14 +119,19 @@ def ler_aluguel(caminhos, lojas: dict) -> dict:
 
 
 def ler_recebimentos(caminhos, lojas: dict) -> dict:
-    """Relatório Detalhado de Recebimentos Pagos (portal Sicredi, um por EC). Cada 'Código de pagamento' é uma linha do
-    extrato; dentro dele vêm as vendas e, quando há aluguel, linhas 'compensado por UR - Cobrança de Aluguel' negativas
-    que a Sicredi abate daquela liquidação (medido: ROBS, R$ 918,00 saíram em 02/10, 05/10 e 15/10, repartidos entre
-    débito, antecipação de crédito por bandeira e um voucher). Devolve
-    {"comp": {filial: {(data, prod): {(tipo, band): cent}}}, "antec": {filial: {(data, band): cent}}, "cobranca": {filial: {data: cent}}}, com prod também
-    "voucher" quando o abate saiu de um vale (fora da conciliação de cartão, mas conta no aluguel do mês)."""
+    """Relatório Detalhado de Recebimentos Pagos (portal Sicredi, um por EC e período). Cada 'Código de pagamento' é uma
+    linha do extrato; dentro dele vêm as vendas (com MDR, antecipação e cancelamentos já calculados pela Sicredi) e,
+    quando há aluguel, linhas 'compensado por UR - Cobrança de Aluguel' negativas abatidas daquela liquidação (medido:
+    ROBS, R$ 918,00 saíram em 02/10, 05/10 e de um voucher em 15/10). Exports que se sobrepõem são juntados sem repetir.
+    Devolve {"comp": {filial: {(data, prod): {(tipo, band): cent}}},   aluguel abatido por lote e bandeira
+             "antec": {filial: {(data, band): cent}},                   desconto de antecipação (crédito)
+             "liq": {filial: {(data, prod, band): cent}},               valor líquido exato que compõe a linha do extrato
+             "cobranca": {filial: {data: cent}},                        cobrança do aluguel do mês
+             "vendas": {filial: df},                                    vendas pagas, para completar o Histórico
+             "cobre": {filial: [(de, ate)]}}                            períodos cobertos"""
     from python_calamine import CalamineWorkbook
     comp_out, antec_out, cobr_out, vendas_out, cobre_out, liq_out = {}, {}, {}, {}, {}, {}
+    partes = []
     for arq in caminhos:
         wb = CalamineWorkbook.from_path(arq)
         rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
@@ -136,57 +141,66 @@ def ler_recebimentos(caminhos, lojas: dict) -> dict:
             continue
         t = pd.DataFrame(rows[h + 1:], columns=rows[h])
         t = t[t["Data de pagamento"].astype(str).str.match(r"\d\d/\d\d/\d{4}")].copy()
+        t["filial"] = t["Número do estabelecimento"].astype(str).str.strip().map(lojas)
         # período que o relatório cobre ("Período selecionado: 01/10/2026 até 07/10/2026"): fora dele o aluguel
         # continua sendo repartido pela regra, porque o abate não está no relatório
         per = re.findall(r"(\d\d/\d\d/\d{4})", " ".join(str(c) for r in rows[:h] for c in r if c))
+        t["_d"] = pd.to_datetime(t["Data de pagamento"], dayfirst=True).dt.date
         if len(per) >= 2:
             de_r, ate_r = pd.to_datetime(per[0], dayfirst=True).date(), pd.to_datetime(per[1], dayfirst=True).date()
-            for filial in set(t["Número do estabelecimento"].astype(str).str.strip().map(lojas).dropna()):
+            for filial in set(t["filial"].dropna()):
+                # exports sobrepostos (ex.: 01–18 e 16–25): cada dia de pagamento entra uma vez, pelo primeiro export
+                ja = [r for r in cobre_out.get(filial, []) if r[0] <= ate_r and r[1] >= de_r]
+                if ja:
+                    t = t[~((t["filial"] == filial) & t["_d"].map(lambda d: any(a <= d <= b for a, b in ja)))]
                 cobre_out.setdefault(filial, []).append((de_r, ate_r))
-        for c in ("Valor líquido", "Desconto antecipação"):
-            t[c] = (pd.to_numeric(t[c], errors="coerce").fillna(0) * 100).round().astype(int)
-        t["d"] = pd.to_datetime(t["Data de pagamento"], dayfirst=True).dt.date
-        t["comp"] = t["Produto"].astype(str).str.contains("Aluguel")
-        t["filial"] = t["Número do estabelecimento"].astype(str).str.strip().map(lojas)
-        t["band"] = t["Bandeira"].map(lambda b: BAND.get(str(b), str(b).upper().split()[0] if str(b).strip() else ""))
-        # a própria cobrança do mês ("Cobrança de Aluguel - Outubro", negativa) diz quanto foi cobrado e quando:
-        # dispensa o Histórico de aluguel quando este relatório existe
-        for (filial, d), g in t[t["Produto"].astype(str).str.startswith("Cobrança de Aluguel") & t["filial"].notna()].groupby(["filial", "d"]):
-            cobr_out.setdefault(filial, {})[d] = cobr_out.get(filial, {}).get(d, 0) + int(-g["Valor líquido"].sum())
-        vend = t[~t["comp"] & t["filial"].notna() & t["Produto"].isin(PROD)].copy()
-        if len(vend):
-            from portal_sicredi import dia_movimento
-            vend["prod"] = vend["Produto"].map(PROD)
-            vend["dt"] = pd.to_datetime(vend["Data da venda"].astype(str) + " " + vend["Hora da venda"].astype(str).str.strip(), dayfirst=True, errors="coerce")
-            vend["Data"] = dia_movimento(vend["dt"])
-            vend["pago_em"] = vend["d"]; vend["pagto"] = vend["d"]
-            vend["bruto_cent"] = (pd.to_numeric(vend["Valor bruto"], errors="coerce").fillna(0) * 100).round().astype(int)
-            vend["mdr_cent"] = (pd.to_numeric(vend["Desconto MDR"], errors="coerce").fillna(0) * 100).round().astype(int)
-            vend["liq_cent"] = vend["bruto_cent"] - vend["mdr_cent"]   # líquido antes da antecipação, como no Histórico
-            vend["Cód. de autorização"] = vend["Código de autorização"].astype(str).str.strip()
-            cols = ["d", "prod", "band", "dt", "Data", "pago_em", "pagto", "bruto_cent", "mdr_cent", "liq_cent", "Cód. de autorização"]
-            for filial, g in vend.groupby("filial"):
-                vendas_out[filial] = pd.concat([vendas_out[filial], g[cols]], ignore_index=True) if filial in vendas_out else g[cols].reset_index(drop=True)
-        # valor líquido exato por (dia de pagamento, produto, bandeira): é o que compõe a linha do extrato, já com
-        # antecipação, MDR e cancelamentos do jeito que a Sicredi calcula (inclusive vendas canceladas, negativas)
-        todas = t[~t["comp"] & t["filial"].notna() & t["Produto"].isin(PROD)]
-        for (filial, d, prod, band), g in todas.groupby(["filial", "d", todas["Produto"].map(PROD), "band"]):
-            liq_out.setdefault(filial, {})[(d, prod, band)] = liq_out.get(filial, {}).get((d, prod, band), 0) + int(g["Valor líquido"].sum())
-        vendas_cred = t[~t["comp"] & t["filial"].notna() & (t["Produto"].map(PROD) == "credito")]
-        for (filial, d, band), g in vendas_cred.groupby(["filial", "d", "band"]):
-            antec_out.setdefault(filial, {})[(d, band)] = int(g["Desconto antecipação"].sum())
-        for cod, g in t.groupby("Código de pagamento"):
-            vendas = g[~g["comp"]]; comp = g[g["comp"]]
-            if not len(vendas) or not len(comp):
-                continue   # só vendas (nada a abater) ou só o lançamento da cobrança e sua compensação (soma zero)
-            filial = vendas.iloc[0]["filial"]
-            if not isinstance(filial, str):
-                continue
-            prod = PROD.get(str(vendas.iloc[0]["Produto"]), str(vendas.iloc[0]["Produto"]).lower())
-            band = vendas.iloc[0]["band"]
-            tipo = "ANTEC" if str(vendas.iloc[0]["Tipo de pagamento"]).startswith("Antecipa") else ("DEBITO" if prod == "debito" else "CREDITO")
-            chave = comp_out.setdefault(filial, {}).setdefault((vendas.iloc[0]["d"], prod), {})
-            chave[(tipo, band)] = chave.get((tipo, band), 0) + int(-comp["Valor líquido"].sum())
+        partes.append(t)
+    if not partes:
+        return {"comp": comp_out, "antec": antec_out, "cobranca": cobr_out, "vendas": vendas_out, "cobre": cobre_out, "liq": liq_out}
+    t = pd.concat(partes, ignore_index=True)
+    for c in ("Valor líquido", "Desconto antecipação"):
+        t[c] = (pd.to_numeric(t[c], errors="coerce").fillna(0) * 100).round().astype(int)
+    t["d"] = pd.to_datetime(t["Data de pagamento"], dayfirst=True).dt.date
+    t["comp"] = t["Produto"].astype(str).str.contains("Aluguel")
+    t["band"] = t["Bandeira"].map(lambda b: BAND.get(str(b), str(b).upper().split()[0] if str(b).strip() else ""))
+    # a própria cobrança do mês ("Cobrança de Aluguel - Outubro", negativa) diz quanto foi cobrado e quando:
+    # dispensa o Histórico de aluguel quando este relatório existe
+    for (filial, d), g in t[t["Produto"].astype(str).str.startswith("Cobrança de Aluguel") & t["filial"].notna()].groupby(["filial", "d"]):
+        cobr_out.setdefault(filial, {})[d] = cobr_out.get(filial, {}).get(d, 0) + int(-g["Valor líquido"].sum())
+    # valor líquido exato por (dia de pagamento, produto, bandeira): é o que compõe a linha do extrato, já com
+    # antecipação, MDR e cancelamentos do jeito que a Sicredi calcula (inclusive vendas canceladas, negativas)
+    todas = t[~t["comp"] & t["filial"].notna() & t["Produto"].isin(PROD)]
+    for (filial, d, prod, band), g in todas.groupby(["filial", "d", todas["Produto"].map(PROD), "band"]):
+        liq_out.setdefault(filial, {})[(d, prod, band)] = liq_out.get(filial, {}).get((d, prod, band), 0) + int(g["Valor líquido"].sum())
+    vend = todas.copy()
+    if len(vend):
+        from portal_sicredi import dia_movimento
+        vend["prod"] = vend["Produto"].map(PROD)
+        vend["dt"] = pd.to_datetime(vend["Data da venda"].astype(str) + " " + vend["Hora da venda"].astype(str).str.strip(), dayfirst=True, errors="coerce")
+        vend["Data"] = dia_movimento(vend["dt"])
+        vend["pago_em"] = vend["d"]; vend["pagto"] = vend["d"]
+        vend["bruto_cent"] = (pd.to_numeric(vend["Valor bruto"], errors="coerce").fillna(0) * 100).round().astype(int)
+        vend["mdr_cent"] = (pd.to_numeric(vend["Desconto MDR"], errors="coerce").fillna(0) * 100).round().astype(int)
+        vend["liq_cent"] = vend["bruto_cent"] - vend["mdr_cent"]   # líquido antes da antecipação, como no Histórico
+        vend["Cód. de autorização"] = vend["Código de autorização"].astype(str).str.strip()
+        cols = ["d", "prod", "band", "dt", "Data", "pago_em", "pagto", "bruto_cent", "mdr_cent", "liq_cent", "Cód. de autorização"]
+        for filial, g in vend.groupby("filial"):
+            vendas_out[filial] = g[cols].reset_index(drop=True)
+    vendas_cred = todas[todas["Produto"].map(PROD) == "credito"]
+    for (filial, d, band), g in vendas_cred.groupby(["filial", "d", "band"]):
+        antec_out.setdefault(filial, {})[(d, band)] = int(g["Desconto antecipação"].sum())
+    for cod, g in t.groupby("Código de pagamento"):
+        vendas = g[~g["comp"]]; comp = g[g["comp"]]
+        if not len(vendas) or not len(comp):
+            continue   # só vendas (nada a abater) ou só o lançamento da cobrança e sua compensação (soma zero)
+        filial = vendas.iloc[0]["filial"]
+        if not isinstance(filial, str):
+            continue
+        prod = PROD.get(str(vendas.iloc[0]["Produto"]), str(vendas.iloc[0]["Produto"]).lower())
+        band = vendas.iloc[0]["band"]
+        tipo = "ANTEC" if str(vendas.iloc[0]["Tipo de pagamento"]).startswith("Antecipa") else ("DEBITO" if prod == "debito" else "CREDITO")
+        chave = comp_out.setdefault(filial, {}).setdefault((vendas.iloc[0]["d"], prod), {})
+        chave[(tipo, band)] = chave.get((tipo, band), 0) + int(-comp["Valor líquido"].sum())
     return {"comp": comp_out, "antec": antec_out, "cobranca": cobr_out, "vendas": vendas_out, "cobre": cobre_out, "liq": liq_out}
 
 
