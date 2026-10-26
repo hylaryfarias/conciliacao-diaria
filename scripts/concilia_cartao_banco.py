@@ -24,6 +24,7 @@ Status por lote (loja × data de pagamento × produto):
   VENDA ANTES DO PERÍODO  crédito no extrato de vendas anteriores ao Histórico lido (ex.: 01/10 paga 30/09).
 """
 import glob
+import json
 import sys
 from pathlib import Path
 
@@ -122,8 +123,9 @@ def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_at
     antec = int(x[x["tipo"] == "ANTEC"]["cent"].sum()); normal = int(x[x["tipo"] != "ANTEC"]["cent"].sum())
     recebido = antec + normal
     sem_efet = int(v[v["pago_em"].isna()]["liq_cent"].sum()) if len(v) else 0
+    por_dia = json.dumps({str(k): int(x) for k, x in v.groupby("Data")["liq_cent"].sum().items()}) if len(v) else "{}"   # líquido por dia de venda (dia de movimento), para o recorte do painel
     out = {"Filial": filial, "Pagamento": d, "Produto": "Crédito" if prod == "credito" else "Débito", "Vendas (qtd)": len(v),
-           "Vendas de": ", ".join(sorted({str(s) for s in v["Data"]})) if len(v) else "", "Sem data efetiva (R$)": sem_efet / 100, "Vendas sem data efetiva (qtd)": int(v["pago_em"].isna().sum()) if len(v) else 0,
+           "Vendas de": ", ".join(sorted({str(s) for s in v["Data"]})) if len(v) else "", "Por dia": por_dia, "Sem data efetiva (R$)": sem_efet / 100, "Vendas sem data efetiva (qtd)": int(v["pago_em"].isna().sum()) if len(v) else 0,
            "Bruto (R$)": bruto / 100, "MDR (R$)": mdr / 100, "Líquido previsto (R$)": liq / 100,
            "Antecipação (R$)": 0.0, "Taxa antecipação (%)": None, "Esperado na conta (R$)": liq / 100,
            "Aluguel (R$)": aluguel_cent / 100, "Recebido (R$)": recebido / 100, "Δ recebido − esperado (R$)": 0.0, "Status": "", "Detalhe": ""}
