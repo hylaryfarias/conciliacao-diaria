@@ -139,11 +139,12 @@ def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_at
     if not len(x):
         out.update({"Status": "SEM CRÉDITO", "Δ recebido − esperado (R$)": -liq / 100, "Detalhe": "o portal diz que pagou e não há crédito Sicredi nesse dia no extrato"})
         return out
-    por_band = []
+    por_band = []; falta_band = 0
     if prod == "debito":
         esperado = liq
         for b, g in v.groupby("band"):
             e_b = int(x[x["band"] == b]["cent"].sum()); l_b = int(g["liq_cent"].sum())
+            falta_band += max(0, l_b - e_b)
             if abs(e_b - l_b) > tol(l_b):
                 por_band.append(f"{b}: previsto R$ {l_b/100:.2f}, recebido R$ {e_b/100:.2f} (Δ {(e_b-l_b)/100:+.2f})")
         for b in set(x["band"]) - set(v["band"]):
@@ -165,6 +166,7 @@ def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_at
             base = max(0, l_b - cr_b)
             esp_b = cr_b + int(round(base * (1 - taxa)))
             esperado += esp_b
+            falta_band += max(0, esp_b - (cr_b + an_b))
             if abs((cr_b + an_b) - esp_b) > tol(l_b):
                 por_band.append(f"{b}: líquido R$ {l_b/100:.2f}, esperado R$ {esp_b/100:.2f}, recebido R$ {(cr_b+an_b)/100:.2f} (Δ {((cr_b+an_b)-esp_b)/100:+.2f})")
         for b in set(x["band"]) - set(v["band"]):
@@ -173,6 +175,7 @@ def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_at
         out["Taxa antecipação (%)"] = round(taxa * 100, 4)
     out["Esperado na conta (R$)"] = esperado / 100
     out["Δ recebido − esperado (R$)"] = (recebido - esperado) / 100
+    out["_falta_band"] = falta_band
     fecha = abs(recebido - esperado) <= tol(esperado)
     if fecha:
         out["Status"] = "CONCILIADO"
@@ -196,10 +199,12 @@ def aplica_aluguel(lotes_dia: list, aluguel_cent: int) -> None:
     pagos = [l for l in lotes_dia if l["Recebido (R$)"] is not None and l["Esperado na conta (R$)"] is not None and l["Status"] not in ("AGUARDA EXTRATO", "VENDA ANTES DO PERÍODO")]
     if not pagos:
         return
-    falta = {id(l): int(round(-l["Δ recebido − esperado (R$)"] * 100)) for l in pagos}
+    falta = {id(l): max(int(round(-l["Δ recebido − esperado (R$)"] * 100)), int(l.get("_falta_band", 0))) for l in pagos}
     total = sum(max(0, f) for f in falta.values())
     folga = max(TOL_CENT * len(pagos), int(aluguel_cent * 0.001))
-    if abs(total - aluguel_cent) <= folga and total > 0:
+    if total + folga >= aluguel_cent and total > 0:
+        # o dia tem falta suficiente para o aluguel inteiro: desconta tudo, reparte pela falta de cada lote, e o que
+        # sobrar de diferença (ex.: uma bandeira que recebeu a mais) continua aparecendo
         resto = aluguel_cent
         for l in sorted(pagos, key=lambda l: -falta[id(l)]):
             parte = min(max(0, falta[id(l)]), resto); resto -= parte
@@ -208,8 +213,10 @@ def aplica_aluguel(lotes_dia: list, aluguel_cent: int) -> None:
             esperado = int(round(l["Esperado na conta (R$)"] * 100)) - parte
             recebido = int(round(l["Recebido (R$)"] * 100))
             l["Aluguel (R$)"] = parte / 100; l["Esperado na conta (R$)"] = esperado / 100; l["Δ recebido − esperado (R$)"] = (recebido - esperado) / 100
-            l["Status"] = "CONCILIADO" if abs(recebido - esperado) <= tol(esperado) else l["Status"]
-            l["Detalhe"] = f"aluguel das máquinas de R$ {parte/100:.2f} descontado desta liquidação" + (f" (de R$ {aluguel_cent/100:.2f} no dia)" if parte != aluguel_cent else "")
+            fechou = abs(recebido - esperado) <= tol(esperado)
+            l["Status"] = "CONCILIADO" if fechou else ("DIVERGENTE" if l["Status"] in ("CONCILIADO", "DIVERGENTE") else l["Status"])
+            nota = f"aluguel das máquinas de R$ {parte/100:.2f} descontado desta liquidação" + (f" (de R$ {aluguel_cent/100:.2f} no dia)" if parte != aluguel_cent else "")
+            l["Detalhe"] = nota if fechou else (nota + "; " + str(l["Detalhe"])).strip("; ")
     else:
         # as faltas do dia não somam o aluguel: cobre só o que falta (até o valor do aluguel) e registra o resto,
         # que a Sicredi deve ter descontado de outra liquidação (ex.: a de 01/10, que paga 30/09, fora do período)
@@ -277,7 +284,7 @@ def main() -> None:
                                   "Pago em": ", ".join(p.strftime("%d/%m") for p in pagos),
                                   "Status": "CONCILIADO" if status and all(s == "CONCILIADO" for s in status) else "DIVERGENTE" if any(s in ("DIVERGENTE", "SEM CRÉDITO") for s in status) else "AGUARDA PORTAL" if any(s == "AGUARDA PORTAL" for s in status) else "AGUARDA EXTRATO"})
 
-    L = pd.DataFrame(lotes).sort_values(["Filial", "Pagamento", "Produto"])
+    L = pd.DataFrame(lotes).drop(columns=["_falta_band"], errors="ignore").sort_values(["Filial", "Pagamento", "Produto"])
     V = pd.DataFrame(por_dia_venda).sort_values(["Filial", "Venda", "Produto"])
     res = (L[L["Status"] != "VENDA ANTES DO PERÍODO"].groupby(["Filial", "Produto"])
            .agg(**{"Líquido previsto (R$)": ("Líquido previsto (R$)", "sum"), "Antecipação (R$)": ("Antecipação (R$)", "sum"), "Esperado na conta (R$)": ("Esperado na conta (R$)", "sum"),
