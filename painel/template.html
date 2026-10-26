@@ -256,17 +256,24 @@ const recebLotes = m => (m.receb || []).map(x => {
   return share > 0 ? {...x, share: Math.min(1, share)} : null;
 }).filter(Boolean);
 function recebTotais(lotes){
-  const t = {n:0, liq:0, antec:0, aluguel:0, esperado:0, recebido:0, delta:0, aReceber:0, ok:0, div:0, agExt:0, agPort:0, antes:0};
+  // Pro-rata (share) só no que é proporcional às vendas: líquido, antecipação, MDR e bruto. Aluguel é cobrado uma vez
+  // no mês, inteiro, e a diferença contra o banco é inteira: os dois entram sem rateio, para bater com o extrato.
+  const t = {n:0, bruto:0, mdr:0, liq:0, antec:0, aluguel:0, esperado:0, recebido:0, delta:0, aReceber:0, fora:0, ok:0, div:0, agExt:0, agPort:0, antes:0, alugEm:[], taxas:[], pagos:[]};
   const R = x => Math.round(x*100)/100;
   for(const x of lotes){
     if(x.status === "VENDA ANTES DO PERÍODO"){ t.antes = R(t.antes + (x.recebido || 0)); continue; }
     const sh = x.share ?? 1;
-    t.n++; t.liq = R(t.liq + x.liq*sh); t.antec = R(t.antec + (x.antec || 0)*sh); t.aluguel = R(t.aluguel + (x.aluguel || 0)*sh);
+    t.n++; t.bruto = R(t.bruto + (x.bruto || 0)*sh); t.mdr = R(t.mdr + (x.mdr || 0)*sh); t.liq = R(t.liq + x.liq*sh); t.antec = R(t.antec + (x.antec || 0)*sh); t.aluguel = R(t.aluguel + (x.aluguel || 0));
+    t.fora = R(t.fora + x.liq*(1 - sh)); if(sh < 0.999 && !t.foraEm) t.foraEm = x.data;
+    if(x.aluguel) t.alugEm.push(x.data);
+    if(x.taxa != null && x.antec) t.taxas.push(x.taxa);
     if(x.status === "CONCILIADO") t.ok++; else if(x.status === "DIVERGENTE" || x.status === "SEM CRÉDITO") t.div++; else if(x.status === "AGUARDA EXTRATO") t.agExt++; else if(x.status === "AGUARDA PORTAL") t.agPort++;
+    const esperado = R((x.liq - (x.antec || 0))*sh - (x.aluguel || 0));
     const decidido = x.status === "CONCILIADO" || x.status === "DIVERGENTE" || x.status === "SEM CRÉDITO";
-    if(decidido){ t.esperado = R(t.esperado + (x.esperado ?? x.liq)*sh); t.recebido = R(t.recebido + (x.recebido || 0)*sh); t.delta = R(t.delta + (x.delta || 0)*sh); }
-    else t.aReceber = R(t.aReceber + (x.esperado ?? x.liq)*sh);   // aguarda extrato ou portal: ainda não é diferença, é a receber
+    if(decidido){ t.esperado = R(t.esperado + esperado); t.delta = R(t.delta + (x.delta || 0)); t.recebido = R(t.recebido + esperado + (x.delta || 0)); t.pagos.push(x.data); }
+    else t.aReceber = R(t.aReceber + esperado);   // aguarda extrato ou portal: ainda não é diferença, é a receber
   }
+  t.taxa = t.taxas.length ? t.taxas.reduce((a,b) => a + b, 0) / t.taxas.length : null;
   return t;
 }
 const sinalS = x => Math.abs(x) <= 0.004 ? "—" : (x > 0 ? "+" : "−") + brl(Math.abs(x));
@@ -336,8 +343,8 @@ function kpis(){
     const rt = recebTotais(todas.flatMap(l => recebLotes(M(l))));
     const liqBanco = Math.round((rt.esperado + rt.aReceber)*100)/100;   // o que a Sicredi deve pagar pelas vendas do período: bruto − MDR − antecipação − aluguel
     k.push(["Em aberto", brl(semPar), `PDV × máquina, líquido do dia${servicoTot>0.004 ? ` · inclui ${brl(servicoTot)} de serviço não baixado` : ""}${parcialTot>0.004 ? ` · ${brl(parcialTot)} de comanda parcial compensada` : ""}${nFech ? ` · ${nFech} dia${nFech===1?"":"s"} fechado${nFech===1?"":"s"} no caixa` : ""}`, semPar>TOL?"erro":"ok"]);
-    k.push(["Banco · a receber", brl(liqBanco), `bruto − MDR ${brl(mdr)}${rt.antec ? ` − antecipação ${brl(rt.antec)}` : ""}${rt.aluguel ? ` − aluguel ${brl(rt.aluguel)}` : ""}`, ""]);
-    k.push(["Banco · recebido", rt.recebido ? brl(rt.recebido) : "—", rt.n ? `${rt.ok} de ${rt.ok + rt.div} lote${rt.ok + rt.div===1?"":"s"} pagos batem${rt.aReceber > 0.004 ? ` · ${brl(rt.aReceber)} ainda a cair${rt.agPort ? " (reexportar o portal)" : ""}` : ""}` : "sem extrato lido", rt.div ? "erro" : rt.recebido ? "ok" : ""]);
+    k.push(["Banco · esperado", brl(liqBanco), `líquido ${brl(Math.round((liqBanco + rt.antec + rt.aluguel)*100)/100)}${rt.antec ? ` − antecipação ${brl(rt.antec)}` : ""}${rt.aluguel ? ` − aluguel ${brl(rt.aluguel)}` : ""}`, ""]);
+    k.push(["Banco · caiu", rt.recebido ? brl(rt.recebido) : "—", rt.n ? `${rt.ok} de ${rt.ok + rt.div} lote${rt.ok + rt.div===1?"":"s"} pagos batem${rt.aReceber > 0.004 ? ` · ${brl(rt.aReceber)} ainda a cair${rt.agPort ? " (reexportar o portal)" : ""}` : ""}` : "sem extrato lido", rt.div ? "erro" : rt.recebido ? "ok" : ""]);
     k.push(["Banco · diferença", sinalS(rt.delta), rt.div ? `${rt.div} lote${rt.div===1?"":"s"} diverge${rt.div===1?"":"m"} · recebido − esperado` : "tudo que foi pago bate", Math.abs(rt.delta) > TOL ? "erro" : rt.n ? "ok" : ""]);
     document.getElementById("kpis").innerHTML = k.map(([l,v,s,t]) => `<div class="kpi" data-tone="${t}"><div class="lbl">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join("");
     return;
@@ -519,11 +526,33 @@ function detalhe(){
     const bancoPonta = tab === "pix"
       ? `<div class="ponta" data-tone="${!m.tem_banco?"pendente":aberto>0.004?"erro":ag>0.004?"pendente":"ok"}"><div class="lbl">Banco</div><div class="val">${m.tem_banco?brl(banco):"—"}</div><div class="sub">${m.tem_banco?(ag>0.004?`${brl(ag)} aguarda extrato`:"tudo creditado"):"sem extrato"}</div></div>`
       : (() => { const rt = recebTotais(recebLotes(m)); const tone = !rt.n ? "pendente" : rt.div ? "erro" : (rt.agExt || rt.agPort) ? "pendente" : "ok";
-          return `<div class="ponta" data-tone="${tone}"><div class="lbl">Banco</div><div class="val">${rt.recebido ? brl(rt.recebido) : "—"}</div><div class="sub">${!rt.n ? `a receber ${brl(sum(m.dias,d=>d.liquido))} · sem extrato` : `${Math.abs(rt.delta) > 0.004 ? `Δ ${sinalS(rt.delta)} contra o esperado` : "bate com o esperado"}${rt.aReceber > 0.004 ? ` · ${brl(rt.aReceber)} ainda a cair` : ""}`}</div></div>`; })();
+          const sub = !rt.n ? `a receber ${brl(sum(m.dias,d=>d.liquido))} · sem extrato`
+            : `esperado ${brl(rt.esperado)}<br>${Math.abs(rt.delta) > 0.004 ? `Δ ${sinalS(rt.delta)} contra o esperado` : "bateu com o esperado"}${rt.aReceber > 0.004 ? `<br>${brl(rt.aReceber)} ainda a cair${rt.agPort ? " · reexportar o portal" : ""}` : ""}${rt.fora > 0.004 ? `<br>o lote de ${dBR(rt.foraEm)} tem ${brl(rt.fora)} de vendas de antes do recorte, fora da conta` : ""}`;
+          return `<div class="ponta" data-tone="${tone}"><div class="lbl">Banco · caiu</div><div class="val">${rt.recebido ? brl(rt.recebido) : "—"}</div><div class="sub">${sub}</div></div>`; })();
+    const taxasPonta = tab === "pix" ? "" : (() => {
+      const rt = recebTotais(recebLotes(m)); const mdr = sum(m.dias, d => d.mdr), bruto = sum(m.dias, d => d.maq);
+      const pct = x => x.toFixed(2).replace(".", ",") + "%";
+      const tot = Math.round((mdr + rt.antec + rt.aluguel)*100)/100;
+      const partes = [`MDR ${brl(mdr)}${bruto ? ` · ${pct(mdr/bruto*100)}` : ""}`];
+      if(rt.antec > 0.004) partes.push(`antecipação ${brl(rt.antec)}${rt.taxa != null ? ` · ${pct(rt.taxa)} ao dia` : ""}`);
+      // aluguel: cobrado uma vez no mês (Histórico de aluguel); pode sair do débito, do crédito ou dos dois
+      const cobr = (l.aluguel || []).filter(a => a.data >= DE && a.data <= ATE), cobrado = sum(cobr, a => a.valor);
+      const outro = tab === "credito" ? "debito" : "credito", noOutro = recebTotais(recebLotes(l.mod[outro] || {})).aluguel;
+      const resto = Math.round((cobrado - rt.aluguel - noOutro)*100)/100;
+      if(cobrado > 0.004){
+        let a = `aluguel das máquinas ${brl(cobrado)} · cobrado ${cobr.map(x => dBR(x.data)).join(" e ")}`;
+        if(rt.aluguel > 0.004 && Math.abs(rt.aluguel - cobrado) <= 0.004) a += ` · descontado do ${TABS[tab].toLowerCase()}`;
+        else if(rt.aluguel > 0.004) a += ` · ${brl(rt.aluguel)} saiu do ${TABS[tab].toLowerCase()}${noOutro > 0.004 ? `, ${brl(noOutro)} do ${TABS[outro].toLowerCase()}` : ""}`;
+        else if(noOutro > 0.004) a += ` · saiu do ${TABS[outro].toLowerCase()}`;
+        if(resto > 0.05) a += ` · ${brl(resto)} ainda sem par no extrato`;
+        partes.push(a);
+      } else if(rt.aluguel > 0.004) partes.push(`aluguel das máquinas ${brl(rt.aluguel)} · ${rt.alugEm.map(dBR).join(" e ")}`);
+      else partes.push("sem aluguel no recorte");
+      return `<div class="ponta"><div class="lbl">Taxas e aluguel</div><div class="val">${brl(tot)}</div><div class="sub">${partes.join("<br>")}</div></div>`; })();
     html += `<div class="pontas">
       <div class="ponta"><div class="lbl">PDV relatório</div><div class="val">${brl(sum(m.dias,rel))}</div><div class="sub">${sum(m.dias,trf) ? `${sinal(sum(m.dias,trf))} transf. · conciliado ${brl(pdv)}` : `${m.dias.reduce((a,d)=>a+d.pdv_qtd,0)} lançamentos`}</div></div>
       <div class="ponta" data-tone="${Math.abs(pdv-maq)>0.004?"erro":"ok"}"><div class="lbl">Maquininha</div><div class="val">${brl(maq)}</div><div class="sub">Δ máquina − PDV ${brl(Math.round((maq-pdv)*100)/100)}</div></div>
-      ${bancoPonta}
+      ${taxasPonta}${bancoPonta}
       <div class="ponta" data-tone="${aberto>TOL?"erro":"ok"}"><div class="lbl">Em aberto</div><div class="val">${brl(aberto)}</div><div class="sub">${nCasos} caso${nCasos===1?"":"s"}${nParcial?` · ${nParcial} de comanda parcial`:""}${nBanco?` · ${nBanco} PIX a mais no banco`:""}${nFech?` · ${nFech} dia${nFech===1?"":"s"} fechado${nFech===1?"":"s"} no caixa`:""}</div></div>
     </div>`;
   }
@@ -567,8 +596,10 @@ function tabela(m){
       : `<span style="color:var(--ink-muted)">—</span>`;
   const rows = m.dias.map((d,i) => {
     const t = tone(d), fds = d.dow==="sáb"||d.dow==="dom"||d.feriado;
-    const recSt = d.receb_st ? `<small class="vir" title="líquido pago em ${esc(d.pago_em||"")}">${d.receb_st === "CONCILIADO" ? "recebido ✓" : d.receb_st === "DIVERGENTE" ? "banco diverge" : d.receb_st === "AGUARDA PORTAL" ? "aguarda portal" : "aguarda extrato"}</small>` : "";
-    const fim = (pix ? `<td>${f(d.banco)}</td>` : `<td>${f(d.mdr)}</td><td>${f(d.liquido)}${recSt}</td>`) + `<td class="fech">${fech(d,i)}</td>`;
+    const pagoEm = d.pago_em ? String(d.pago_em).replace(/\d{4}-(\d{2})-(\d{2})/g, "$2/$1") : "";   // "02/10" ou "02/10, 05/10" (já vem em dd/mm)
+    const recSt = d.receb_st ? `<small class="vir" title="líquido pago em ${esc(d.pago_em||"")}">${d.receb_st === "CONCILIADO" ? `caiu ${pagoEm} ✓` : d.receb_st === "DIVERGENTE" ? `banco diverge · ${pagoEm}` : d.receb_st === "AGUARDA PORTAL" ? "aguarda portal" : `cai ${pagoEm} · aguarda extrato`}</small>` : "";
+    const mdrPct = d.mdr && d.maq ? `<small class="vir">${(d.mdr/d.maq*100).toFixed(2).replace(".", ",")}%</small>` : "";
+    const fim = (pix ? `<td>${f(d.banco)}</td>` : `<td>${f(d.mdr)}${mdrPct}</td><td>${f(d.liquido)}${recSt}</td>`) + `<td class="fech">${fech(d,i)}</td>`;
     return `<tr class="${fds?"fim":""}" data-i="${i}" data-open="false"><td class="dia"><span class="dot" data-s="${t}"></span><button type="button" data-i="${i}" aria-expanded="false">${dBR(d.data)}</button><small>${d.dow}${d.feriado?" · feriado":""}</small></td>
       <td>${d.sem_pdv?"—":d.pdv_qtd}</td><td>${d.sem_pdv?`<span style="color:var(--ink-muted)">sem relatório</span>`:brl(rel(d))}</td><td class="trf">${trf(d)?sinal(trf(d)):"—"}</td><td>${d.sem_pdv?"—":brl(d.pdv)}</td><td>${f(d.maq)}</td>
       <td class="${Math.abs(d.delta??0)>0.004 && Math.abs((d.delta??0)+virada(d))>0.004?"neg":""}">${d.delta===undefined?"—":brl(neg(d.delta))}${virada(d)!==0?`<small class="vir" title="${esc(`${d.virada_saiu?brl(d.virada_saiu)+" pagos na máquina neste dia e fechados no PDV em outro dia":""}${d.virada_saiu&&d.virada_entrou?" · ":""}${d.virada_entrou?brl(d.virada_entrou)+" fechados no PDV neste dia e pagos na máquina em outro dia":""}`)}">virada de dia ${Math.abs((d.delta??0)+virada(d))<=0.004?"✓":brl(neg(Math.round(((d.delta??0)+virada(d))*100)/100))+" além"}</small>`:""}</td>${fim}</tr>`;

@@ -87,6 +87,17 @@ def main() -> None:
         for _, q in lb[lb["Status"] == "CONCILIADO"].iterrows():
             banco_por_aut[str(q["Ref"]).replace("aut. ", "")] = (str(q["Crédito"]), str(q["Pagador"]))
     ec_de = {v: k for k, v in carrega_lojas().items()}
+    # aluguel das máquinas cobrado no mês (Histórico de aluguel do portal, um arquivo por EC): o card da loja mostra
+    # quanto foi cobrado e em que dia, ao lado do que foi descontado das liquidações
+    try:
+        from concilia_cartao_banco import ler_aluguel
+        alug = ler_aluguel(sorted(glob.glob(str(RAIZ / "entrada" / "aluguel" / "*.xlsx"))), carrega_lojas())
+    except Exception:
+        alug = {}
+    aluguel_de = {}
+    for (fil, d), cent in alug.items():
+        if de <= d <= ate:
+            aluguel_de.setdefault(fil, []).append({"data": d.isoformat(), "valor": cent / 100})
     MODK = {"PIX": "pix", "Crédito": "credito", "Débito": "debito"}
     cupL = le("concilia_cupom.xlsx", "Linhas")
     cupR = le("concilia_cupom.xlsx", "Cupons resolvidos")
@@ -387,7 +398,7 @@ def main() -> None:
                             row["pago_em"] = str(q["Pago em"]); row["receb_st"] = str(q["Status"]); row["liq_pago"] = r2(q["Líquido (R$)"])
             mods[m] = {"tem_maq": any("maq" in r for r in dias), "tem_banco": any(x["recebido"] is not None for x in receb), "dias": dias, "pendencias": sorted(pend, key=lambda q: q["data"]), "receb": receb}
 
-        lojas.append({"nome": filial, "marca": marca(filial), "ec": ec_de.get(filial), "mod": mods})
+        lojas.append({"nome": filial, "marca": marca(filial), "ec": ec_de.get(filial), "aluguel": sorted(aluguel_de.get(filial, []), key=lambda a: a["data"]), "mod": mods})
 
     dados = {"gerado_em": datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M"), "de": de.isoformat(), "ate": ate.isoformat(),
              "extrato_ate": extrato_ate.isoformat() if extrato_ate else None, "pdv_ate": pdv_ate.isoformat(), "lojas": lojas}
