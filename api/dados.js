@@ -116,7 +116,7 @@ async function semearSePreciso(cfg){
 // Registros gravados no repositório (ajustes/importar.json) entram no banco uma vez, por conteúdo do arquivo.
 // É o caminho para o Claude lançar transferências e fechamentos sem acesso direto ao banco: ele faz o push,
 // a Vercel publica, e na próxima leitura o painel importa. HSETNX: nunca sobrescreve o que já está gravado
-// (o que a Hylary fez no painel vence); "remover" apaga ids listados. Cada versão do arquivo é aplicada uma vez.
+// (o que a Hylary fez no painel vence); "atualizar" substitui; "remover" apaga ids listados. Cada versão do arquivo é aplicada uma vez.
 async function importarRepositorio(cfg){
   let imp, texto;
   try{ imp = require("../ajustes/importar.json"); texto = JSON.stringify(imp); }catch(e){ return false; }
@@ -126,6 +126,7 @@ async function importarRepositorio(cfg){
   const cmds = [];
   for(const c of COLS){
     for(const [id, doc] of Object.entries(imp[c] || {})) cmds.push(["HSETNX", KEY(c), id, JSON.stringify(doc)]);
+    for(const [id, doc] of Object.entries((imp.atualizar && imp.atualizar[c]) || {})) cmds.push(["HSET", KEY(c), id, JSON.stringify(doc)]);   // "atualizar": substitui mesmo se já existir
     for(const id of (imp.remover && imp.remover[c]) || []) cmds.push(["HDEL", KEY(c), id]);
   }
   cmds.push(["SET", chave, new Date().toISOString()], ["INCR", "painel:ver"]);
