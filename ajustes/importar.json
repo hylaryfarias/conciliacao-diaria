@@ -8791,6 +8791,22 @@
    "justificativa": "Dia fechado com falta de R$ 81,59 no crédito: cupom 13690 (13:34, R$ 89,09, cartão crédito manual, itens de delivery e das mesas 174 e 233) sem nenhuma transação correspondente na máquina Sicredi, em nenhuma modalidade; e crédito de R$ 7,50 às 14:39 sem cupom. Falta assumida.",
    "criado_em": "2026-10-26T15:00:00.000Z",
    "por": null
+  },
+  "ISAIAS-01---MARINGA_credito_2026-10-01": {
+   "loja": "ISAIAS 01 - MARINGA",
+   "mod": "credito",
+   "data": "2026-10-01",
+   "aberto": 40.4,
+   "caixa": 40.4,
+   "pdv": 2462.12,
+   "pdv_rel": 2462.12,
+   "transf": 0,
+   "maq": 2502.52,
+   "delta": 40.4,
+   "motivo": "sobra",
+   "justificativa": "Dia fechado com sobra de R$ 40,40 na máquina: cupons 42817 (R$ 160,00, máquina R$ 176,00) e 42818 (R$ 244,00, máquina R$ 268,40) cobrados com a taxa de serviço e baixados sem ela, caso já tratado com o RH e incluído na planilha da rescisão.",
+   "criado_em": "2026-10-26T15:20:00.000Z",
+   "por": null
   }
  },
  "vistos": {},
