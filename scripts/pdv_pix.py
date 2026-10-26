@@ -141,7 +141,7 @@ def com_base_mesa(bruto: pd.DataFrame, analitico: pd.DataFrame | None = None) ->
 
 
 def pix_do_pdv(df: pd.DataFrame) -> pd.DataFrame:
-    pix = df[df["Desc. pagam."].str.upper().isin(FORMAS_PIX)].copy()
+    pix = df[df["Desc. pagam."].str.upper().isin(FORMAS_PIX) & (df["cent"] > 0)].copy()   # cupom de R$ 0,00 não é pendência
     cols = ["Filial", "Caixa", "Data", "Hora", "Cupom", "Desc. pagam.", "Vl. pagamento", "cent", "Chave"]
     cols += [c for c in ("dt_pdv", "Dia movimento", "cent_mesa") if c in pix.columns]
     return pix[cols].sort_values(["Filial", "Data", "Hora", "Cupom"]).reset_index(drop=True)

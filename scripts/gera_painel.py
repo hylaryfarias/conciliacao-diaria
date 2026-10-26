@@ -74,6 +74,9 @@ def main() -> None:
     l1 = le("concilia_pix_2*.xlsx", "PDV x maquininha")              # linhas PIX, lado PDV
     lb = le("concilia_pix_banco_*.xlsx", "Venda x banco")             # linhas PIX, lado banco
     lc = {m: le(f"concilia_{m}_2*.xlsx", "Maquininha x PDV") for m in ("credito", "debito")}
+    # etapa 2 do cartão: o que a Sicredi devia pagar × o que caiu na conta (concilia_cartao_banco.py)
+    rec_l = le("concilia_cartao_banco_*.xlsx", "Recebimentos", col_data="Pagamento")
+    rec_v = le("concilia_cartao_banco_*.xlsx", "Por dia de venda", col_data="Venda")
     # pendências só do período do painel
     no_per = lambda df: df[(df["Data"] >= de) & (df["Data"] <= ate)] if len(df) else df
     e1p, e1m, e2p, e2s = no_per(e1p), no_per(e1m), no_per(e2p), no_per(e2s)
@@ -364,7 +367,24 @@ def main() -> None:
             for row in dias:
                 pend = aplica_comanda(filial, m, pd.Timestamp(row["data"]).date(), row, pend)
             pend = aplica_viradas(filial, m, dias, pend)
-            mods[m] = {"tem_maq": any("maq" in r for r in dias), "tem_banco": False, "dias": dias, "pendencias": sorted(pend, key=lambda q: q["data"])}
+            # recebimentos no banco desta loja e produto
+            nome_prod = "Crédito" if m == "credito" else "Débito"
+            receb = []
+            if len(rec_l):
+                for _, q in rec_l[(rec_l["Filial"] == filial) & (rec_l["Produto"] == nome_prod)].sort_values("Pagamento").iterrows():
+                    receb.append({"data": q["Pagamento"].isoformat(), "vendas_de": [x.strip() for x in str(q["Vendas de"]).split(",") if x.strip() and x.strip() != "nan"],
+                                  "qtd": int(q["Vendas (qtd)"]) if pd.notna(q["Vendas (qtd)"]) else 0, "bruto": r2(q["Bruto (R$)"]), "mdr": r2(q["MDR (R$)"]), "liq": r2(q["Líquido previsto (R$)"]),
+                                  "antec": r2(q["Antecipação (R$)"]), "taxa": (float(q["Taxa antecipação (%)"]) if pd.notna(q["Taxa antecipação (%)"]) else None),
+                                  "esperado": (r2(q["Esperado na conta (R$)"]) if pd.notna(q["Esperado na conta (R$)"]) else None),
+                                  "recebido": (r2(q["Recebido (R$)"]) if pd.notna(q["Recebido (R$)"]) else None),
+                                  "delta": r2(q["Δ recebido − esperado (R$)"]) if pd.notna(q["Δ recebido − esperado (R$)"]) else 0.0,
+                                  "status": str(q["Status"]), "detalhe": "" if pd.isna(q["Detalhe"]) else str(q["Detalhe"])})
+            if len(rec_v):
+                for _, q in rec_v[(rec_v["Filial"] == filial) & (rec_v["Produto"] == nome_prod)].iterrows():
+                    for row in dias:
+                        if row["data"] == q["Venda"].isoformat():
+                            row["pago_em"] = str(q["Pago em"]); row["receb_st"] = str(q["Status"]); row["liq_pago"] = r2(q["Líquido (R$)"])
+            mods[m] = {"tem_maq": any("maq" in r for r in dias), "tem_banco": any(x["recebido"] is not None for x in receb), "dias": dias, "pendencias": sorted(pend, key=lambda q: q["data"]), "receb": receb}
 
         lojas.append({"nome": filial, "marca": marca(filial), "ec": ec_de.get(filial), "mod": mods})
 

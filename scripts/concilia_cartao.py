@@ -96,7 +96,7 @@ def casa(maq: pd.DataFrame, pdv: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
 
 def roda(mod: str, bruto: pd.DataFrame, portais: list[str], lojas: dict) -> None:
     cfg = MODAL[mod]
-    pdv_all = bruto[bruto["Desc. pagam."].str.upper().isin(cfg["pdv"])].copy()
+    pdv_all = bruto[bruto["Desc. pagam."].str.upper().isin(cfg["pdv"]) & (bruto["cent"] > 0)].copy()   # cupom de R$ 0,00 (refeição de funcionário, cortesia) não é pendência
     todas, sobras, resumo = [], [], []
     for (filial, ec), df in ler_portais(portais, lojas).items():
         maq = df[df["Modalidade"].str.startswith(cfg["maq"]) & (df["Status"].str.upper() == "APROVADA")]
