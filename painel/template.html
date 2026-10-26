@@ -444,13 +444,15 @@ function fechKpis(){
   const k = [
     ["PDV nos dias fechados", brl(t.pdv), resumo, ""],
     ["Máquina nos dias fechados", brl(t.maq), "o que a maquininha registrou nesses dias", ""],
-    (() => {   // banco: só o PIX tem a ponta do extrato cruzada dia a dia (crédito e débito entram na etapa 2)
+    (() => {   // banco: PIX dos dias fechados (extrato cruzado dia a dia) + crédito e débito do recorte (lotes de recebimento da etapa 2)
       const pixF = lista.filter(f => f.mod === "pix");
       const dia = f => { const l = D.lojas.find(x => x.nome === f.loja); return l && l.mod.pix.dias.find(d => d.data === f.data); };
       const banco = r2(pixF.reduce((a,f) => a + ((dia(f) || {}).banco ?? 0), 0)), maqPix = r2(pixF.reduce((a,f) => a + maqDe(f), 0)), ag = r2(pixF.reduce((a,f) => a + ((dia(f) || {}).aguarda ?? 0), 0));
-      const dif = r2(banco - maqPix);
-      const semV = bancoLista().filter(p => p.grupo === "sem venda"), extra = semV.length ? ` · no período entraram também ${brl(somaV(semV))} em ${semV.length} PIX sem venda identificada` : "";
-      return ["Caiu no banco", pixF.length ? brl(banco) : "—", (!pixF.length ? "nenhum dia de PIX fechado" : Math.abs(dif) <= 0.004 ? "PIX · igual à máquina" : `PIX · ${sinal(dif)} contra a máquina${ag > 0.004 ? ` · ${brl(ag)} aguarda extrato` : ""}`) + extra, pixF.length && Math.abs(dif) > 0.004 && ag <= 0.004 ? "erro" : pixF.length ? "ok" : ""];
+      const rc = recebTotais(D.lojas.flatMap(l => recebLotes(l.mod.credito || {}))), rd = recebTotais(D.lojas.flatMap(l => recebLotes(l.mod.debito || {})));
+      const caiu = r2(banco + rc.recebido + rd.recebido), dif = r2((banco - maqPix) + rc.delta + rd.delta), aCair = r2(ag + rc.aReceber + rd.aReceber);
+      const partes = [`PIX ${brl(banco)}`, `crédito ${brl(rc.recebido)}`, `débito ${brl(rd.recebido)}`];
+      const sub = partes.join(" · ") + (Math.abs(dif) > 0.004 ? ` · Δ ${sinalS(dif)} contra o esperado` : " · bate com o esperado") + (aCair > 0.004 ? ` · ${brl(aCair)} a cair` : "");
+      return ["Caiu no banco", caiu ? brl(caiu) : "—", sub, Math.abs(dif) > TOL ? "erro" : caiu ? "ok" : ""];
     })(),
     ["Sobra na máquina", brl(t.sobra), "a máquina recebeu mais do que o PDV registrou", t.sobra > TOL ? "pendente" : "ok"],
     ["Falta no caixa", brl(Math.abs(t.falta)), "o PDV registrou mais do que a máquina recebeu", t.falta < -TOL ? "erro" : "ok"],
