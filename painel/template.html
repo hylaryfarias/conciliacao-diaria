@@ -528,7 +528,6 @@ function detalhe(){
     </div>`;
   }
   html += tabela(m);
-  if(tab !== "pix") html += tabelaReceb(m);
   if(m.pendencias.length){
     const podeAjustar = !!dbRef && podeEscrever !== false;
     html += `<h2>Pendências · ${m.pendencias.length}</h2><ul class="pend" id="pend">` + m.pendencias.map((p,i) => {
