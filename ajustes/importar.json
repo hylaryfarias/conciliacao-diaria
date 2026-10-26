@@ -13146,15 +13146,48 @@
    "justificativa": "Sem movimento de débito: a MAPOLI não abre de fim de semana (domingo). Nenhum lançamento no PDV. Dia fechado.",
    "criado_em": "2026-10-26T20:56:36Z",
    "por": null
+  },
+  "BIGGS-01---MARINGA_pix_2026-10-18": {
+   "loja": "BIGGS 01 - MARINGA",
+   "mod": "pix",
+   "data": "2026-10-18",
+   "aberto": 0,
+   "caixa": 0,
+   "pdv": 1699.26,
+   "pdv_rel": 1699.26,
+   "transf": 0,
+   "maq": 1699.26,
+   "delta": 0.0,
+   "motivo": "bateu",
+   "justificativa": "Conferido no fechamento de 18/10: PDV e maquininha batem no PIX, cupom a cupom, e o banco creditou o valor integral em 19/10. As transferências dos cupons 63193 (R$ 59,80) e 63206 (R$ 39,90) para crédito, feitas em 20/10 antes de o relatório de PIX da TEF cobrir o dia, foram desfeitas: os dois têm PIX na máquina no mesmo minuto e com o mesmo valor (00:49 e 01:27), e as vendas em crédito de R$ 59,80 e R$ 39,90 pertencem aos cupons 79965 e 80242. Dia fechado.",
+   "criado_em": "2026-10-26T20:59:23Z",
+   "por": null
+  },
+  "BIGGS-01---MARINGA_credito_2026-10-18": {
+   "loja": "BIGGS 01 - MARINGA",
+   "mod": "credito",
+   "data": "2026-10-18",
+   "aberto": 0,
+   "caixa": 0,
+   "pdv": 3845.83,
+   "pdv_rel": 3845.83,
+   "transf": 0,
+   "maq": 3845.83,
+   "delta": 0.0,
+   "motivo": "bateu",
+   "justificativa": "Conferido no fechamento de 18/10: PDV e maquininha batem no crédito, cupom a cupom, depois de desfeitas as transferências dos cupons 63193 e 63206 (que são PIX, com par na máquina). Dia fechado.",
+   "criado_em": "2026-10-26T20:59:23Z",
+   "por": null
   }
  },
  "vistos": {},
  "remover": {
   "ajustes": [
+   "BIGGS-01---MARINGA_2026-10-18_63193_pix_255266",
+   "BIGGS-01---MARINGA_2026-10-18_63206_pix_6DANSV",
    "BIGGS-07---JAMIL-E-ACAI_2026-10-02_95607_pix_067851"
   ],
   "fechamentos": [
-   "BIGGS-01---MARINGA_pix_2026-10-18",
    "BIGGS-02---SANTOS-DUMONT_credito_2026-10-05",
    "BIGGS-02---SANTOS-DUMONT_credito_2026-10-06",
    "BIGGS-02---SANTOS-DUMONT_credito_2026-10-11",
