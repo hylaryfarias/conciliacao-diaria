@@ -8890,6 +8890,38 @@
    "justificativa": "Conferido no fechamento de 01/10: PDV e maquininha batem no débito, cupom a cupom. Dia fechado. Inclui a transferência de R$ 18,00 do cupom 37095 (vale → débito).",
    "criado_em": "2026-10-26T16:30:00.000Z",
    "por": null
+  },
+  "ISAIAS-01---MARINGA_debito_2026-10-01": {
+   "loja": "ISAIAS 01 - MARINGA",
+   "mod": "debito",
+   "data": "2026-10-01",
+   "aberto": 8.8,
+   "caixa": 8.8,
+   "pdv": 1517.2,
+   "pdv_rel": 1517.2,
+   "transf": 0.0,
+   "maq": 1526.0,
+   "delta": 8.8,
+   "motivo": "sobra",
+   "justificativa": "Dia fechado com sobra de R$ 8,80 na máquina: cupom 42823 (R$ 88,00, máquina R$ 96,80) cobrado com a taxa de serviço e baixado sem ela.",
+   "criado_em": "2026-10-26T17:00:00.000Z",
+   "por": null
+  },
+  "BIGGS-07---JAMIL-E-ACAI_debito_2026-10-01": {
+   "loja": "BIGGS 07 - JAMIL E ACAI",
+   "mod": "debito",
+   "data": "2026-10-01",
+   "aberto": 1.15,
+   "caixa": 1.15,
+   "pdv": 5238.7,
+   "pdv_rel": 5320.85,
+   "transf": -82.15,
+   "maq": 5239.85,
+   "delta": 1.15,
+   "motivo": "sobra",
+   "justificativa": "Dia fechado com sobra de R$ 1,15 na máquina, líquido do dia depois das transferências de forma: duas vendas em débito sem cupom (R$ 27,69 às 13:46 e R$ 33,15 às 23:49) e um cupom de delivery sem cartão (106581, R$ 40,00), compensados entre si.",
+   "criado_em": "2026-10-26T17:00:00.000Z",
+   "por": null
   }
  },
  "vistos": {},
