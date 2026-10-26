@@ -454,7 +454,6 @@ function fechKpis(){
     })(),
     ["Sobra na máquina", brl(t.sobra), "a máquina recebeu mais do que o PDV registrou", t.sobra > TOL ? "pendente" : "ok"],
     ["Falta no caixa", brl(Math.abs(t.falta)), "o PDV registrou mais do que a máquina recebeu", t.falta < -TOL ? "erro" : "ok"],
-    ["Líquido", brlS(t.liq), "sobra − falta nos dias fechados", ""],
   ];
   const bl = bancoLista(), semVenda = bl.filter(p => p.grupo === "sem venda"), venda = bl.filter(p => p.grupo === "venda");
   k.push(["PIX na conta sem venda", brl(somaV(semVenda)), `${semVenda.length} PIX${venda.length ? ` · mais ${brl(somaV(venda))} em ${venda.length} PIX de vendas que a máquina não mostra` : ""}`, somaV(semVenda) > TOL ? "pendente" : "ok"]);
