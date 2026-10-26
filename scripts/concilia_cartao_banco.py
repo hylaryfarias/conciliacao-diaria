@@ -25,6 +25,7 @@ Status por lote (loja × data de pagamento × produto):
 """
 import glob
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -125,7 +126,7 @@ def ler_recebimentos(caminhos, lojas: dict) -> dict:
     {"comp": {filial: {(data, prod): {(tipo, band): cent}}}, "antec": {filial: {(data, band): cent}}, "cobranca": {filial: {data: cent}}}, com prod também
     "voucher" quando o abate saiu de um vale (fora da conciliação de cartão, mas conta no aluguel do mês)."""
     from python_calamine import CalamineWorkbook
-    comp_out, antec_out, cobr_out, vendas_out = {}, {}, {}, {}
+    comp_out, antec_out, cobr_out, vendas_out, cobre_out, liq_out = {}, {}, {}, {}, {}, {}
     for arq in caminhos:
         wb = CalamineWorkbook.from_path(arq)
         rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
@@ -135,6 +136,13 @@ def ler_recebimentos(caminhos, lojas: dict) -> dict:
             continue
         t = pd.DataFrame(rows[h + 1:], columns=rows[h])
         t = t[t["Data de pagamento"].astype(str).str.match(r"\d\d/\d\d/\d{4}")].copy()
+        # período que o relatório cobre ("Período selecionado: 01/10/2026 até 07/10/2026"): fora dele o aluguel
+        # continua sendo repartido pela regra, porque o abate não está no relatório
+        per = re.findall(r"(\d\d/\d\d/\d{4})", " ".join(str(c) for r in rows[:h] for c in r if c))
+        if len(per) >= 2:
+            de_r, ate_r = pd.to_datetime(per[0], dayfirst=True).date(), pd.to_datetime(per[1], dayfirst=True).date()
+            for filial in set(t["Número do estabelecimento"].astype(str).str.strip().map(lojas).dropna()):
+                cobre_out.setdefault(filial, []).append((de_r, ate_r))
         for c in ("Valor líquido", "Desconto antecipação"):
             t[c] = (pd.to_numeric(t[c], errors="coerce").fillna(0) * 100).round().astype(int)
         t["d"] = pd.to_datetime(t["Data de pagamento"], dayfirst=True).dt.date
@@ -159,6 +167,11 @@ def ler_recebimentos(caminhos, lojas: dict) -> dict:
             cols = ["d", "prod", "band", "dt", "Data", "pago_em", "pagto", "bruto_cent", "mdr_cent", "liq_cent", "Cód. de autorização"]
             for filial, g in vend.groupby("filial"):
                 vendas_out[filial] = pd.concat([vendas_out[filial], g[cols]], ignore_index=True) if filial in vendas_out else g[cols].reset_index(drop=True)
+        # valor líquido exato por (dia de pagamento, produto, bandeira): é o que compõe a linha do extrato, já com
+        # antecipação, MDR e cancelamentos do jeito que a Sicredi calcula (inclusive vendas canceladas, negativas)
+        todas = t[~t["comp"] & t["filial"].notna() & t["Produto"].isin(PROD)]
+        for (filial, d, prod, band), g in todas.groupby(["filial", "d", todas["Produto"].map(PROD), "band"]):
+            liq_out.setdefault(filial, {})[(d, prod, band)] = liq_out.get(filial, {}).get((d, prod, band), 0) + int(g["Valor líquido"].sum())
         vendas_cred = t[~t["comp"] & t["filial"].notna() & (t["Produto"].map(PROD) == "credito")]
         for (filial, d, band), g in vendas_cred.groupby(["filial", "d", "band"]):
             antec_out.setdefault(filial, {})[(d, band)] = int(g["Desconto antecipação"].sum())
@@ -174,15 +187,15 @@ def ler_recebimentos(caminhos, lojas: dict) -> dict:
             tipo = "ANTEC" if str(vendas.iloc[0]["Tipo de pagamento"]).startswith("Antecipa") else ("DEBITO" if prod == "debito" else "CREDITO")
             chave = comp_out.setdefault(filial, {}).setdefault((vendas.iloc[0]["d"], prod), {})
             chave[(tipo, band)] = chave.get((tipo, band), 0) + int(-comp["Valor líquido"].sum())
-    return {"comp": comp_out, "antec": antec_out, "cobranca": cobr_out, "vendas": vendas_out}
+    return {"comp": comp_out, "antec": antec_out, "cobranca": cobr_out, "vendas": vendas_out, "cobre": cobre_out, "liq": liq_out}
 
 
-def com_compensacao(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_ate, comp: dict, antec_exata=None) -> dict:
+def com_compensacao(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_ate, comp: dict, antec_exata=None, liq_exato=None) -> dict:
     """Lote em que a Sicredi abateu aluguel da liquidação: devolve ao extrato o que foi abatido (por bandeira), concilia
     como se tudo tivesse caído, e depois registra o aluguel e o que de fato chegou."""
     extra = pd.DataFrame([{"Loja": filial, "Data": d, "tipo": tipo, "band": band, "prod": prod, "cent": c, "Descrição": "aluguel compensado", "Valor": c / 100} for (tipo, band), c in comp.items()])
     xx = pd.concat([x, extra], ignore_index=True) if len(x) else extra
-    out = lote(filial, d, prod, v, xx, extrato_ate, antec_exata=antec_exata)
+    out = lote(filial, d, prod, v, xx, extrato_ate, antec_exata=antec_exata, liq_exato=liq_exato)
     total = sum(comp.values())
     if out["Esperado na conta (R$)"] is not None and out["Recebido (R$)"] is not None:
         out["Aluguel (R$)"] = total / 100
@@ -193,7 +206,7 @@ def com_compensacao(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame,
     return out
 
 
-def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_ate, aluguel_cent: int = 0, antec_exata=None) -> dict:
+def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_ate, aluguel_cent: int = 0, antec_exata=None, liq_exato=None) -> dict:
     """Um lote = loja × data de pagamento × produto. v: vendas pagas nesse dia; x: linhas do extrato desse dia.
     antec_exata: {band: centavos} de desconto de antecipação do relatório de recebimentos, quando existe; sem ele a
     taxa é deduzida do extrato."""
@@ -218,10 +231,12 @@ def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_at
         out.update({"Status": "SEM CRÉDITO", "Δ recebido − esperado (R$)": -liq / 100, "Detalhe": "o portal diz que pagou e não há crédito Sicredi nesse dia no extrato"})
         return out
     por_band = []; falta_band = 0
+    exato = liq_exato or {}
     if prod == "debito":
-        esperado = liq
+        esperado = 0
         for b, g in v.groupby("band"):
-            e_b = int(x[x["band"] == b]["cent"].sum()); l_b = int(g["liq_cent"].sum())
+            e_b = int(x[x["band"] == b]["cent"].sum()); l_b = exato.get(b, int(g["liq_cent"].sum()))   # relatório de recebimentos: valor exato
+            esperado += l_b
             falta_band += max(0, l_b - e_b)
             if abs(e_b - l_b) > tol(l_b):
                 por_band.append(f"{b}: previsto R$ {l_b/100:.2f}, recebido R$ {e_b/100:.2f} (Δ {(e_b-l_b)/100:+.2f})")
@@ -244,7 +259,7 @@ def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_at
         for b, g in v.groupby("band"):
             l_b = int(g["liq_cent"].sum()); cr_b = int(x[(x["band"] == b) & (x["tipo"] != "ANTEC")]["cent"].sum()); an_b = int(x[(x["band"] == b) & (x["tipo"] == "ANTEC")]["cent"].sum())
             base = max(0, l_b - cr_b)
-            esp_b = (l_b - exata[b]) if b in exata else cr_b + int(round(base * (1 - taxa)))   # relatório de recebimentos: desconto exato por bandeira
+            esp_b = exato[b] if b in exato else (l_b - exata[b]) if b in exata else cr_b + int(round(base * (1 - taxa)))   # relatório de recebimentos: valor exato por bandeira
             esperado += esp_b
             falta_band += max(0, esp_b - (cr_b + an_b))
             if abs((cr_b + an_b) - esp_b) > tol(l_b):
@@ -345,6 +360,15 @@ def main() -> None:
         # por isso o recorte aqui é por calendário; o dia de movimento (Data) fica só para ligar ao painel
         v["cal"] = pd.to_datetime(v["dt"]).dt.date
         v = v[(v["cal"] >= de) & (v["cal"] <= ate)]
+        # relatório de recebimentos: a data real de pagamento de cada venda (por autorização) vale mais que a regra
+        # D+1 útil usada quando o Histórico foi exportado antes de a Sicredi registrar o pagamento
+        rv = recebimentos["vendas"].get(filial)
+        if rv is not None and len(v):
+            real = dict(zip(rv["Cód. de autorização"].astype(str).str.strip() + "|" + rv["prod"], rv["d"]))
+            chave = v["Cód. de autorização"].astype(str).str.strip() + "|" + v["prod"]
+            achou = chave.map(real)
+            troca = v["pago_em"].isna() & achou.notna()
+            v.loc[troca, "pagto"] = achou[troca]; v.loc[troca, "pago_em"] = achou[troca]
         xl = ex[ex["Loja"] == filial]
         datas = sorted(set(v["pagto"].dropna()) | set(xl["Data"]))
         for d in datas:
@@ -363,8 +387,9 @@ def main() -> None:
                     continue
                 comp = recebimentos["comp"].get(filial, {}).get((d, prod))
                 ant = {b: c for (dd, b), c in recebimentos["antec"].get(filial, {}).items() if dd == d} if prod == "credito" and filial in recebimentos["antec"] else None
-                do_dia.append(com_compensacao(filial, d, prod, vv, xx, extrato_ate, comp, ant) if comp else lote(filial, d, prod, vv, xx, extrato_ate, antec_exata=ant))
-            if filial not in recebimentos["comp"] and filial not in recebimentos["antec"]:   # com o relatório de recebimentos o aluguel já veio abatido lote a lote
+                lq = {b: c for (dd, p, b), c in recebimentos["liq"].get(filial, {}).items() if dd == d and p == prod} or None
+                do_dia.append(com_compensacao(filial, d, prod, vv, xx, extrato_ate, comp, ant, lq) if comp else lote(filial, d, prod, vv, xx, extrato_ate, antec_exata=ant, liq_exato=lq))
+            if not any(a <= d <= b for a, b in recebimentos["cobre"].get(filial, [])):   # dia coberto pelo relatório de recebimentos: o aluguel já veio abatido lote a lote
                 aplica_aluguel(do_dia, aluguel.get((filial, d), 0))
             lotes.extend(do_dia)
         # por dia de venda: para onde foi o líquido de cada dia e se chegou
