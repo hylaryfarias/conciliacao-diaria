@@ -534,7 +534,7 @@ function detalhe(){
       const pct = x => x.toFixed(2).replace(".", ",") + "%";
       const tot = Math.round((mdr + rt.antec + rt.aluguel)*100)/100;
       const partes = [`MDR ${brl(mdr)}${bruto ? ` · ${pct(mdr/bruto*100)}` : ""}`];
-      if(rt.antec > 0.004) partes.push(`antecipação ${brl(rt.antec)}${rt.taxa != null ? ` · ${pct(rt.taxa)} ao dia` : ""}`);
+      if(rt.antec > 0.004) partes.push(`antecipação ${brl(rt.antec)}${rt.taxa != null ? ` · ${pct(rt.taxa)} do líquido` : ""}`);
       // aluguel: cobrado uma vez no mês (Histórico de aluguel); pode sair do débito, do crédito ou dos dois
       const cobr = (l.aluguel || []).filter(a => a.data >= DE && a.data <= ATE), cobrado = sum(cobr, a => a.valor);
       const outro = tab === "credito" ? "debito" : "credito", noOutro = recebTotais(recebLotes(l.mod[outro] || {})).aluguel;
