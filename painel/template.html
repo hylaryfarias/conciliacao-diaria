@@ -296,7 +296,7 @@ function tabs(){
     const nErro = st.filter(x=>x.s==="erro").length, nOk = st.filter(x=>x.s==="ok").length;
     const badge = nErro ? `<span class="n" data-s="erro">${nErro} em aberto</span>` : nOk ? `<span class="n" data-s="ok">${nOk} ok</span>` : "";
     return `<button class="tab" role="tab" id="tab-${k}" data-tab="${k}" aria-selected="${k===tab}">${v}${badge}</button>`;
-  }).join("") + (() => { const n = fechLista().length; return `<button class="tab" role="tab" id="tab-fech" data-tab="fech" aria-selected="${tab==="fech"}">Fechamentos${n?`<span class="n">${n}</span>`:""}</button>`; })() + `<label class="ate">de <input type="date" id="de" value="${DE}" min="${D0.de}" max="${ATE}"> até <input type="date" id="ate" value="${ATE}" min="${DE}" max="${D0.ate}">${(ATE < D0.ate || DE > D0.de) ? `<button type="button" id="ate-tudo">todo o período</button>` : ""}</label>`;
+  }).join("") + `<button class="tab" role="tab" id="tab-fech" data-tab="fech" aria-selected="${tab==="fech"}">Fechamentos</button>` + `<label class="ate">de <input type="date" id="de" value="${DE}" min="${D0.de}" max="${ATE}"> até <input type="date" id="ate" value="${ATE}" min="${DE}" max="${D0.ate}">${(ATE < D0.ate || DE > D0.de) ? `<button type="button" id="ate-tudo">todo o período</button>` : ""}</label>`;
   document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => { tab = b.dataset.tab; try{localStorage.setItem("tab",tab)}catch(e){} render(); }));
   const muda = (de, ate) => {
     if(!ate || ate < D0.de || ate > D0.ate) ate = D0.ate;
@@ -454,6 +454,7 @@ function fechKpis(){
     })(),
     ["Sobra na máquina", brl(t.sobra), "a máquina recebeu mais do que o PDV registrou", t.sobra > TOL ? "pendente" : "ok"],
     ["Falta no caixa", brl(Math.abs(t.falta)), "o PDV registrou mais do que a máquina recebeu", t.falta < -TOL ? "erro" : "ok"],
+    ["Líquido", brlS(t.liq), "sobra − falta nos dias fechados", ""],
   ];
   const bl = bancoLista(), semVenda = bl.filter(p => p.grupo === "sem venda"), venda = bl.filter(p => p.grupo === "venda");
   k.push(["PIX na conta sem venda", brl(somaV(semVenda)), `${semVenda.length} PIX${venda.length ? ` · mais ${brl(somaV(venda))} em ${venda.length} PIX de vendas que a máquina não mostra` : ""}`, somaV(semVenda) > TOL ? "pendente" : "ok"]);
