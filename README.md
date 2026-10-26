@@ -167,6 +167,23 @@ ajustes, fechamentos e vistos listados ali entram no banco na primeira leitura d
 deploy (cada versão do arquivo é aplicada uma vez; nunca sobrescreve o que já está gravado;
 `remover` apaga ids). Depois de importado, o conteúdo pode ser substituído pelo lote seguinte.
 
+## Cartão · etapa 2: o que a Sicredi devia pagar × o que caiu na conta
+
+```bash
+python3 scripts/concilia_cartao_banco.py "entrada/extrato_todas_*.xlsx" entrada/portal/*detalhado*.xlsx --de 2026-10-01 --ate 2026-10-18 --aluguel "entrada/aluguel/*.xlsx"
+```
+
+Chave: (loja, data de pagamento, produto, bandeira). O portal informa, venda a venda, o líquido
+(bruto − MDR) e a data efetiva do pagamento (sem ela, D+1 útil da data calendário); o extrato traz
+o crédito já separado nesse eixo (`SICREDI DEBITO VISA`, `SICREDI ANTEC MASTER`, `SICREDI CREDITO ELO`).
+Débito bate centavo a centavo. Crédito desconta a antecipação automática, cuja taxa muda por dia e sai do
+próprio extrato (as bandeiras concordam entre si). Parte da ELO cai fora da antecipação, em D+2, pelo
+líquido exato. O aluguel das máquinas é descontado da liquidação do dia da cobrança: o Histórico de
+aluguel do portal (um arquivo por EC, `entrada/aluguel/aluguel_<EC>_<AAAA-MM>.xlsx`) entra no cálculo.
+Status por lote: CONCILIADO, DIVERGENTE, SEM CRÉDITO, AGUARDA EXTRATO, AGUARDA PORTAL (venda ainda sem
+data efetiva no Histórico exportado; reexportar resolve), VENDA ANTES DO PERÍODO. Saída em
+`saida/concilia_cartao_banco_<de>_a_<ate>.xlsx`; o painel lê as abas Recebimentos e Por dia de venda.
+
 ## Taxa de serviço sem o relatório por forma de pagamento
 
 `scripts/isaias_taxa.py --loja "ISAIAS 01 - MARINGA" --de 2026-10-01 --ate 2026-10-20` cruza o relatório de

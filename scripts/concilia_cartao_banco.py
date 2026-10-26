@@ -2,7 +2,7 @@
 """Etapa 2 · cartão: o que a Sicredi devia pagar × o que caiu na conta.
 
 Uso:
-    python3 scripts/concilia_cartao_banco.py <extrato.xlsx[,...]> <portal1.xlsx> [portal2.xlsx ...] --de AAAA-MM-DD --ate AAAA-MM-DD
+    python3 scripts/concilia_cartao_banco.py <extrato.xlsx[,...]> <portal1.xlsx> [portal2.xlsx ...] --de AAAA-MM-DD --ate AAAA-MM-DD [--aluguel "entrada/aluguel/*.xlsx"]
 
 A chave é (loja, data de pagamento, produto, bandeira). O portal Sicredi informa, venda a venda, o
 líquido (bruto − MDR) e a data efetiva do pagamento; o extrato traz o crédito já separado nesse eixo:
@@ -92,7 +92,31 @@ def extrato_cartao(caminho: str, filiais) -> pd.DataFrame:
     return ex[ex["Loja"].isin(filiais)].reset_index(drop=True)
 
 
-def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_ate) -> dict:
+def ler_aluguel(caminhos, lojas: dict) -> dict:
+    """Histórico de aluguel do portal Sicredi (um arquivo por EC): a Sicredi desconta o aluguel das máquinas da
+    liquidação do dia 'Data efetiva da cobrança' (medido: BIGGS 01, 02/10, R$ 483,00 a menos no débito Master).
+    Devolve {(filial, data): centavos}."""
+    from python_calamine import CalamineWorkbook
+    out = {}
+    for arq in caminhos:
+        wb = CalamineWorkbook.from_path(arq)
+        rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
+        try:
+            h = next(i for i, r in enumerate(rows) if "Valor do aluguel" in r)
+        except StopIteration:
+            continue
+        t = pd.DataFrame(rows[h + 1:], columns=rows[h])
+        t = t[t["Status"].astype(str).str.upper().str.startswith("DEBIT")]
+        for _, r in t.iterrows():
+            filial = lojas.get(str(r["Estabelecimento"]).strip())
+            if not filial:
+                continue
+            d = pd.to_datetime(r["Data efetiva da cobrança"], dayfirst=True).date()
+            out[(filial, d)] = out.get((filial, d), 0) + int(round(abs(float(r["Valor do aluguel"])) * 100))
+    return out
+
+
+def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_ate, aluguel_cent: int = 0) -> dict:
     """Um lote = loja × data de pagamento × produto. v: vendas pagas nesse dia; x: linhas do extrato desse dia."""
     liq = int(v["liq_cent"].sum()); bruto = int(v["bruto_cent"].sum()); mdr = int(v["mdr_cent"].sum())
     antec = int(x[x["tipo"] == "ANTEC"]["cent"].sum()); normal = int(x[x["tipo"] != "ANTEC"]["cent"].sum())
@@ -102,7 +126,7 @@ def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_at
            "Vendas de": ", ".join(sorted({str(s) for s in v["Data"]})) if len(v) else "", "Sem data efetiva (R$)": sem_efet / 100, "Vendas sem data efetiva (qtd)": int(v["pago_em"].isna().sum()) if len(v) else 0,
            "Bruto (R$)": bruto / 100, "MDR (R$)": mdr / 100, "Líquido previsto (R$)": liq / 100,
            "Antecipação (R$)": 0.0, "Taxa antecipação (%)": None, "Esperado na conta (R$)": liq / 100,
-           "Recebido (R$)": recebido / 100, "Δ recebido − esperado (R$)": 0.0, "Status": "", "Detalhe": ""}
+           "Aluguel (R$)": aluguel_cent / 100, "Recebido (R$)": recebido / 100, "Δ recebido − esperado (R$)": 0.0, "Status": "", "Detalhe": ""}
     if not len(v):
         out.update({"Status": "VENDA ANTES DO PERÍODO" if d <= extrato_ate else "AGUARDA EXTRATO", "Esperado na conta (R$)": None,
                     "Detalhe": "crédito no extrato sem venda no Histórico lido (vendas anteriores ao período)"})
@@ -145,6 +169,9 @@ def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_at
             por_band.append(f"{b}: recebido R$ {int(x[x['band']==b]['cent'].sum())/100:.2f} sem venda prevista")
         out["Antecipação (R$)"] = (liq - esperado) / 100
         out["Taxa antecipação (%)"] = round(taxa * 100, 4)
+    if aluguel_cent:
+        esperado -= aluguel_cent
+        por_band = [p for p in por_band if not (prod == "debito" and p.startswith("MASTER"))]   # o aluguel sai do débito Master; a diferença por bandeira é o próprio aluguel
     out["Esperado na conta (R$)"] = esperado / 100
     out["Δ recebido − esperado (R$)"] = (recebido - esperado) / 100
     fecha = abs(recebido - esperado) <= tol(esperado)
@@ -168,8 +195,12 @@ def main() -> None:
     de = pd.Timestamp(args[args.index("--de") + 1]).date(); ate = pd.Timestamp(args[args.index("--ate") + 1]).date()
     for k in ("--de", "--ate"):
         i = args.index(k); del args[i:i + 2]
+    aluguel_arqs = []
+    if "--aluguel" in args:
+        i = args.index("--aluguel"); aluguel_arqs = sorted(glob.glob(args[i + 1])); del args[i:i + 2]
     extrato_arq, portais = args[0], args[1:]
     lojas = carrega_lojas()
+    aluguel = ler_aluguel(aluguel_arqs, lojas)
     filiais = list(lojas.values())
     ex = extrato_cartao(extrato_arq, filiais)
     extrato_ate = ex["Data"].max() if len(ex) else None
@@ -186,12 +217,15 @@ def main() -> None:
         for d in datas:
             if d < de:
                 continue
+            alug = aluguel.get((filial, d), 0)
             for prod in ("debito", "credito"):
                 vv = v[(v["pagto"] == d) & (v["prod"] == prod)]
                 xx = xl[(xl["Data"] == d) & (xl["prod"] == prod)]
                 if not len(vv) and not len(xx):
                     continue
-                lotes.append(lote(filial, d, prod, vv, xx, extrato_ate))
+                lotes.append(lote(filial, d, prod, vv, xx, extrato_ate, alug if len(vv) else 0))
+                if len(vv):
+                    alug = 0   # o aluguel do dia sai uma vez só: do lote de débito, se houver; senão do de crédito
         # por dia de venda: para onde foi o líquido de cada dia e se chegou
         st = {(l["Pagamento"], l["Produto"]): l["Status"] for l in lotes if l["Filial"] == filial}
         for (d, prod), g in v.groupby(["Data", "prod"]):

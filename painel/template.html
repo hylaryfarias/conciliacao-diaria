@@ -248,11 +248,11 @@ const sum = (arr, f) => arr.reduce((a,x) => a + Math.round((f(x) ?? 0)*100), 0) 
 // cartão · etapa 2: lotes de recebimento (loja × data de pagamento) cujas vendas estão no recorte de … até
 const recebLotes = m => (m.receb || []).filter(x => x.vendas_de && x.vendas_de.length ? x.vendas_de.some(d => d >= DE && d <= ATE) : (x.data >= DE && x.data <= ATE));
 function recebTotais(lotes){
-  const t = {n:0, liq:0, antec:0, esperado:0, recebido:0, delta:0, ok:0, div:0, agExt:0, agPort:0, antes:0};
+  const t = {n:0, liq:0, antec:0, aluguel:0, esperado:0, recebido:0, delta:0, ok:0, div:0, agExt:0, agPort:0, antes:0};
   const R = x => Math.round(x*100)/100;
   for(const x of lotes){
     if(x.status === "VENDA ANTES DO PERÍODO"){ t.antes = R(t.antes + (x.recebido || 0)); continue; }
-    t.n++; t.liq = R(t.liq + x.liq); t.antec = R(t.antec + (x.antec || 0));
+    t.n++; t.liq = R(t.liq + x.liq); t.antec = R(t.antec + (x.antec || 0)); t.aluguel = R(t.aluguel + (x.aluguel || 0));
     if(x.status === "CONCILIADO") t.ok++; else if(x.status === "DIVERGENTE" || x.status === "SEM CRÉDITO") t.div++; else if(x.status === "AGUARDA EXTRATO") t.agExt++; else if(x.status === "AGUARDA PORTAL") t.agPort++;
     if(x.recebido !== null && x.recebido !== undefined && x.status !== "AGUARDA EXTRATO"){ t.esperado = R(t.esperado + (x.esperado ?? x.liq)); t.recebido = R(t.recebido + x.recebido); t.delta = R(t.delta + (x.delta || 0)); }
   }
@@ -323,7 +323,7 @@ function kpis(){
   } else {
     const mdr = sum(conc, l => sum(M(l).dias, d => d.mdr)), liq = sum(conc, l => sum(M(l).dias, d => d.liquido));
     const rt = recebTotais(todas.flatMap(l => recebLotes(M(l))));
-    k.push(["Taxas", brl(Math.round((mdr + rt.antec)*100)/100), `MDR ${brl(mdr)}${rt.antec ? ` · antecipação ${brl(rt.antec)}` : ""}`, ""]);
+    k.push(["Taxas", brl(Math.round((mdr + rt.antec + rt.aluguel)*100)/100), `MDR ${brl(mdr)}${rt.antec ? ` · antecipação ${brl(rt.antec)}` : ""}${rt.aluguel ? ` · aluguel das máquinas ${brl(rt.aluguel)}` : ""}`, ""]);
     k.push(["Líquido a receber", brl(liq), "bruto − MDR das vendas do período", ""]);
     k.push(["Recebido no banco", rt.recebido ? brl(rt.recebido) : "—", rt.n ? `${rt.ok} lote${rt.ok===1?"":"s"} batem${rt.div ? ` · ${rt.div} divergem` : ""}${rt.agExt ? ` · ${rt.agExt} aguardam extrato` : ""}${rt.agPort ? ` · ${rt.agPort} aguardam portal` : ""}` : "sem extrato lido", rt.div ? "erro" : rt.recebido ? "ok" : ""]);
     k.push(["Diferença no banco", sinalS(rt.delta), "recebido − esperado, nos lotes já pagos", Math.abs(rt.delta) > TOL ? "erro" : rt.n ? "ok" : ""]);
@@ -572,8 +572,8 @@ function tabelaReceb(m){
   const rotulo = {"CONCILIADO":["ok","bateu"], "DIVERGENTE":["erro","divergente"], "SEM CRÉDITO":["erro","sem crédito"], "AGUARDA EXTRATO":["pendente","aguarda extrato"], "AGUARDA PORTAL":["pendente","aguarda portal"], "VENDA ANTES DO PERÍODO":["aguarda","venda antes do período"]};
   const chip = s => { const [k,v] = rotulo[s] || ["aguarda", s.toLowerCase()]; return `<span class="chip" data-s="${k}">${v}</span>`; };
   const tdD = x => `<td class="${x > TOL ? "pos" : x < -TOL ? "neg" : ""}">${sinalS(x)}</td>`;
-  const rows = L.map(x => `<tr><td class="dia">${dBR(x.data)}</td><td>${x.vendas_de && x.vendas_de.length ? x.vendas_de.map(dBR).join(", ") : "—"}</td><td>${x.qtd || "—"}</td><td>${x.qtd ? brl(x.bruto) : "—"}</td><td>${x.qtd ? brl(x.mdr) : "—"}</td><td>${x.antec ? `${brl(x.antec)}<small class="vir">${x.taxa != null ? x.taxa.toFixed(2).replace(".", ",") + "%" : ""}</small>` : "—"}</td><td>${x.esperado != null ? brl(x.esperado) : "—"}</td><td>${x.recebido != null ? brl(x.recebido) : "—"}</td>${x.recebido != null && x.esperado != null ? tdD(x.delta) : "<td>—</td>"}<td>${chip(x.status)}${x.detalhe ? `<small class="vir" title="${esc(x.detalhe)}">${esc(x.detalhe.slice(0, 70))}${x.detalhe.length > 70 ? "…" : ""}</small>` : ""}</td></tr>`).join("");
-  return `<h2>Recebimentos no banco · ${TABS[tab]} · ${t.ok} de ${t.n} lote${t.n===1?"":"s"} batem</h2><div class="tablewrap"><table class="fech-t"><thead><tr><th>Pago em</th><th>Vendas de</th><th>Qtd</th><th>Bruto</th><th>MDR</th><th>Antecipação</th><th>Esperado</th><th>Recebido</th><th>Δ</th><th>Situação</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td>Total</td><td></td><td></td><td></td><td></td><td>${brl(t.antec)}</td><td>${brl(t.esperado)}</td><td>${brl(t.recebido)}</td>${tdD(t.delta)}<td></td></tr></tfoot></table></div>`;
+  const rows = L.map(x => `<tr><td class="dia">${dBR(x.data)}</td><td>${x.vendas_de && x.vendas_de.length ? x.vendas_de.map(dBR).join(", ") : "—"}</td><td>${x.qtd || "—"}</td><td>${x.qtd ? brl(x.bruto) : "—"}</td><td>${x.qtd ? brl(x.mdr) : "—"}</td><td>${x.antec ? `${brl(x.antec)}<small class="vir">${x.taxa != null ? x.taxa.toFixed(2).replace(".", ",") + "%" : ""}</small>` : "—"}</td><td>${x.aluguel ? brl(x.aluguel) : "—"}</td><td>${x.esperado != null ? brl(x.esperado) : "—"}</td><td>${x.recebido != null ? brl(x.recebido) : "—"}</td>${x.recebido != null && x.esperado != null ? tdD(x.delta) : "<td>—</td>"}<td>${chip(x.status)}${x.detalhe ? `<small class="vir" title="${esc(x.detalhe)}">${esc(x.detalhe.slice(0, 70))}${x.detalhe.length > 70 ? "…" : ""}</small>` : ""}</td></tr>`).join("");
+  return `<h2>Recebimentos no banco · ${TABS[tab]} · ${t.ok} de ${t.n} lote${t.n===1?"":"s"} batem</h2><div class="tablewrap"><table class="fech-t"><thead><tr><th>Pago em</th><th>Vendas de</th><th>Qtd</th><th>Bruto</th><th>MDR</th><th>Antecipação</th><th>Aluguel</th><th>Esperado</th><th>Recebido</th><th>Δ</th><th>Situação</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td>Total</td><td></td><td></td><td></td><td></td><td>${brl(t.antec)}</td><td>${t.aluguel ? brl(t.aluguel) : "—"}</td><td>${brl(t.esperado)}</td><td>${brl(t.recebido)}</td>${tdD(t.delta)}<td></td></tr></tfoot></table></div>`;
 }
 const autCurta = a => !a ? "—" : String(a).length > 14 ? "…" + String(a).slice(-10) : String(a);   // autorização de PIX tem 34 caracteres; a ponta final identifica
 function lancamentos(d){

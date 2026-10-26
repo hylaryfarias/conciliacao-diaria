@@ -374,7 +374,7 @@ def main() -> None:
                 for _, q in rec_l[(rec_l["Filial"] == filial) & (rec_l["Produto"] == nome_prod)].sort_values("Pagamento").iterrows():
                     receb.append({"data": q["Pagamento"].isoformat(), "vendas_de": [x.strip() for x in str(q["Vendas de"]).split(",") if x.strip() and x.strip() != "nan"],
                                   "qtd": int(q["Vendas (qtd)"]) if pd.notna(q["Vendas (qtd)"]) else 0, "bruto": r2(q["Bruto (R$)"]), "mdr": r2(q["MDR (R$)"]), "liq": r2(q["Líquido previsto (R$)"]),
-                                  "antec": r2(q["Antecipação (R$)"]), "taxa": (float(q["Taxa antecipação (%)"]) if pd.notna(q["Taxa antecipação (%)"]) else None),
+                                  "antec": r2(q["Antecipação (R$)"]), "aluguel": r2(q.get("Aluguel (R$)", 0) if pd.notna(q.get("Aluguel (R$)", 0)) else 0), "taxa": (float(q["Taxa antecipação (%)"]) if pd.notna(q["Taxa antecipação (%)"]) else None),
                                   "esperado": (r2(q["Esperado na conta (R$)"]) if pd.notna(q["Esperado na conta (R$)"]) else None),
                                   "recebido": (r2(q["Recebido (R$)"]) if pd.notna(q["Recebido (R$)"]) else None),
                                   "delta": r2(q["Δ recebido − esperado (R$)"]) if pd.notna(q["Δ recebido − esperado (R$)"]) else 0.0,
