@@ -8775,6 +8775,22 @@
    "justificativa": "Conferido no fechamento de 18/10: PDV e maquininha batem no débito, cupom a cupom. Dia fechado.",
    "criado_em": "2026-10-26T14:00:00.000Z",
    "por": null
+  },
+  "BIGGS-06---HIGIENOPOLIS_credito_2026-10-01": {
+   "loja": "BIGGS 06 - HIGIENOPOLIS",
+   "mod": "credito",
+   "data": "2026-10-01",
+   "aberto": 81.59,
+   "caixa": -81.59,
+   "pdv": 1512.75,
+   "pdv_rel": 1512.75,
+   "transf": 0,
+   "maq": 1431.16,
+   "delta": -81.59,
+   "motivo": "falta",
+   "justificativa": "Dia fechado com falta de R$ 81,59 no crédito: cupom 13690 (13:34, R$ 89,09, cartão crédito manual, itens de delivery e das mesas 174 e 233) sem nenhuma transação correspondente na máquina Sicredi, em nenhuma modalidade; e crédito de R$ 7,50 às 14:39 sem cupom. Falta assumida.",
+   "criado_em": "2026-10-26T15:00:00.000Z",
+   "por": null
   }
  },
  "vistos": {},
