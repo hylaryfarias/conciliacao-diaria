@@ -541,7 +541,13 @@ function textoDiretoria(){
   L.push("");
   L.push("Resultado do período");
   L.push(`• Vendas no PDV: ${brl(fl.pdv)}`);
-  L.push(`• Registrado nas maquininhas: ${brl(fl.maq)}${Math.abs(difMaq) > 0.004 ? ` (${sinal(difMaq)}, ${p(Math.abs(difMaq)/Math.max(1,fl.pdv))}, em dias ainda em análise)` : " (igual ao PDV)"}`);
+  // a diferença máquina − PDV se divide entre o que já foi decidido no fechamento do caixa (sobra − falta, com justificativa) e o que está em dias ainda abertos
+  const difFech = t.liq, difAberto = r2(difMaq - difFech), pc = Math.abs(difMaq)/Math.max(1,fl.pdv) >= 0.0001 ? `, ${p(Math.abs(difMaq)/Math.max(1,fl.pdv))}` : "";
+  const explica = Math.abs(difMaq) <= 0.004 ? " (igual ao PDV)"
+    : Math.abs(difAberto) <= 0.004 ? ` (${sinal(difMaq)}${pc}, já decidido no fechamento do caixa com justificativa)`
+    : Math.abs(difFech) <= 0.004 ? ` (${sinal(difMaq)}${pc}, em dias ainda em análise)`
+    : ` (${sinal(difMaq)}${pc}: ${sinal(difFech)} já decididos no fechamento do caixa e ${sinal(difAberto)} em dias ainda em análise)`;
+  L.push(`• Registrado nas maquininhas: ${brl(fl.maq)}${explica}`);
   L.push(`• Taxas descontadas: MDR ${brl(fl.mdr)}${fl.antec ? ` · antecipação ${brl(fl.antec)}` : ""}${fl.aluguel ? ` · aluguel das máquinas ${brl(fl.aluguel)}` : ""}`);
   L.push(`• Esperado na conta: ${brl(fl.esperado)}`);
   L.push(`• Caiu na conta: ${brl(fl.caiu)}${Math.abs(fl.dif) > 0.004 ? ` (${sinalS(fl.dif)} contra o esperado${nDiv ? `, em ${nDiv} lote${nDiv===1?"":"s"} de cartão em tratativa com a Sicredi` : ""})` : " (bate com o esperado)"}${fl.aCair > 0.004 ? ` · ${brl(fl.aCair)} ainda a cair` : ""}`);
