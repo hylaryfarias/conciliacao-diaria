@@ -176,6 +176,10 @@ details.mais summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--i
 details.mais[open] summary{border-bottom:1px solid var(--rule)}
 @media (max-width:820px){.fluxo{grid-template-columns:repeat(2,minmax(0,1fr))} .passo+.passo::before{display:none} .resultado{grid-template-columns:minmax(0,1fr)} .mapa .linha{grid-template-columns:110px repeat(var(--n),16px)} .mapa .cel{width:16px;height:16px}}
 
+.ger details.diretoria{padding:0} .ger details.diretoria summary{display:flex;justify-content:space-between;align-items:center;gap:12px;cursor:pointer;padding:12px 16px;font-size:13px;font-weight:600;color:var(--ink-soft);list-style:none}
+.ger details.diretoria summary::-webkit-details-marker{display:none} .ger details.diretoria summary span::before{content:"▸ ";color:var(--ink-muted)} .ger details.diretoria[open] summary span::before{content:"▾ "}
+.ger details.diretoria pre{margin:0;padding:4px 16px 16px;white-space:pre-wrap;font:inherit;font-size:13.5px;line-height:1.5;color:var(--ink)}
+
 /* pendências */
 .pend{list-style:none;margin:0;padding:6px 16px 16px;display:grid;gap:8px}
 .pend li{display:grid;grid-template-columns:4px minmax(0,1fr);gap:12px;border:1px solid var(--rule);border-radius:8px;padding:10px 12px 10px 10px}
@@ -208,6 +212,7 @@ td.st[data-s="ajuste"]{color:var(--gestao)}
 .pend .expl{font-size:13px;color:var(--ink-soft);margin-top:6px}
 
 /* regras */
+#regras-sec h2{display:flex;align-items:center;gap:12px} #regras-sec h2 .btn{text-transform:none;letter-spacing:0}
 .regras{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0;padding:4px 0}
 .regra{padding:12px 16px;border-top:1px solid var(--rule);font-size:13.5px;color:var(--ink-soft)}
 .regra:first-child{border-top:0}
@@ -245,9 +250,9 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
     <section class="panel" id="detalhe" aria-live="polite"></section>
   </div>
 
-  <section class="panel">
-    <h2>Regras medidas no dado</h2>
-    <div class="regras">
+  <section class="panel" id="regras-sec">
+    <h2>Regras medidas no dado <button type="button" class="btn mini quieto" id="regras-bt" aria-expanded="false" aria-controls="regras-corpo">mostrar</button></h2>
+    <div class="regras" id="regras-corpo" hidden>
       <div class="regra"><b>PIX só pela máquina</b>Não existe PIX na chave da empresa. Todo PIX vendido passa pelo QR code ou TEF da maquininha Sicredi e aparece no portal como "Via QRCODE".</div>
       <div class="regra"><b>PIX cai D0 em dia útil</b>Sábado, domingo e feriado caem no próximo dia útil. Sem taxa: o valor que entra é o vendido. ROBS: 54 de 54 créditos casados.</div>
       <div class="regra"><b>Dia único: o dia de movimento</b>A venda vai da abertura do caixa até a reabertura da loja às 10h. O PDV já conta assim; a Sicredi vira à meia-noite. O painel traz a maquininha e o banco para o mesmo dia do PDV: o que passou na máquina entre 00:00 e 09:59 é venda do dia anterior. Uma visão só, dia a dia.</div>
@@ -523,6 +528,36 @@ function fluxoDinheiro(lojas){
   const caiu = r2(pixBanco + rc.recebido + rd.recebido), aCair = r2(pixAg + rc.aReceber + rd.aReceber), dif = r2((pixBanco - pixMaq + pixAg) + rc.delta + rd.delta);
   return {pdv, maq, esperado, caiu, aCair, dif, mdr, antec: r2(rc.antec + rd.antec), aluguel: r2(rc.aluguel + rd.aluguel)};
 }
+function textoDiretoria(){
+  const lista = fechLista(), t = fechTotais(lista), c = contaEstados(D.lojas), fl = fluxoDinheiro(D.lojas), bl = bancoLista();
+  const sv = bl.filter(p => p.grupo === "sem venda");
+  const rc = recebTotais(D.lojas.flatMap(l => recebLotes(l.mod.credito || {}))), rd = recebTotais(D.lojas.flatMap(l => recebLotes(l.mod.debito || {})));
+  const nDias = diasPeriodo().length, nLojas = D.lojas.length, p = x => `${(x*100).toFixed(2).replace(".", ",")}%`;
+  const difMaq = r2(fl.maq - fl.pdv), nDiv = rc.div + rd.div, nSobra = lista.filter(f => difDe(f) > TOL).length, nFalta = lista.filter(f => difDe(f) < -TOL).length;
+  const L = [];
+  L.push(`Conciliação diária · PIX, crédito e débito · ${nLojas} lojas · ${dBR(DE)} a ${dBR(ATE)}`);
+  L.push("");
+  L.push(`Cruzamento do PDV (Cloudfy) com as maquininhas Sicredi e o extrato bancário, cupom a cupom.`);
+  L.push("");
+  L.push("Resultado do período");
+  L.push(`• Vendas no PDV: ${brl(fl.pdv)}`);
+  L.push(`• Registrado nas maquininhas: ${brl(fl.maq)}${Math.abs(difMaq) > 0.004 ? ` (${sinal(difMaq)}, ${p(Math.abs(difMaq)/Math.max(1,fl.pdv))}, em dias ainda em análise)` : " (igual ao PDV)"}`);
+  L.push(`• Taxas descontadas: MDR ${brl(fl.mdr)}${fl.antec ? ` · antecipação ${brl(fl.antec)}` : ""}${fl.aluguel ? ` · aluguel das máquinas ${brl(fl.aluguel)}` : ""}`);
+  L.push(`• Esperado na conta: ${brl(fl.esperado)}`);
+  L.push(`• Caiu na conta: ${brl(fl.caiu)}${Math.abs(fl.dif) > 0.004 ? ` (${sinalS(fl.dif)} contra o esperado${nDiv ? `, em ${nDiv} lote${nDiv===1?"":"s"} de cartão em tratativa com a Sicredi` : ""})` : " (bate com o esperado)"}${fl.aCair > 0.004 ? ` · ${brl(fl.aCair)} ainda a cair` : ""}`);
+  L.push("");
+  L.push("Fechamento do caixa");
+  L.push(`• ${c.fechados.toLocaleString("pt-BR")} de ${c.total.toLocaleString("pt-BR")} fechamentos concluídos (${pct(c.fechados, c.total)}%) · ${nLojas} lojas × ${nDias} dias × 3 formas`);
+  L.push(`• Sobra na máquina nos dias fechados: ${brl(t.sobra)} (${nSobra} fechamento${nSobra===1?"":"s"})`);
+  L.push(`• Falta no caixa nos dias fechados: ${brl(Math.abs(t.falta))} (${nFalta} fechamento${nFalta===1?"":"s"})`);
+  L.push(`• Líquido: ${brlS(t.liq)} · todas as diferenças com justificativa registrada`);
+  L.push(`• Em conferência com as lojas: ${c.olhar} dia${c.olhar===1?"":"s"} com diferença real entre PDV e máquina${c.semmaq ? ` · ${c.semmaq} aguardam relatório da maquininha` : ""}`);
+  if(sv.length || c.semmaq){ L.push(""); L.push("Pontos de atenção"); }
+  if(sv.length) L.push(`• ${sv.length} PIX (${brl(somaV(sv))}) entraram na conta sem ser venda: duplicidades já devolvidas e transferências de outra natureza`);
+  L.push("");
+  L.push(`Painel atualizado diariamente: https://conciliacao-diaria.vercel.app`);
+  return L.join("\n");
+}
 function fechKpis(){
   const lista = fechLista(), t = fechTotais(lista), c = contaEstados(D.lojas), fl = fluxoDinheiro(D.lojas);
   const nSobra = lista.filter(f => difDe(f) > TOL).length, nFalta = lista.filter(f => difDe(f) < -TOL).length;
@@ -532,7 +567,7 @@ function fechKpis(){
   k.innerHTML = `
   <div class="bloco">
     <div class="ger-top"><div><h4>Fechamento do caixa · ${dBR(DE)} a ${dBR(ATE)}</h4>
-      <div class="ger-big">${c.fechados} <small>de ${c.total} fechados · ${pct(c.fechados, c.total)}%</small></div></div>
+      <div class="ger-big">${c.fechados.toLocaleString("pt-BR")} <small>de ${c.total.toLocaleString("pt-BR")} fechados · ${pct(c.fechados, c.total)}%</small></div></div>
       <div class="ger-chips">${c.olhar ? `<span class="chip" data-s="pendente">${c.olhar} precisam de você</span>` : `<span class="chip" data-s="ok">nada pendente</span>`}${c.limpo ? ` <span class="chip" data-s="ok">${c.limpo} batem e podem fechar</span>` : ""}${c.semmaq ? ` <span class="chip" data-s="aguarda">${c.semmaq} aguardam a maquininha</span>` : ""}</div></div>
     ${barra(c)}
     <div class="ger-formas">${Object.entries(TABS).map(([m,v]) => { const pf = c.porForma[m]; return `<div><b>${v}</b> ${pf.fechado} de ${pf.total}${pf.olhar ? ` · <span class="olhar-n">${pf.olhar} p/ olhar</span>` : ""}</div>`; }).join("")}</div>
@@ -553,7 +588,10 @@ function fechKpis(){
       <div data-tone="${t.falta < -TOL ? "erro" : ""}"><div class="lbl">Falta no caixa</div><div class="val">${brl(Math.abs(t.falta))}</div><div class="sub">${nFalta} fechamento${nFalta===1?"":"s"} · o PDV registrou mais do que a máquina recebeu</div></div>
       <div><div class="lbl">Líquido</div><div class="val">${brlS(t.liq)}</div><div class="sub">sobra − falta · ${lista.length} fechamento${lista.length===1?"":"s"} no recorte</div></div>
     </div>
-  </div>`;
+  </div>
+  <details class="bloco diretoria"><summary><span>Resumo para a diretoria · ${dBR(DE)} a ${dBR(ATE)}</span><button type="button" class="btn mini" id="copia-dir">Copiar texto</button></summary><pre id="texto-dir">${esc(textoDiretoria())}</pre></details>`;
+  const bt = document.getElementById("copia-dir");
+  if(bt) bt.addEventListener("click", async ev => { ev.preventDefault(); ev.stopPropagation(); const txt = textoDiretoria(); try{ await navigator.clipboard.writeText(txt); bt.textContent = "Copiado ✓"; }catch(e){ const ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); bt.textContent = "Copiado ✓"; }catch(_){ bt.textContent = "Selecione e copie"; } ta.remove(); } setTimeout(() => bt.textContent = "Copiar texto", 2500); });
 }
 function fechLojas(){
   const ul = document.getElementById("lojas"), lista = fechLista();
@@ -1108,6 +1146,10 @@ function ligaCliques(){
   });
 }
 
+(() => { const bt = document.getElementById("regras-bt"), corpo = document.getElementById("regras-corpo"); if(!bt) return;
+  const set = ab => { corpo.hidden = !ab; bt.textContent = ab ? "recolher" : "mostrar"; bt.setAttribute("aria-expanded", String(ab)); };
+  let ab = false; try{ ab = localStorage.getItem("regras") === "1"; }catch(e){}
+  set(ab); bt.addEventListener("click", () => { ab = corpo.hidden; set(ab); try{ localStorage.setItem("regras", ab ? "1" : "0"); }catch(e){} }); })();
 function render(){ tabs(); if(tab === "fech"){ fechKpis(); fechLojas(); fechDetalhe(); stamp(); return; } document.getElementById("kpis").className = "kpis"; kpis(); lojas(); detalhe(); ligaDias(); ligaAjustes(); stamp(); }
 
 
