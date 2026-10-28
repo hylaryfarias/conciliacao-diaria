@@ -533,7 +533,7 @@ function textoDiretoria(){
   const sv = bl.filter(p => p.grupo === "sem venda");
   const rc = recebTotais(D.lojas.flatMap(l => recebLotes(l.mod.credito || {}))), rd = recebTotais(D.lojas.flatMap(l => recebLotes(l.mod.debito || {})));
   const nDias = diasPeriodo().length, nLojas = D.lojas.length, p = x => `${(x*100).toFixed(2).replace(".", ",")}%`;
-  const difMaq = r2(fl.maq - fl.pdv), nDiv = rc.div + rd.div, nSobra = lista.filter(f => difDe(f) > TOL).length, nFalta = lista.filter(f => difDe(f) < -TOL).length;
+  const nDiv = rc.div + rd.div, nSobra = lista.filter(f => difDe(f) > TOL).length, nFalta = lista.filter(f => difDe(f) < -TOL).length;
   const L = [];
   L.push(`Conciliação diária · PIX, crédito e débito · ${nLojas} lojas · ${dBR(DE)} a ${dBR(ATE)}`);
   L.push("");
@@ -542,7 +542,10 @@ function textoDiretoria(){
   L.push("Resultado do período");
   L.push(`• Vendas no PDV: ${brl(fl.pdv)}`);
   // a diferença máquina − PDV se divide entre o que já foi decidido no fechamento do caixa (sobra − falta, com justificativa) e o que está em dias ainda abertos
-  const difFech = t.liq, difAberto = r2(difMaq - difFech), pc = Math.abs(difMaq)/Math.max(1,fl.pdv) >= 0.0001 ? `, ${p(Math.abs(difMaq)/Math.max(1,fl.pdv))}` : "";
+  // dia a dia, com a virada de dia já descontada: o que está em dia fechado foi decidido; o que está em dia aberto ainda está em análise
+  let difFech = 0, difAberto = 0;
+  for(const l of D.lojas) for(const m of Object.keys(TABS)) for(const d of l.mod[m].dias){ if(d.data < DE || d.data > ATE || d.maq === undefined) continue; const x = r2(d.maq - d.pdv - viradaUtil(d)); if(d.fechado) difFech = r2(difFech + x); else difAberto = r2(difAberto + x); }
+  const difMaq = r2(difFech + difAberto), pc = Math.abs(difMaq)/Math.max(1,fl.pdv) >= 0.0001 ? `, ${p(Math.abs(difMaq)/Math.max(1,fl.pdv))}` : "";
   const explica = Math.abs(difMaq) <= 0.004 ? " (igual ao PDV)"
     : Math.abs(difAberto) <= 0.004 ? ` (${sinal(difMaq)}${pc}, já decidido no fechamento do caixa com justificativa)`
     : Math.abs(difFech) <= 0.004 ? ` (${sinal(difMaq)}${pc}, em dias ainda em análise)`
