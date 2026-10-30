@@ -1495,6 +1495,23 @@
    "aut": "000173",
    "data_maq": null,
    "id": "ROBS_2026-10-20_60642_debito_000173"
+  },
+  "BIGGS-01---MARINGA_2026-10-10_78189_dinheiro_SE0010000000009N7AJFNAFFWPEBSH2QW9": {
+   "loja": "BIGGS 01 - MARINGA",
+   "de": "dinheiro",
+   "para": "pix",
+   "data": "2026-10-10",
+   "cupom": "78189",
+   "caixa": "001 - BG01 - PDV 001",
+   "hora": "17:33",
+   "forma": "DINHEIRO",
+   "valor": 39.0,
+   "justificativa": "Baixa incorreta no PDV: cupom 78189 lançado como DINHEIRO, venda passou na máquina como PIX (R$ 39,00 às 18:14, terminal APT9B7C4). No mesmo minuto o caixa baixou o cupom 78190, pago na máquina 11 minutos depois.",
+   "criado_em": "2026-10-30T18:42:36Z",
+   "por": null,
+   "aut": "SE0010000000009N7AJFNAFFWPEBSH2QW9",
+   "data_maq": "2026-10-10",
+   "id": "BIGGS-01---MARINGA_2026-10-10_78189_dinheiro_SE0010000000009N7AJFNAFFWPEBSH2QW9"
   }
  },
  "fechamentos": {
@@ -15480,6 +15497,22 @@
    "motivo": "bateu",
    "justificativa": "Conferido no fechamento de 12/10: PDV e maquininha batem no débito, cupom a cupom. Dia fechado. Inclui −R$ 35,60 de transferência de forma registrada no painel.",
    "criado_em": "2026-10-30T12:01:00Z",
+   "por": null
+  },
+  "BIGGS-01---MARINGA_pix_2026-10-10": {
+   "loja": "BIGGS 01 - MARINGA",
+   "mod": "pix",
+   "data": "2026-10-10",
+   "aberto": 35.4,
+   "caixa": 35.4,
+   "pdv": 3685.45,
+   "pdv_rel": 3646.45,
+   "transf": 39.0,
+   "maq": 3720.85,
+   "delta": 35.4,
+   "motivo": "sobra",
+   "justificativa": "Dia fechado com sobra de R$ 35,40 na máquina: PIX de R$ 35,40 às 14:10 (terminal APT9B7BE) sem cupom no PDV, venda não registrada. Inclui +R$ 39,00 de transferência de forma registrada no painel (cupom 78189, dinheiro → PIX). O banco creditou o valor integral da máquina.",
+   "criado_em": "2026-10-30T18:42:36Z",
    "por": null
   }
  },
