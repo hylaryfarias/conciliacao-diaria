@@ -15514,6 +15514,22 @@
    "justificativa": "Dia fechado com sobra de R$ 35,40 na máquina: PIX de R$ 35,40 às 14:10 (terminal APT9B7BE) sem cupom no PDV, venda não registrada. Inclui +R$ 39,00 de transferência de forma registrada no painel (cupom 78189, dinheiro → PIX). O banco creditou o valor integral da máquina.",
    "criado_em": "2026-10-30T18:42:36Z",
    "por": null
+  },
+  "BIGGS-01---MARINGA_debito_2026-10-12": {
+   "loja": "BIGGS 01 - MARINGA",
+   "mod": "debito",
+   "data": "2026-10-12",
+   "aberto": 44.9,
+   "caixa": -44.9,
+   "pdv": 3779.57,
+   "pdv_rel": 3779.57,
+   "transf": 0,
+   "maq": 3734.67,
+   "delta": -44.9,
+   "motivo": "falta",
+   "justificativa": "Dia fechado com falta de R$ 44,90 no débito: o cupom 78834 (PDV 001, 23:31, CARTAO DEBITO, 1 item) repete o cupom 78829 (PDV 001, 23:22, TEF débito, 1 item, mesmo valor), que tem o pagamento na máquina às 23:20 (MDS, aut. conciliada). Só houve um pagamento; a venda foi lançada duas vezes no PDV. Não é dinheiro faltando na máquina, é cupom duplicado.",
+   "criado_em": "2026-10-30T18:47:14Z",
+   "por": null
   }
  },
  "vistos": {},
