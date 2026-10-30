@@ -953,6 +953,7 @@ function aplicaAjustes(){
 
 async function ligaBanco(){
   if(window.claude?.use){
+    avisoTopo("Esta é a cópia do painel dentro do Claude: os registros aqui pararam em 22/10. O painel oficial, com os fechamentos e transferências atuais, é conciliacao-diaria.vercel.app.");
     try{
       dbRef = await claude.use("db");
       userRef = await claude.use("user");
