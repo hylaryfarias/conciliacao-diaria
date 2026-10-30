@@ -1512,6 +1512,21 @@
    "aut": "SE0010000000009N7AJFNAFFWPEBSH2QW9",
    "data_maq": "2026-10-10",
    "id": "BIGGS-01---MARINGA_2026-10-10_78189_dinheiro_SE0010000000009N7AJFNAFFWPEBSH2QW9"
+  },
+  "BIGGS-01---MARINGA_2026-10-12_78829_debito": {
+   "loja": "BIGGS 01 - MARINGA",
+   "de": "debito",
+   "para": "cancelado",
+   "data": "2026-10-12",
+   "cupom": "78829",
+   "caixa": "001 - BG01 - PDV 001",
+   "hora": "23:22",
+   "forma": "TEF - DEBITO",
+   "valor": 44.9,
+   "justificativa": "Cupom 78829 cancelado no PDV (confirmado pela loja), mas continua no relatório de cupons. Não tem itens no analítico. O pagamento em débito MDS das 23:20 (R$ 44,90) é da venda do cupom 78834, pedido por telefone, 1 Monster Triplo.",
+   "criado_em": "2026-10-30T19:00:29Z",
+   "por": null,
+   "id": "BIGGS-01---MARINGA_2026-10-12_78829_debito"
   }
  },
  "fechamentos": {
@@ -15514,22 +15529,6 @@
    "justificativa": "Dia fechado com sobra de R$ 35,40 na máquina: PIX de R$ 35,40 às 14:10 (terminal APT9B7BE) sem cupom no PDV, venda não registrada. Inclui +R$ 39,00 de transferência de forma registrada no painel (cupom 78189, dinheiro → PIX). O banco creditou o valor integral da máquina.",
    "criado_em": "2026-10-30T18:42:36Z",
    "por": null
-  },
-  "BIGGS-01---MARINGA_debito_2026-10-12": {
-   "loja": "BIGGS 01 - MARINGA",
-   "mod": "debito",
-   "data": "2026-10-12",
-   "aberto": 44.9,
-   "caixa": -44.9,
-   "pdv": 3779.57,
-   "pdv_rel": 3779.57,
-   "transf": 0,
-   "maq": 3734.67,
-   "delta": -44.9,
-   "motivo": "falta",
-   "justificativa": "Dia fechado com falta de R$ 44,90 no débito: cupom 78834 (PDV 001, 23:31, pedido por telefone, cliente 26426, 1 Monster Triplo) baixado como CARTAO DEBITO à mão, sem pagamento de R$ 44,90 na máquina Sicredi em nenhuma forma. O único débito de R$ 44,90 do dia (23:20, MDS) é do cupom 78829 (TEF, 23:22), que não aparece no relatório analítico de itens. Ou a venda foi lançada duas vezes, ou o pedido por telefone foi pago fora da Sicredi.",
-   "criado_em": "2026-10-30T18:47:14Z",
-   "por": null
   }
  },
  "vistos": {},
@@ -15698,6 +15697,22 @@
     "motivo": "bateu",
     "justificativa": "Conferido no fechamento de 18/10: PDV e maquininha batem no PIX, cupom a cupom. Dia fechado e o banco creditou o valor integral. Virada de dia de R$ 33,25 conciliada: pago na máquina num dia e fechado no PDV no outro.",
     "criado_em": "2026-10-30T12:01:00Z",
+    "por": null
+   },
+   "BIGGS-01---MARINGA_debito_2026-10-12": {
+    "loja": "BIGGS 01 - MARINGA",
+    "mod": "debito",
+    "data": "2026-10-12",
+    "aberto": 0,
+    "caixa": 0,
+    "pdv": 3734.67,
+    "pdv_rel": 3779.57,
+    "transf": -44.9,
+    "maq": 3734.67,
+    "delta": 0.0,
+    "motivo": "bateu",
+    "justificativa": "Conferido no fechamento de 12/10: PDV e maquininha batem no débito depois de desconsiderar o cupom 78829, cancelado no PDV (R$ 44,90). O pagamento em débito das 23:20 é do cupom 78834 (pedido por telefone, 1 Monster Triplo). Dia fechado.",
+    "criado_em": "2026-10-30T19:00:29Z",
     "por": null
    }
   },

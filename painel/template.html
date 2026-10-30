@@ -912,7 +912,7 @@ let VI = {};            // id -> pendência marcada como vista (feito)
 const idVisto = (l, p) => `${slug(l.nome)}_${tab}_${p.data || ""}_${slug(p.cupom || "")}_${slug(p.aut || p.ref || "").slice(0, 60)}`;
 const idFech = f => `${slug(f.loja)}_${f.mod}_${f.data}`;
 let dbRef = null, userRef = null, podeEscrever = null, meuId = null;
-const NOMES = {pix:"PIX", credito:"Crédito", debito:"Débito", voucher:"Voucher (vale)", dinheiro:"Dinheiro", ifood:"iFood", prazo:"Venda a prazo"};
+const NOMES = {pix:"PIX", credito:"Crédito", debito:"Débito", voucher:"Voucher (vale)", dinheiro:"Dinheiro", ifood:"iFood", prazo:"Venda a prazo", cancelado:"Cancelado no PDV"};   // cancelado: cupom que o PDV cancelou mas continua no relatório de cupons; sai da conta sem entrar em outra forma
 const slug = x => String(x).replace(/[^A-Za-z0-9_.~:@+-]+/g, "-");
 const idAjuste = a => a.id || `${slug(a.loja)}_${a.data}_${a.cupom}_${a.de}${a.aut ? "_" + slug(a.aut) : ""}`;   // um cupom pode ter duas linhas (dois vales): a autorização entra no id
 
