@@ -15527,7 +15527,7 @@
    "maq": 3734.67,
    "delta": -44.9,
    "motivo": "falta",
-   "justificativa": "Dia fechado com falta de R$ 44,90 no débito: o cupom 78834 (PDV 001, 23:31, CARTAO DEBITO, 1 item) repete o cupom 78829 (PDV 001, 23:22, TEF débito, 1 item, mesmo valor), que tem o pagamento na máquina às 23:20 (MDS, aut. conciliada). Só houve um pagamento; a venda foi lançada duas vezes no PDV. Não é dinheiro faltando na máquina, é cupom duplicado.",
+   "justificativa": "Dia fechado com falta de R$ 44,90 no débito: cupom 78834 (PDV 001, 23:31, pedido por telefone, cliente 26426, 1 Monster Triplo) baixado como CARTAO DEBITO à mão, sem pagamento de R$ 44,90 na máquina Sicredi em nenhuma forma. O único débito de R$ 44,90 do dia (23:20, MDS) é do cupom 78829 (TEF, 23:22), que não aparece no relatório analítico de itens. Ou a venda foi lançada duas vezes, ou o pedido por telefone foi pago fora da Sicredi.",
    "criado_em": "2026-10-30T18:47:14Z",
    "por": null
   }
