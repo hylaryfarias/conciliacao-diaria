@@ -23,6 +23,32 @@ def dia_movimento(dt: pd.Series) -> pd.Series:
 FORMAS_PIX = {"PIX MAQUININHA", "PIX - TEF", "TEF - PIX"}
 
 
+def sem_cancelados(df: pd.DataFrame) -> pd.DataFrame:
+    """Cupons cancelados no PDV continuam no relatório de cupons, mas não são venda. O relatório analítico só de
+    cancelados (entrada/pdv_cancelados_*.xlsx, exportado no Cloudfy com o filtro de cancelados) diz quais são:
+    saem da conciliação por (Filial, Data, Cupom)."""
+    import glob
+    arqs = sorted(glob.glob(str(Path(__file__).resolve().parent.parent / "entrada" / "pdv_cancelados_*.xlsx")))
+    if not arqs or not len(df):
+        return df
+    canc = set()
+    for a in arqs:
+        wb = CalamineWorkbook.from_path(a)
+        rows = wb.get_sheet_by_name(wb.sheet_names[0]).to_python()
+        idx = next((i for i, r in enumerate(rows) if "Cupom" in r and "Filial" in r), None)
+        if idx is None:
+            continue
+        h = rows[idx]; fi, di, ci = h.index("Filial"), h.index("Data"), h.index("Cupom")
+        for r in rows[idx + 1:]:
+            if r and str(r[fi]).strip():
+                canc.add((str(r[fi]).strip(), pd.to_datetime(str(r[di])[:10], dayfirst=True).date(), str(r[ci]).replace(".0", "").strip()))
+    if not canc:
+        return df
+    k = list(zip(df["Filial"], pd.to_datetime(df["Data"], dayfirst=True).dt.date, df["Cupom"].astype(str).str.replace(".0", "", regex=False).str.strip()))
+    mask = pd.Series([x in canc for x in k], index=df.index)
+    return df[~mask]
+
+
 def ler_pdv(caminho: str) -> pd.DataFrame:
     """Relatório de cupons de vendas. Aceita vários arquivos (separados por vírgula ou curinga), ex.: o
     relatório 01–14/10 mais o diário de 15/10; cupons repetidos entre arquivos entram uma vez só."""
@@ -45,6 +71,7 @@ def ler_pdv(caminho: str) -> pd.DataFrame:
     chave = [c for c in ("Filial", "Caixa", "Data", "Hora", "Cupom", "Desc. pagam.", "Vl. pagamento") if c in df.columns]
     df["_seq"] = df.groupby(["_arq"] + chave).cumcount()
     df = df.drop_duplicates(subset=chave + ["_seq"]).drop(columns=["_arq", "_seq"])
+    df = sem_cancelados(df)
     df["Vl. pagamento"] = pd.to_numeric(df["Vl. pagamento"], errors="coerce").fillna(0)
     df["cent"] = (df["Vl. pagamento"] * 100).round().astype(int)
     df["Data"] = pd.to_datetime(df["Data"], dayfirst=True).dt.date
