@@ -15567,7 +15567,7 @@
     "maq": 1594.1,
     "delta": 0.0,
     "motivo": "bateu",
-    "justificativa": "Conferido no fechamento de 05/10: PDV e maquininha batem no PIX, cupom a cupom, e o banco creditou o valor integral. Um PIX de R$ 43,80 na máquina (18:59) e o cupom 51527 de R$ 43,80 (11:44) se compensam no dia. Dia fechado.",
+    "justificativa": "Conferido no fechamento de 05/10: PDV e maquininha batem no total do PIX (R$ 1.594,10) e o banco creditou o valor integral, mas com duas falhas que se cancelam. Falta: cupom 51527 (PDV 002, 11:44) baixado como PIX R$ 43,80 sem pagamento na máquina em nenhuma forma. Sobra: PIX de R$ 43,80 às 18:59 na máquina sem cupom; o cupom 60899 (PDV 003, 18:57) saiu com R$ 0,00 em dinheiro, provável venda lançada sem valor. Dia fechado.",
     "criado_em": "2026-10-30T11:49:22Z",
     "por": null
    },
