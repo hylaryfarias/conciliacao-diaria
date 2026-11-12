@@ -15713,6 +15713,22 @@
    "justificativa": "Conferido no fechamento de 23/10: PDV e maquininha batem no PIX, cupom a cupom, e o banco creditou o valor integral. Dia fechado. Inclui +R$ 29,15 de transferência de forma registrada no painel (cupom 81257, vindo do crédito).",
    "criado_em": "2026-11-12T20:32:45Z",
    "por": null
+  },
+  "BIGGS-04---WINSTON_pix_2026-10-18": {
+   "loja": "BIGGS 04 - WINSTON",
+   "mod": "pix",
+   "data": "2026-10-18",
+   "aberto": 0,
+   "caixa": 0,
+   "pdv": 2312.36,
+   "pdv_rel": 2312.36,
+   "transf": 0,
+   "maq": 2312.36,
+   "delta": 0.0,
+   "motivo": "bateu",
+   "justificativa": "Conferido no fechamento de 18/10: PDV e maquininha batem no PIX, cupom a cupom, e o banco creditou o valor integral. Dia fechado.",
+   "criado_em": "2026-11-12T20:50:12Z",
+   "por": null
   }
  },
  "vistos": {},
@@ -15726,6 +15742,7 @@
    "BIGGS-02---SANTOS-DUMONT_2026-10-10_36534_pix_908011",
    "BIGGS-02---SANTOS-DUMONT_2026-10-10_76997_pix_164297",
    "BIGGS-03---GOIAS_2026-10-07_46076_pix_012024",
+   "BIGGS-04---WINSTON_2026-10-18_88377_pix_845235",
    "BIGGS-04---WINSTON_2026-10-18_88383_pix_888871",
    "BIGGS-05---PORTUGAL_2026-10-05_100494_pix_WIRCNC",
    "BIGGS-05---PORTUGAL_2026-10-10_16399_pix_867395",
