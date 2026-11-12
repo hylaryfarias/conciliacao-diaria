@@ -196,3 +196,11 @@ cupons (totais + operador, `entrada/pdv_totais_*.xlsx`) e o analítico (`entrada
 Histórico de vendas da Sicredi, sem depender da forma de pagamento: casa valor exato (até 36 h, comanda virada)
 e cupom × 1,10 = máquina (até 2 h), o par mais próximo no tempo primeiro. Gera `saida/isaias_taxa_servico_<de>_a_<ate>.xlsx`
 com a prova par a par (terminal exclusivo do caixa, minutos até o fechamento, concorrentes livres).
+
+## Um mês por vez, numa página só
+
+`painel/index.html` é só a tela (150 KB). Os dados ficam em `painel/dados/<AAAA-MM>.json` (um por mês,
+~1 MB) e os cupons e lançamentos de cada loja em `painel/dados/<AAAA-MM>/<loja>.json`, carregados quando
+alguém abre um dia. `painel/dados/meses.json` lista os meses; o seletor ao lado do "de / até" troca de mês
+sem sair da página, e o "de / até" anda dentro do mês. `gera_painel.py --de --ate` grava o mês de `--de`.
+`painel/claude.html` é a cópia com tudo embutido, para o artefato no Claude.

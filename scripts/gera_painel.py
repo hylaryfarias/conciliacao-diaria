@@ -416,8 +416,29 @@ def main() -> None:
 
     dados = {"gerado_em": datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M"), "de": de.isoformat(), "ate": ate.isoformat(),
              "extrato_ate": extrato_ate.isoformat() if extrato_ate else None, "pdv_ate": pdv_ate.isoformat(), "lojas": lojas}
+    # Vercel: uma página leve (index.html) + um arquivo de dados por mês (dados/<AAAA-MM>.json) + os cupons e
+    # lançamentos de cada loja à parte (dados/<AAAA-MM>/<loja>.json), carregados quando alguém abre um dia.
+    # Cópia do Claude (claude.html): tudo embutido numa página só, como antes.
+    import re as _re
+    slug = lambda x: _re.sub(r"[^A-Za-z0-9_.~:@+-]+", "-", str(x))
+    mes = de.isoformat()[:7]
+    pasta = RAIZ / "painel" / "dados"; (pasta / mes).mkdir(parents=True, exist_ok=True)
+    leve = json.loads(json.dumps(dados, ensure_ascii=False))
+    for l in leve["lojas"]:
+        lanc = {}
+        for m, mod in l["mod"].items():
+            lanc[m] = {d["data"]: d.pop("lanc") for d in mod["dias"] if "lanc" in d}
+        (pasta / mes / f"{slug(l['nome'])}.json").write_text(json.dumps(lanc, ensure_ascii=False))
+    (pasta / f"{mes}.json").write_text(json.dumps(leve, ensure_ascii=False))
+    meses = []
+    for f in sorted(pasta.glob("????-??.json")):
+        j = json.loads(f.read_text()); mm = f.stem
+        meses.append({"mes": mm, "de": j["de"], "ate": j["ate"], "gerado_em": j["gerado_em"], "rotulo": f"{['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][int(mm[5:7])-1]}/{mm[:4]}"})
+    (pasta / "meses.json").write_text(json.dumps(meses, ensure_ascii=False))
+    tpl = (RAIZ / "painel/template.html").read_text()
     out = RAIZ / "painel/index.html"
-    out.write_text((RAIZ / "painel/template.html").read_text().replace("/*DADOS*/", json.dumps(dados, ensure_ascii=False)))
+    out.write_text(tpl.replace("/*DADOS*/", "null"))
+    (RAIZ / "painel/claude.html").write_text(tpl.replace("/*DADOS*/", json.dumps(dados, ensure_ascii=False)))
     print(f"{len(lojas)} lojas · PIX com maquininha: {sum(l['mod']['pix']['tem_maq'] for l in lojas)} · com banco: {sum(l['mod']['pix']['tem_banco'] for l in lojas)} · gravado em {out}")
 
 
