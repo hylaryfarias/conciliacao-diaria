@@ -15729,6 +15729,22 @@
    "justificativa": "Conferido no fechamento de 18/10: PDV e maquininha batem no PIX, cupom a cupom, e o banco creditou o valor integral. Dia fechado.",
    "criado_em": "2026-11-12T20:50:12Z",
    "por": null
+  },
+  "BIGGS-04---WINSTON_pix_2026-10-02": {
+   "loja": "BIGGS 04 - WINSTON",
+   "mod": "pix",
+   "data": "2026-10-02",
+   "aberto": 15.0,
+   "caixa": 15.0,
+   "pdv": 2265.97,
+   "pdv_rel": 2280.87,
+   "transf": -14.9,
+   "maq": 2280.97,
+   "delta": 15.0,
+   "motivo": "sobra",
+   "justificativa": "Dia fechado com sobra de R$ 15,00 na máquina: três PIX de R$ 5,00 na Clover (CLF12B3C) às 15:44 e 15:45, sem cupom, no mesmo horário de três refeições de colaborador lançadas a R$ 0,00 (cupons 85373, 85374 e 85378, FUNC PF). Cota do colaborador paga por PIX sem registro no PDV. Caixa físico conferido pela loja com +R$ 0,10. O banco creditou o valor integral da máquina. Inclui −R$ 14,90 de transferência de forma registrada no painel (cupom 85379, PIX → débito).",
+   "criado_em": "2026-11-12T21:03:08Z",
+   "por": null
   }
  },
  "vistos": {},
