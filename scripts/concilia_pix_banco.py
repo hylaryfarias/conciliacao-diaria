@@ -102,6 +102,16 @@ def pdv_sem_par_pix() -> pd.DataFrame:
     return df
 
 
+
+def _b2b() -> dict:
+    """Pagadores de PIX que são clientes B2B (venda para empresa, não passa pelo PDV): entrada/b2b_pagadores.csv (doc;nome;cliente)."""
+    f = RAIZ / "entrada" / "b2b_pagadores.csv"
+    if not f.exists():
+        return {}
+    t = pd.read_csv(f, sep=";", dtype=str).fillna("")
+    return {str(r["doc"]).strip(): (r.get("cliente") or r.get("nome") or "").strip() for _, r in t.iterrows()}
+B2B = _b2b()
+
 def classifica_sobra(sobra: pd.DataFrame, vendas: pd.DataFrame, devol: pd.DataFrame, res: pd.DataFrame | None = None, antes: pd.DataFrame | None = None) -> pd.DataFrame:
     """Crédito sem venda própria: devolvido (há DEVOLUCAO PIX do mesmo pagador e valor); máquina não registrou
     (há baixa PIX no PDV sem par); duplicidade (o MESMO pagador já pagou uma venda de mesmo valor na loja);
@@ -116,6 +126,9 @@ def classifica_sobra(sobra: pd.DataFrame, vendas: pd.DataFrame, devol: pd.DataFr
     usados_sp: set = set()
     cls, evid, cupons = [], [], []
     for _, x in sobra.iterrows():
+        # pagadores B2B conhecidos (entrada/b2b_pagadores.csv): venda para empresa, não passa pelo PDV
+        if str(x['doc']) in B2B:
+            cls.append('VENDA B2B'); evid.append(f"venda B2B para {B2B[str(x['doc'])]}, fora do PDV"); cupons.append(""); continue
         d = x["Data"]
         dias = {d - pd.Timedelta(days=k) for k in range(0, 4)}
         v = vendas[(vendas["Filial"] == x["Loja"]) & (vendas["cent"] == x["cent"]) & (vendas["Data"].isin(dias))]
