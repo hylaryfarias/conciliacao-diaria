@@ -22380,6 +22380,38 @@
    "justificativa": "Conferido no fechamento de 30/10: PDV e maquininha batem no débito, cupom a cupom. Dia fechado. Inclui −R$ 38,41 de transferência de forma registrada no painel.",
    "criado_em": "2026-11-13T18:00:24Z",
    "por": null
+  },
+  "BIGGS-01---MARINGA_pix_2026-10-12": {
+   "loja": "BIGGS 01 - MARINGA",
+   "mod": "pix",
+   "data": "2026-10-12",
+   "aberto": 30.3,
+   "caixa": 30.3,
+   "pdv": 2305.95,
+   "pdv_rel": 2305.95,
+   "transf": 0,
+   "maq": 2336.25,
+   "delta": 30.3,
+   "motivo": "sobra",
+   "justificativa": "Dia fechado com sobra de R$ 30,30 no PIX: sobra de R$ 30,30: PIX às 23:44 (R$ 30,30) na máquina sem cupom no PDV.",
+   "criado_em": "2026-11-13T18:05:55Z",
+   "por": null
+  },
+  "BIGGS-01---MARINGA_pix_2026-10-28": {
+   "loja": "BIGGS 01 - MARINGA",
+   "mod": "pix",
+   "data": "2026-10-28",
+   "aberto": 68.2,
+   "caixa": -14.4,
+   "pdv": 1307.65,
+   "pdv_rel": 1307.65,
+   "transf": 0,
+   "maq": 1293.25,
+   "delta": -14.4,
+   "motivo": "falta",
+   "justificativa": "Dia fechado com falta de R$ 14,40 no PIX: falta de R$ 41,30: cupom 82305 (17:59, R$ 41,30) sem pagamento correspondente na máquina em nenhuma forma; sobra de R$ 26,90: PIX às 13:21 (R$ 26,90) na máquina sem cupom no PDV.",
+   "criado_em": "2026-11-13T18:05:55Z",
+   "por": null
   }
  },
  "vistos": {},
