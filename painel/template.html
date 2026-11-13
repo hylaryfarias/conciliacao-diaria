@@ -184,6 +184,7 @@ details.mais[open] summary{border-bottom:1px solid var(--rule)}
 .ger details.diretoria summary::-webkit-details-marker{display:none} .ger details.diretoria summary span::before{content:"▸ ";color:var(--ink-muted)} .ger details.diretoria[open] summary span::before{content:"▾ "}
 .ger details.diretoria pre{margin:0;padding:4px 16px 16px;white-space:pre-wrap;font:inherit;font-size:13.5px;line-height:1.5;color:var(--ink)}
 
+table.taxas-t td small.vir{display:block;color:var(--ink-muted);font-size:10.5px}
 /* pendências */
 .pend{list-style:none;margin:0;padding:6px 16px 16px;display:grid;gap:8px}
 .pend li{display:grid;grid-template-columns:4px minmax(0,1fr);gap:12px;border:1px solid var(--rule);border-radius:8px;padding:10px 12px 10px 10px}
@@ -668,6 +669,7 @@ function fechDetalhe(){
       return {rotulo: x.nome.replace(/ - .*/, ""), nome: x.nome, estados, titulos};
     });
     const c = contaEstados(D.lojas);
+    html += taxasHtml();
     html += `<div class="det-head"><h3>Mapa dos fechamentos</h3><span class="meta">cada quadrado é um dia de uma loja, nas três formas · a cor mostra o pior caso do dia · clique para abrir a loja</span></div>${mapaHtml(linhas, dias)}${legenda()}`;
     if(c.olhar){
       const pend = [];
@@ -702,6 +704,24 @@ function fechDetalhe(){
   el.innerHTML = html;
   el.querySelectorAll(".cel[data-nome], .rot[data-nome], .link-loja[data-nome]").forEach(b => b.addEventListener("click", () => { sel = b.dataset.nome; try{localStorage.setItem("loja",sel)}catch(e){} fechLojas(); fechDetalhe(); vaiAoDetalhe(); }));
   el.querySelectorAll("[data-por]").forEach(q => nomeDe(q.dataset.por).then(n => { if(n) q.textContent = ` por ${n}`; }));
+}
+// Taxas do mês: MDR por produto, antecipação e aluguel, loja a loja, para o fechamento contábil
+function taxasLoja(l){
+  const dias = m => (l.mod[m] ? l.mod[m].dias : []).filter(d => d.data >= DE && d.data <= ATE);
+  const bD = sum(dias("debito"), d => d.maq), mD = sum(dias("debito"), d => d.mdr), bC = sum(dias("credito"), d => d.maq), mC = sum(dias("credito"), d => d.mdr), pix = sum(dias("pix"), d => d.maq);
+  const rc = recebTotais(recebLotes(l.mod.credito || {})), rd = recebTotais(recebLotes(l.mod.debito || {}));
+  const alug = sum((l.aluguel || []).filter(a => a.data >= DE && a.data <= ATE), a => a.valor);
+  const antec = r2(rc.antec + rd.antec), total = r2(mD + mC + antec + alug);
+  return {bD, mD, bC, mC, pix, antec, alug, total, cartao: r2(bD + bC)};
+}
+function taxasHtml(){
+  const rows = [...D.lojas].sort((a,b) => a.nome.localeCompare(b.nome)).map(l => ({l, t: taxasLoja(l)})).filter(x => x.t.cartao > 0.004 || x.t.pix > 0.004);
+  if(!rows.length) return "";
+  const T = rows.reduce((a, {t}) => { for(const k of Object.keys(t)) a[k] = r2((a[k] || 0) + t[k]); return a; }, {});
+  const pct = (x, b) => b > 0.004 ? (x / b * 100).toFixed(2).replace(".", ",") + "%" : "—";
+  const linha = (nome, t, tot) => `<tr${tot ? "" : ""}><td>${esc(nome)}</td><td>${brl(t.pix)}</td><td>${brl(t.bD)}</td><td>${brl(t.mD)}<small class="vir">${pct(t.mD, t.bD)}</small></td><td>${brl(t.bC)}</td><td>${brl(t.mC)}<small class="vir">${pct(t.mC, t.bC)}</small></td><td>${brl(t.antec)}<small class="vir">${pct(t.antec, t.bC)}</small></td><td>${t.alug ? brl(t.alug) : "—"}</td><td><b>${brl(t.total)}</b><small class="vir">${pct(t.total, t.cartao)} do cartão</small></td></tr>`;
+  return `<div class="det-head"><h3>Taxas do mês</h3><span class="meta">${dBR(DE)} a ${dBR(ATE)} · MDR pelo Histórico de vendas, antecipação e aluguel pelos lotes pagos · PIX não tem taxa</span></div>
+    <div class="tablewrap"><table class="fech-t taxas-t"><thead><tr><th>Loja</th><th>PIX (bruto)</th><th>Débito (bruto)</th><th>MDR débito</th><th>Crédito (bruto)</th><th>MDR crédito</th><th>Antecipação</th><th>Aluguel</th><th>Total de taxas</th></tr></thead><tbody>${rows.map(({l, t}) => linha(l.nome, t)).join("")}</tbody><tfoot>${linha("Total", T, true)}</tfoot></table></div>`;
 }
 function tabelaFech(L){
   return `<div class="tablewrap"><table class="fech-t"><thead><tr><th>Dia</th><th>Forma</th><th>PDV conc.</th><th>Máquina</th><th>Diferença</th><th>Motivo</th><th class="just">Justificativa</th><th>Registrado</th></tr></thead><tbody>` +
