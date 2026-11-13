@@ -368,7 +368,7 @@ function statusLoja(l){
   if(!m.tem_maq) return {s:"aguarda", t:"aguarda relatório"};
   const diverg = m.dias.some(d => abertoEf(d) > TOL) || m.pendencias.some(p => !p.ajuste && !p.fechado && !p.comanda && !p.banco && p.valor > TOL && /FORMA|NÃO CAIU|SERVIÇO/.test(p.status));
   if(diverg) return {s:"erro", t:"divergência"};
-  if(tab !== "pix"){ const rt = recebTotais(recebLotes(m)); if(rt.div) return {s:"erro", t:"banco diverge"}; if(rt.n && (rt.agExt || rt.agPort)) return {s:"pendente", t:"aguarda extrato"}; return {s:"ok", t: rt.n ? "fechou" : "PDV = máquina"}; }
+  if(tab !== "pix"){ const rt = recebTotais(recebLotes(m)); if(rt.n && (rt.agExt || rt.agPort)) return {s:"pendente", t:"aguarda extrato"}; return {s:"ok", t: rt.n ? "fechou" : "PDV = máquina"}; }   // lote divergente no banco fica só no card "Banco · caiu": o dia já está fechado
   if(!m.tem_banco) return {s:"pendente", t:"sem extrato"};
   if(m.dias.some(d => (d.aguarda ?? 0) > 0.004)) return {s:"pendente", t:"aguarda extrato"};
   return {s:"ok", t:"fechou"};
