@@ -81,7 +81,8 @@ def casa(maq: pd.DataFrame, pdv: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
         for i, m in res[res["Status"] == "MAQUININHA SEM PAR NO PDV"].iterrows():
             tm = m["dt"]
             dif = (sobra["dt_pdv"] - tm).dt.total_seconds() / 60
-            c = sobra[((sobra["cent"] - m["cent"]).abs() <= TOLERANCIA_CENT) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados_t))]
+            # com diferença de valor só no mesmo dia de movimento: R$ 40,00 na máquina num dia não é o cupom de R$ 39,90 do dia seguinte
+            c = sobra[((sobra["cent"] - m["cent"]).abs() <= TOLERANCIA_CENT) & (sobra["Data"] == m["Data"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados_t))]
             if len(c) == 0:
                 continue
             j = ((c["cent"] - m["cent"]).abs() * 1e6 + (c["dt_pdv"] - tm).abs().dt.total_seconds()).idxmin()

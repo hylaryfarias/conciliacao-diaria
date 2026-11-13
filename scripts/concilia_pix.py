@@ -165,7 +165,8 @@ def casa_tolerancia(res: pd.DataFrame, sobra: pd.DataFrame) -> tuple[pd.DataFram
     usados: set = set()
     for i, a in res[res["Status"] == "SEM PAR NA MAQUININHA"].iterrows():
         dif = (a["dt_pdv"] - sobra["dt"]).dt.total_seconds() / 60
-        c = sobra[((sobra["cent"] - a["cent"]).abs() <= TOLERANCIA_CENT) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados))]
+        # com diferença de valor só no mesmo dia de movimento: R$ 40,00 na máquina num dia não é o cupom de R$ 39,90 do dia seguinte
+        c = sobra[((sobra["cent"] - a["cent"]).abs() <= TOLERANCIA_CENT) & (sobra["Data"] == a["Data"]) & (dif >= -JANELA_ANTES_MIN) & (dif <= JANELA_DEPOIS_H * 60) & (~sobra.index.isin(usados))]
         if len(c) == 0:
             continue
         j = ((c["cent"] - a["cent"]).abs() * 1e6 + (c["dt"] - a["dt_pdv"]).abs().dt.total_seconds()).idxmin()
