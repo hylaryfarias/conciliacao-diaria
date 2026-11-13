@@ -22477,6 +22477,22 @@
    "justificativa": "Dia fechado com falta de R$ 22,25 no crédito: cupom 63039 (04:33, R$ 22,25, entrega, cartão crédito manual) sem pagamento correspondente na máquina. Há um vale Ticket de R$ 22,25 às 22:35 sem cupom de voucher, que também pode ser do cupom 63038 (dinheiro), por isso não foi vinculado. Inclui +R$ 89,06 de transferência de forma registrada no painel: cupom 63036 baixado como dinheiro, pago em crédito Mastercard às 22:32.",
    "criado_em": "2026-11-13T18:15:39Z",
    "por": null
+  },
+  "BIGGS-01---MARINGA_credito_2026-10-19": {
+   "loja": "BIGGS 01 - MARINGA",
+   "mod": "credito",
+   "data": "2026-10-19",
+   "aberto": 109.91,
+   "caixa": -1.89,
+   "pdv": 2959.28,
+   "pdv_rel": 2959.28,
+   "transf": 0,
+   "maq": 2957.39,
+   "delta": -1.89,
+   "motivo": "falta",
+   "justificativa": "Dia fechado com falta de R$ 1,89 no crédito: falta de R$ 55,90: cupom 63285 (23:23, R$ 55,90) sem pagamento correspondente na máquina em nenhuma forma; sobra de R$ 54,01: crédito Mastercard às 20:05 (R$ 54,01) na máquina sem cupom no PDV. Provavelmente a mesma venda com R$ 1,89 de diferença entre máquina e baixa, acima da tolerância, por isso não vinculada.",
+   "criado_em": "2026-11-13T18:17:08Z",
+   "por": null
   }
  },
  "vistos": {},
