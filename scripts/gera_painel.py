@@ -412,6 +412,22 @@ def main() -> None:
                             row["pago_em"] = str(q["Pago em"]); row["receb_st"] = str(q["Status"]); row["liq_pago"] = r2(q["Líquido (R$)"])
             mods[m] = {"tem_maq": any("maq" in r for r in dias), "tem_banco": any(x["recebido"] is not None for x in receb), "dias": dias, "pendencias": sorted(pend, key=lambda q: q["data"]), "receb": receb}
 
+        # "provável forma errada" só vale se a venda apontada na máquina estiver livre no destino: se ela já casou com
+        # outro cupom, a sugestão volta a "sem par" (medido: BIGGS 04 02/10, cupom 85379 apontava um débito que era do 85406)
+        for m, mod in mods.items():
+            for p in mod["pendencias"]:
+                if not str(p.get("status", "")).startswith("PROVÁVEL FORMA ERRADA") or not p.get("aut") or p.get("para") not in mods:
+                    continue
+                destino = mods[p["para"]]
+                dias_dest = [d for d in destino["dias"] if d["data"] in (p.get("data_maq"), p["data"])]
+                ocupada = any(str(r.get("a")) == str(p["aut"]) and str(r.get("s", "")).startswith("CONCILIADO") and str(r.get("c", "")).replace(".0", "") != str(p.get("cupom")) for d in dias_dest for r in d.get("lanc", []))
+                if ocupada:
+                    p["status"] = "SEM PAR NA MAQUININHA"; p["detalhe"] = ""; p.pop("aut", None); p.pop("para", None); p.pop("data_maq", None)
+                    for d in mod["dias"]:
+                        if d["data"] == p["data"]:
+                            for r in d.get("lanc", []):
+                                if r.get("c") == p.get("cupom") and str(r.get("s", "")).startswith("PROVÁVEL"):
+                                    r["s"] = "SEM PAR NA MAQUININHA"; r.pop("hm", None); r.pop("t", None); r.pop("a", None)
         lojas.append({"nome": filial, "marca": marca(filial), "ec": ec_de.get(filial), "aluguel": sorted(aluguel_de.get(filial, []), key=lambda a: a["data"]), "aluguel_outros": aluguel_outros.get(filial, []), "mod": mods})
 
     dados = {"gerado_em": datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M"), "de": de.isoformat(), "ate": ate.isoformat(),
