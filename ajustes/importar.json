@@ -1801,6 +1801,21 @@
    "aut": "133940",
    "data_maq": "2026-10-29",
    "id": "BIGGS-12---SAUL-ELKIND_2026-10-29_45402_pix_133940"
+  },
+  "BIGGS-01---MARINGA_2026-10-31_82983_pix": {
+   "loja": "BIGGS 01 - MARINGA",
+   "de": "pix",
+   "para": "prazo",
+   "data": "2026-10-31",
+   "cupom": "82983",
+   "caixa": "001 - BG01 - PDV 001",
+   "hora": "15:18",
+   "forma": "PIX MAQUININHA",
+   "valor": 1190.0,
+   "justificativa": "Venda B2B, não é PIX: evento carrinho Bigg's de 31/10 (cliente Giulia Moro, 50 Dog Frango Jr. e 50 Cheese Burguer Jr.), pago por transferência bancária na Marti Foods, recebido em 16/11. Valor combinado R$ 1.140,00 com desconto; o cupom saiu com R$ 1.190,00 porque o desconto de R$ 50,00 não foi lançado na baixa.",
+   "criado_em": "2026-11-13T15:45:05Z",
+   "por": null,
+   "id": "BIGGS-01---MARINGA_2026-10-31_82983_pix"
   }
  },
  "fechamentos": {
@@ -19434,6 +19449,22 @@
    "motivo": "bateu",
    "justificativa": "Conferido no fechamento de 31/10: PDV e maquininha batem no débito, cupom a cupom. Dia fechado.",
    "criado_em": "2026-11-13T15:26:17Z",
+   "por": null
+  },
+  "BIGGS-01---MARINGA_pix_2026-10-31": {
+   "loja": "BIGGS 01 - MARINGA",
+   "mod": "pix",
+   "data": "2026-10-31",
+   "aberto": 0,
+   "caixa": 0,
+   "pdv": 3890.22,
+   "pdv_rel": 5080.22,
+   "transf": -1190.0,
+   "maq": 3890.22,
+   "delta": 0.0,
+   "motivo": "bateu",
+   "justificativa": "Conferido no fechamento de 31/10: PDV e maquininha batem no PIX, cupom a cupom. Dia fechado e o banco creditou o valor integral. Inclui −R$ 1.190,00 do cupom 82983, venda B2B do evento carrinho Bigg's reclassificada para venda a prazo, paga por transferência na Marti Foods em 16/11.",
+   "criado_em": "2026-11-13T15:45:05Z",
    "por": null
   }
  },
