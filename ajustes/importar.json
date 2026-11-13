@@ -3770,6 +3770,23 @@
    "aut": "704094",
    "data_maq": "2026-10-30",
    "id": "MAPOLI_2026-10-30_39050_debito_704094"
+  },
+  "BIGGS-01---MARINGA_2026-10-17_63036_dinheiro_213556": {
+   "loja": "BIGGS 01 - MARINGA",
+   "de": "dinheiro",
+   "para": "credito",
+   "data": "2026-10-17",
+   "cupom": "63036",
+   "caixa": "003 - BG01 - PDV 003",
+   "hora": "04:32",
+   "forma": "DINHEIRO",
+   "valor": 89.06,
+   "justificativa": "Baixa incorreta no PDV: cupom 63036 de R$ 89,06 lançado como DINHEIRO às 04:32, a venda passou na máquina como crédito Mastercard às 22:32, terminal APT9C0E9 (aut. 213556). Valor único nos dois lados do dia.",
+   "criado_em": "2026-11-13T18:15:39Z",
+   "por": null,
+   "aut": "213556",
+   "data_maq": "2026-10-17",
+   "id": "BIGGS-01---MARINGA_2026-10-17_63036_dinheiro_213556"
   }
  },
  "fechamentos": {
@@ -22443,6 +22460,22 @@
    "motivo": "falta",
    "justificativa": "Dia fechado com falta de R$ 48,90 no débito: falta de R$ 48,90: cupom 62802 (01:50, R$ 48,90) sem pagamento correspondente na máquina em nenhuma forma. Entrega fechada pelo PDV 003 à 01:50 como cartão manual; nenhuma transação Sicredi desse valor no dia. Outros três cupons de débito do dia (R$ 71,30) foram vale na TEF e estão transferidos para voucher, com isso o voucher do dia fecha exato.",
    "criado_em": "2026-11-13T18:08:24Z",
+   "por": null
+  },
+  "BIGGS-01---MARINGA_credito_2026-10-17": {
+   "loja": "BIGGS 01 - MARINGA",
+   "mod": "credito",
+   "data": "2026-10-17",
+   "aberto": 22.25,
+   "caixa": -22.25,
+   "pdv": 10604.77,
+   "pdv_rel": 10515.71,
+   "transf": 89.06,
+   "maq": 10582.52,
+   "delta": -22.25,
+   "motivo": "falta",
+   "justificativa": "Dia fechado com falta de R$ 22,25 no crédito: cupom 63039 (04:33, R$ 22,25, entrega, cartão crédito manual) sem pagamento correspondente na máquina. Há um vale Ticket de R$ 22,25 às 22:35 sem cupom de voucher, que também pode ser do cupom 63038 (dinheiro), por isso não foi vinculado. Inclui +R$ 89,06 de transferência de forma registrada no painel: cupom 63036 baixado como dinheiro, pago em crédito Mastercard às 22:32.",
+   "criado_em": "2026-11-13T18:15:39Z",
    "por": null
   }
  },
