@@ -22412,6 +22412,38 @@
    "justificativa": "Dia fechado com falta de R$ 14,40 no PIX: falta de R$ 41,30: cupom 82305 (17:59, R$ 41,30) sem pagamento correspondente na máquina em nenhuma forma; sobra de R$ 26,90: PIX às 13:21 (R$ 26,90) na máquina sem cupom no PDV.",
    "criado_em": "2026-11-13T18:05:55Z",
    "por": null
+  },
+  "BIGGS-01---MARINGA_credito_2026-10-16": {
+   "loja": "BIGGS 01 - MARINGA",
+   "mod": "credito",
+   "data": "2026-10-16",
+   "aberto": 120.55,
+   "caixa": -120.55,
+   "pdv": 6656.12,
+   "pdv_rel": 6656.12,
+   "transf": 0,
+   "maq": 6535.57,
+   "delta": -120.55,
+   "motivo": "falta",
+   "justificativa": "Dia fechado com falta de R$ 120,55 no crédito: falta de R$ 120,55: cupom 62800 (01:49, R$ 47,15), cupom 62801 (01:49, R$ 73,40) sem pagamento correspondente na máquina em nenhuma forma. Entregas fechadas pelo PDV 003 à 01:49 como cartão manual; nenhuma transação Sicredi desses valores no dia, em nenhuma forma.",
+   "criado_em": "2026-11-13T18:08:24Z",
+   "por": null
+  },
+  "BIGGS-01---MARINGA_debito_2026-10-16": {
+   "loja": "BIGGS 01 - MARINGA",
+   "mod": "debito",
+   "data": "2026-10-16",
+   "aberto": 48.9,
+   "caixa": -48.9,
+   "pdv": 5405.49,
+   "pdv_rel": 5476.79,
+   "transf": -71.3,
+   "maq": 5356.59,
+   "delta": -48.9,
+   "motivo": "falta",
+   "justificativa": "Dia fechado com falta de R$ 48,90 no débito: falta de R$ 48,90: cupom 62802 (01:50, R$ 48,90) sem pagamento correspondente na máquina em nenhuma forma. Entrega fechada pelo PDV 003 à 01:50 como cartão manual; nenhuma transação Sicredi desse valor no dia. Outros três cupons de débito do dia (R$ 71,30) foram vale na TEF e estão transferidos para voucher, com isso o voucher do dia fecha exato.",
+   "criado_em": "2026-11-13T18:08:24Z",
+   "por": null
   }
  },
  "vistos": {},
