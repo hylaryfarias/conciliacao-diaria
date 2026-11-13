@@ -22442,7 +22442,7 @@
    "maq": 6535.57,
    "delta": -120.55,
    "motivo": "falta",
-   "justificativa": "Dia fechado com falta de R$ 120,55 no crédito: falta de R$ 120,55: cupom 62800 (01:49, R$ 47,15), cupom 62801 (01:49, R$ 73,40) sem pagamento correspondente na máquina em nenhuma forma. Entregas fechadas pelo PDV 003 à 01:49 como cartão manual; nenhuma transação Sicredi desses valores no dia, em nenhuma forma.",
+   "justificativa": "Dia fechado com falta de R$ 120,55 no crédito: falta de R$ 120,55: cupom 62800 (01:49, R$ 47,15), cupom 62801 (01:49, R$ 73,40) sem pagamento correspondente na máquina em nenhuma forma. Entregas fechadas pelo PDV 003 à 01:49 como cartão manual; nenhuma transação Sicredi desses valores no dia, em nenhuma forma. Possível achado: crédito Visa de R$ 47,15 às 00:07 e Mastercard de R$ 73,40 às 00:35 passaram na maquininha da BIGGS 02 no mesmo dia, sem cupom lá.",
    "criado_em": "2026-11-13T18:08:24Z",
    "por": null
   },
@@ -22458,7 +22458,7 @@
    "maq": 5356.59,
    "delta": -48.9,
    "motivo": "falta",
-   "justificativa": "Dia fechado com falta de R$ 48,90 no débito: falta de R$ 48,90: cupom 62802 (01:50, R$ 48,90) sem pagamento correspondente na máquina em nenhuma forma. Entrega fechada pelo PDV 003 à 01:50 como cartão manual; nenhuma transação Sicredi desse valor no dia. Outros três cupons de débito do dia (R$ 71,30) foram vale na TEF e estão transferidos para voucher, com isso o voucher do dia fecha exato.",
+   "justificativa": "Dia fechado com falta de R$ 48,90 no débito: falta de R$ 48,90: cupom 62802 (01:50, R$ 48,90) sem pagamento correspondente na máquina em nenhuma forma. Entrega fechada pelo PDV 003 à 01:50 como cartão manual; nenhuma transação Sicredi desse valor no dia. Outros três cupons de débito do dia (R$ 71,30) foram vale na TEF e estão transferidos para voucher, com isso o voucher do dia fecha exato. Possível achado: débito Mastercard de R$ 48,90 às 00:16 passou na maquininha da BIGGS 02 no mesmo dia, sem cupom lá.",
    "criado_em": "2026-11-13T18:08:24Z",
    "por": null
   },
@@ -22793,6 +22793,38 @@
     "motivo": "bateu",
     "justificativa": "Conferido no fechamento de 02/10: PDV e maquininha batem no débito, cupom a cupom. Dia fechado. Inclui −R$ 97,80 de transferências de forma registradas no painel. Diferença de −R$ 0,27 dentro da tolerância de R$ 1,00.",
     "criado_em": "2026-11-13T15:59:57Z",
+    "por": null
+   },
+   "BIGGS-01---MARINGA_credito_2026-10-16": {
+    "loja": "BIGGS 01 - MARINGA",
+    "mod": "credito",
+    "data": "2026-10-16",
+    "aberto": 120.55,
+    "caixa": -120.55,
+    "pdv": 6656.12,
+    "pdv_rel": 6656.12,
+    "transf": 0,
+    "maq": 6535.57,
+    "delta": -120.55,
+    "motivo": "falta",
+    "justificativa": "Dia fechado com falta de R$ 120,55 no crédito: falta de R$ 120,55: cupom 62800 (01:49, R$ 47,15), cupom 62801 (01:49, R$ 73,40) sem pagamento correspondente na máquina em nenhuma forma. Entregas fechadas pelo PDV 003 à 01:49 como cartão manual; nenhuma transação Sicredi desses valores no dia, em nenhuma forma. Possível achado: crédito Visa de R$ 47,15 às 00:07 e Mastercard de R$ 73,40 às 00:35 passaram na maquininha da BIGGS 02 no mesmo dia, sem cupom lá.",
+    "criado_em": "2026-11-13T18:08:24Z",
+    "por": null
+   },
+   "BIGGS-01---MARINGA_debito_2026-10-16": {
+    "loja": "BIGGS 01 - MARINGA",
+    "mod": "debito",
+    "data": "2026-10-16",
+    "aberto": 48.9,
+    "caixa": -48.9,
+    "pdv": 5405.49,
+    "pdv_rel": 5476.79,
+    "transf": -71.3,
+    "maq": 5356.59,
+    "delta": -48.9,
+    "motivo": "falta",
+    "justificativa": "Dia fechado com falta de R$ 48,90 no débito: falta de R$ 48,90: cupom 62802 (01:50, R$ 48,90) sem pagamento correspondente na máquina em nenhuma forma. Entrega fechada pelo PDV 003 à 01:50 como cartão manual; nenhuma transação Sicredi desse valor no dia. Outros três cupons de débito do dia (R$ 71,30) foram vale na TEF e estão transferidos para voucher, com isso o voucher do dia fecha exato. Possível achado: débito Mastercard de R$ 48,90 às 00:16 passou na maquininha da BIGGS 02 no mesmo dia, sem cupom lá.",
+    "criado_em": "2026-11-13T18:08:24Z",
     "por": null
    }
   },
