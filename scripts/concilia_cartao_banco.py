@@ -403,8 +403,10 @@ def main() -> None:
         # D+1 útil usada quando o Histórico foi exportado antes de a Sicredi registrar o pagamento
         rv = recebimentos["vendas"].get(filial)
         if rv is not None and len(v):
-            real = dict(zip(rv["Cód. de autorização"].astype(str).str.strip() + "|" + rv["prod"], rv["d"]))
-            chave = v["Cód. de autorização"].astype(str).str.strip() + "|" + v["prod"]
+            # chave = autorização + produto + data calendário da venda: o código de autorização se repete entre vendas
+            # de dias diferentes (BIGGS 03: 200746 em 16/10 e em 12/11), e só o código levava a venda ao lote errado
+            real = dict(zip(rv["Cód. de autorização"].astype(str).str.strip() + "|" + rv["prod"] + "|" + pd.to_datetime(rv["dt"]).dt.date.astype(str), rv["d"]))
+            chave = v["Cód. de autorização"].astype(str).str.strip() + "|" + v["prod"] + "|" + v["cal"].astype(str)
             achou = chave.map(real)
             troca = v["pago_em"].isna() & achou.notna()
             v.loc[troca, "pagto"] = achou[troca]; v.loc[troca, "pago_em"] = achou[troca]
@@ -418,7 +420,8 @@ def main() -> None:
                 vv = v[(v["pagto"] == d) & (v["prod"] == prod)]
                 rv = recebimentos["vendas"].get(filial)
                 if rv is not None:
-                    extra = rv[(rv["d"] == d) & (rv["prod"] == prod) & ~rv["Cód. de autorização"].isin(set(vv["Cód. de autorização"].astype(str).str.strip()))]
+                    ja = set(vv["Cód. de autorização"].astype(str).str.strip() + "|" + vv["cal"].astype(str))
+                    extra = rv[(rv["d"] == d) & (rv["prod"] == prod) & ~(rv["Cód. de autorização"].astype(str).str.strip() + "|" + pd.to_datetime(rv["dt"]).dt.date.astype(str)).isin(ja)]
                     if len(extra):
                         vv = pd.concat([vv, extra.drop(columns=["d"])], ignore_index=True)   # venda paga nesse dia que o Histórico lido não traz (ex.: venda de antes do período)
                 xx = xl[(xl["Data"] == d) & (xl["prod"] == prod)]
