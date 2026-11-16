@@ -58,7 +58,17 @@ def _extrato_bruto(caminho: str) -> pd.DataFrame:
         partes.append(pd.DataFrame(rows[h + 1 :], columns=rows[h]))
     ex = pd.concat(partes, ignore_index=True)
     chave = [c for c in ("Data", "Descrição", "Valor", "Loja", "Saldo após") if c in ex.columns]
-    return ex.drop_duplicates(subset=chave).reset_index(drop=True)
+    ex = ex.drop_duplicates(subset=chave).reset_index(drop=True)
+    # correções de categoria feitas pela Hylary no painel de extratos depois do export (entrada/extrato_categoria.csv:
+    # loja;data;descricao;valor;categoria). Ex.: PIX da maquininha classificado como "Vendas no B2B" por engano.
+    corr = RAIZ / "entrada" / "extrato_categoria.csv"
+    if corr.exists() and "Categoria" in ex.columns:
+        c = pd.read_csv(corr, sep=";", dtype=str).fillna("")
+        for _, r in c.iterrows():
+            m = (ex["Loja"].astype(str).str.strip() == r["loja"].strip()) & (pd.to_datetime(ex["Data"]).dt.date == pd.Timestamp(r["data"]).date()) \
+                & (ex["Descrição"].astype(str).str.strip() == r["descricao"].strip()) & (pd.to_numeric(ex["Valor"], errors="coerce").round(2) == round(float(r["valor"]), 2))
+            ex.loc[m, "Categoria"] = r["categoria"].strip()
+    return ex
 
 
 def ler_extrato(caminho: str, filiais_pdv=()) -> pd.DataFrame:
