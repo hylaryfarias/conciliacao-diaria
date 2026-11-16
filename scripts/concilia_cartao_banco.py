@@ -299,6 +299,24 @@ def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_at
     return out
 
 
+def cruza_elo(lotes_dia: list) -> None:
+    """ELO: a Sicredi deposita parte do crédito ELO dentro do crédito 'DEBITO ELO' do mesmo dia, ou o contrário
+    (medido em todas as lojas, out/nov 2026: o total ELO do dia bate ao centavo, só a repartição muda). Se os
+    lotes de crédito e débito do dia divergem em sentidos opostos e a soma dos dois fecha, os dois fecham."""
+    pagos = [l for l in lotes_dia if l["Status"] in ("CONCILIADO", "DIVERGENTE") and l["Recebido (R$)"] is not None and l["Esperado na conta (R$)"] is not None]
+    if len(pagos) != 2 or not any(l["Status"] == "DIVERGENTE" for l in pagos):
+        return
+    if not all("ELO" in str(l.get("Detalhe", "")).upper() for l in pagos if l["Status"] == "DIVERGENTE"):
+        return
+    deltas = [int(round(l["Δ recebido − esperado (R$)"] * 100)) for l in pagos]
+    esperado = sum(int(round(l["Esperado na conta (R$)"] * 100)) for l in pagos)
+    if abs(sum(deltas)) <= tol(esperado) and any(x > 0 for x in deltas) and any(x < 0 for x in deltas):
+        nota = f"crédito e débito ELO repartidos de outro jeito no extrato do mesmo dia (Δ {deltas[0]/100:+.2f} e {deltas[1]/100:+.2f}); a soma dos dois lotes fecha"
+        for l in pagos:
+            l["Status"] = "CONCILIADO"; l["_falta_band"] = 0
+            l["Detalhe"] = (nota + ("; " + str(l["Detalhe"]) if l["Detalhe"] else "")).strip("; ")
+
+
 def aplica_aluguel(lotes_dia: list, aluguel_cent: int) -> None:
     """A Sicredi desconta o aluguel do dia da liquidação, repartido entre débito e crédito como couber (medido:
     BIGGS 01 inteiro no débito; BIGGS 10 e 13 inteiros no crédito; BIGGS 11 R$ 912,64 no débito e R$ 164,36 no
@@ -405,6 +423,7 @@ def main() -> None:
                 do_dia.append(com_compensacao(filial, d, prod, vv, xx, extrato_ate, comp, ant, lq) if comp else lote(filial, d, prod, vv, xx, extrato_ate, antec_exata=ant, liq_exato=lq))
             if not any(a <= d <= b for a, b in recebimentos["cobre"].get(filial, [])):   # dia coberto pelo relatório de recebimentos: o aluguel já veio abatido lote a lote
                 aplica_aluguel(do_dia, aluguel.get((filial, d), 0))
+            cruza_elo(do_dia)
             lotes.extend(do_dia)
         # por dia de venda: para onde foi o líquido de cada dia e se chegou
         st = {(l["Pagamento"], l["Produto"]): l["Status"] for l in lotes if l["Filial"] == filial}
