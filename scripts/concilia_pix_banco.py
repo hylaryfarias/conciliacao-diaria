@@ -67,7 +67,7 @@ def ler_extrato(caminho: str, filiais_pdv=()) -> pd.DataFrame:
     ex = _extrato_bruto(caminho)
     ex = ex[ex["Descrição"].astype(str).str.upper().str.startswith("RECEBIMENTO PIX")].copy()
     if "Categoria" in ex.columns and ex["Categoria"].astype(str).str.contains("Vendas no Pix").any():
-        ex = ex[ex["Categoria"].astype(str) == "Vendas no Pix"]
+        ex = ex[ex["Categoria"].astype(str) == "Vendas no Pix"]   # "Vendas no B2B" fica fora: venda B2B não passa na maquininha
     ex["Valor"] = pd.to_numeric(ex["Valor"], errors="coerce").fillna(0)
     ex["cent"] = (ex["Valor"] * 100).round().astype(int)
     ex["Data"] = pd.to_datetime(ex["Data"]).dt.date
