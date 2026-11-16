@@ -564,11 +564,14 @@ function fluxoDinheiro(lojas){
   const esperado = r2(pixMaq + rc.esperado + rc.aReceber + rd.esperado + rd.aReceber);
   const caiu = r2(pixBanco + rc.recebido + rd.recebido), aCair = r2(pixAg + rc.aReceber + rd.aReceber), dif = r2((pixBanco - pixMaq + pixAg) + rc.delta + rd.delta);
   const pixNaoCaiu = lojas.reduce((a,l) => a + (l.mod.pix?.pendencias || []).filter(p => p.status === "NÃO CAIU NO BANCO" && p.data >= DE && p.data <= ATE).length, 0);
-  return {pdv, maq, esperado, caiu, aCair, dif, mdr, antec: r2(rc.antec + rd.antec), aluguel: r2(rc.aluguel + rd.aluguel), pixDif: r2(pixBanco - pixMaq + pixAg), cardDif: r2(rc.delta + rd.delta), pixNaoCaiu, nDiv: rc.div + rd.div};
+  const arrL = lojas.flatMap(l => recebLotes(l.mod.credito || {})).filter(x => x.status === "CONCILIADO" && String(x.detalhe || "").startsWith("arredondamento"));
+  const arr = r2(arrL.reduce((a,x) => a + (x.delta || 0), 0));
+  return {pdv, maq, esperado, caiu, aCair, dif, mdr, antec: r2(rc.antec + rd.antec), aluguel: r2(rc.aluguel + rd.aluguel), pixDif: r2(pixBanco - pixMaq + pixAg), cardDif: r2(rc.delta + rd.delta - arr), pixNaoCaiu, nDiv: rc.div + rd.div, arr, nArr: arrL.length};
 }
 function explicaDif(fl){
   // separa o que é lote de cartão pago diferente do previsto do que é PIX da maquininha que não chegou à conta
   const partes = [];
+  if(fl.arr > 0.004) partes.push(`+${brl(fl.arr)} de arredondamento da antecipação em ${fl.nArr} lote${fl.nArr===1?"":"s"}, a favor das lojas`);
   if(Math.abs(fl.cardDif) > 0.004) partes.push(`${sinalS(fl.cardDif)} em ${fl.nDiv} lote${fl.nDiv===1?"":"s"} de cartão pago${fl.nDiv===1?"":"s"} pela Sicredi ${fl.cardDif > 0 ? "acima" : "abaixo"} do previsto`);
   if(Math.abs(fl.pixDif) > 0.004) partes.push(`${sinalS(fl.pixDif)} de ${fl.pixNaoCaiu || ""} PIX da maquininha que não ${fl.pixNaoCaiu===1?"caiu":"caíram"} na conta`.replace("de  PIX", "em PIX"));
   return partes.join("; ") || "diferença residual";
