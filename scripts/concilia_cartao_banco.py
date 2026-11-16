@@ -40,7 +40,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 OK_STATUS = {"APROVADA", "AUTORIZADA"}
 BAND = {"MDS": "MASTER", "Mastercard": "MASTER", "Maestro": "MASTER", "Visa": "VISA", "Visa Electron": "VISA",
         "ELO Full": "ELO", "Elo": "ELO", "ELO": "ELO", "Amex Full": "AMEX", "Amex": "AMEX", "Hipercard": "HIPER", "Hiper": "HIPER"}
-PROD = {"Débito": "debito", "Crédito a Vista": "credito", "Crédito Parcelado": "credito", "Crédito": "credito"}
+PROD = {"Débito": "debito", "Crédito a Vista": "credito", "Crédito Parcelado": "credito", "Crédito": "credito", "Parcelado Lojista": "credito", "Parcelado Emissor": "credito"}   # parcelado: o relatório de recebimentos chama assim (BIGGS 02, 13/10, duas vendas em 2x)
 TOL_CENT = 5          # até R$ 0,05 é arredondamento de lote (sobe com o tamanho: ver tol())
 TOL_TAXA = 0.0015     # bandeiras concordam na taxa de antecipação até 0,15 ponto percentual
 
