@@ -293,8 +293,13 @@ def lote(filial: str, d, prod: str, v: pd.DataFrame, x: pd.DataFrame, extrato_at
     out["Δ recebido − esperado (R$)"] = (recebido - esperado) / 100
     out["_falta_band"] = falta_band
     fecha = abs(recebido - esperado) <= tol(esperado)
-    if fecha:
+    # crédito antecipado: a Sicredi calcula o desconto de antecipação sobre o lote e o relatório mostra o desconto
+    # arredondado venda a venda; sobram centavos a favor da loja (medido: até R$ 0,07 por venda). Não é divergência.
+    arred = prod == "credito" and 0 < recebido - esperado <= max(tol(esperado), 10 * len(v))
+    if fecha or arred:
         out["Status"] = "CONCILIADO"
+        if arred and not fecha:
+            por_band.insert(0, f"arredondamento da antecipação: R$ {(recebido - esperado)/100:.2f} a mais em {len(v)} vendas, a favor da loja")
     elif sem_efet > liq / 2 or (sem_efet > 0 and abs((recebido - esperado) + sem_efet) <= tol(esperado) + int(sem_efet * 0.03)):
         # o Histórico foi exportado antes de a Sicredi registrar o pagamento: a data é a da regra (D+1 útil), e a parte
         # da ELO que cai fora da antecipação (D+2) muda de lote. Não é divergência: é reexportar o Histórico.
