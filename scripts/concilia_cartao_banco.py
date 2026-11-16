@@ -169,10 +169,17 @@ def ler_recebimentos(caminhos, lojas: dict) -> dict:
         cobr_out.setdefault(filial, {})[d] = cobr_out.get(filial, {}).get(d, 0) + int(-g["Valor líquido"].sum())
     # valor líquido exato por (dia de pagamento, produto, bandeira): é o que compõe a linha do extrato, já com
     # antecipação, MDR e cancelamentos do jeito que a Sicredi calcula (inclusive vendas canceladas, negativas)
-    todas = t[~t["comp"] & t["filial"].notna() & t["Produto"].isin(PROD)]
-    for (filial, d, prod, band), g in todas.groupby(["filial", "d", todas["Produto"].map(PROD), "band"]):
+    # venda cancelada: o relatório traz a venda e, logo abaixo, a linha "Cancelamento" (negativa, com a taxa de
+    # antecipação não devolvida). As duas entram no líquido exato, para o lote não esperar dinheiro que a Sicredi
+    # não paga (medido: BIGGS 13, 03/11, cinco ELO canceladas = R$ 211,91 que o painel cobrava do banco)
+    canc = t["Produto"].astype(str).str.startswith("Cancelamento")
+    t["prodc"] = t["Produto"].map(PROD)
+    t.loc[canc, "prodc"] = t.loc[canc, "Tipo transação"].astype(str).str.upper().map(lambda s: "credito" if s.startswith("CR") else "debito")
+    todas = t[~t["comp"] & t["filial"].notna() & t["prodc"].notna()]
+    for (filial, d, prod, band), g in todas.groupby(["filial", "d", "prodc", "band"]):
         liq_out.setdefault(filial, {})[(d, prod, band)] = liq_out.get(filial, {}).get((d, prod, band), 0) + int(g["Valor líquido"].sum())
-    vend = todas.copy()
+    canceladas = set(todas[canc.reindex(todas.index, fill_value=False)]["Código de autorização"].astype(str).str.strip())
+    vend = todas[~canc.reindex(todas.index, fill_value=False) & ~todas["Código de autorização"].astype(str).str.strip().isin(canceladas)].copy()
     if len(vend):
         from portal_sicredi import dia_movimento
         vend["prod"] = vend["Produto"].map(PROD)
@@ -186,7 +193,7 @@ def ler_recebimentos(caminhos, lojas: dict) -> dict:
         cols = ["d", "prod", "band", "dt", "Data", "pago_em", "pagto", "bruto_cent", "mdr_cent", "liq_cent", "Cód. de autorização"]
         for filial, g in vend.groupby("filial"):
             vendas_out[filial] = g[cols].reset_index(drop=True)
-    vendas_cred = todas[todas["Produto"].map(PROD) == "credito"]
+    vendas_cred = todas[todas["prodc"] == "credito"]
     for (filial, d, band), g in vendas_cred.groupby(["filial", "d", "band"]):
         antec_out.setdefault(filial, {})[(d, band)] = int(g["Desconto antecipação"].sum())
     for cod, g in t.groupby("Código de pagamento"):
@@ -423,7 +430,6 @@ def main() -> None:
                 do_dia.append(com_compensacao(filial, d, prod, vv, xx, extrato_ate, comp, ant, lq) if comp else lote(filial, d, prod, vv, xx, extrato_ate, antec_exata=ant, liq_exato=lq))
             if not any(a <= d <= b for a, b in recebimentos["cobre"].get(filial, [])):   # dia coberto pelo relatório de recebimentos: o aluguel já veio abatido lote a lote
                 aplica_aluguel(do_dia, aluguel.get((filial, d), 0))
-            cruza_elo(do_dia)
             lotes.extend(do_dia)
         # por dia de venda: para onde foi o líquido de cada dia e se chegou
         st = {(l["Pagamento"], l["Produto"]): l["Status"] for l in lotes if l["Filial"] == filial}
