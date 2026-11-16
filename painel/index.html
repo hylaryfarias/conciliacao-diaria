@@ -563,7 +563,15 @@ function fluxoDinheiro(lojas){
   const mdr = r2(lojas.reduce((a,l) => a + sum(dias(l,"credito"), d => d.mdr) + sum(dias(l,"debito"), d => d.mdr), 0));
   const esperado = r2(pixMaq + rc.esperado + rc.aReceber + rd.esperado + rd.aReceber);
   const caiu = r2(pixBanco + rc.recebido + rd.recebido), aCair = r2(pixAg + rc.aReceber + rd.aReceber), dif = r2((pixBanco - pixMaq + pixAg) + rc.delta + rd.delta);
-  return {pdv, maq, esperado, caiu, aCair, dif, mdr, antec: r2(rc.antec + rd.antec), aluguel: r2(rc.aluguel + rd.aluguel)};
+  const pixNaoCaiu = lojas.reduce((a,l) => a + (l.mod.pix?.pendencias || []).filter(p => p.status === "NÃO CAIU NO BANCO" && p.data >= DE && p.data <= ATE).length, 0);
+  return {pdv, maq, esperado, caiu, aCair, dif, mdr, antec: r2(rc.antec + rd.antec), aluguel: r2(rc.aluguel + rd.aluguel), pixDif: r2(pixBanco - pixMaq + pixAg), cardDif: r2(rc.delta + rd.delta), pixNaoCaiu, nDiv: rc.div + rd.div};
+}
+function explicaDif(fl){
+  // separa o que é lote de cartão pago diferente do previsto do que é PIX da maquininha que não chegou à conta
+  const partes = [];
+  if(Math.abs(fl.cardDif) > 0.004) partes.push(`${sinalS(fl.cardDif)} em ${fl.nDiv} lote${fl.nDiv===1?"":"s"} de cartão pago${fl.nDiv===1?"":"s"} pela Sicredi abaixo do previsto, em tratativa`);
+  if(Math.abs(fl.pixDif) > 0.004) partes.push(`${sinalS(fl.pixDif)} de ${fl.pixNaoCaiu || ""} PIX da maquininha que não ${fl.pixNaoCaiu===1?"caiu":"caíram"} na conta`.replace("de  PIX", "em PIX"));
+  return partes.join("; ") || "diferença residual";
 }
 function textoDiretoria(){
   const lista = fechLista(), t = fechTotais(lista), c = contaEstados(D.lojas), fl = fluxoDinheiro(D.lojas), bl = bancoLista();
@@ -590,7 +598,7 @@ function textoDiretoria(){
   L.push(`• Registrado nas maquininhas: ${brl(fl.maq)}${explica}`);
   L.push(`• Taxas descontadas: MDR ${brl(fl.mdr)}${fl.antec ? ` · antecipação ${brl(fl.antec)}` : ""}${fl.aluguel ? ` · aluguel das máquinas ${brl(fl.aluguel)}` : ""}`);
   L.push(`• Esperado na conta: ${brl(fl.esperado)}`);
-  L.push(`• Caiu na conta: ${brl(fl.caiu)}${Math.abs(fl.dif) > 0.004 ? ` (${sinalS(fl.dif)} contra o esperado${nDiv ? `, em ${nDiv} lote${nDiv===1?"":"s"} de cartão em tratativa com a Sicredi` : ""})` : " (bate com o esperado)"}${fl.aCair > 0.004 ? ` · ${brl(fl.aCair)} ainda a cair` : ""}`);
+  L.push(`• Caiu na conta: ${brl(fl.caiu)}${Math.abs(fl.dif) > 0.004 ? ` (${sinalS(fl.dif)} contra o esperado: ${explicaDif(fl)})` : " (bate com o esperado)"}${fl.aCair > 0.004 ? ` · ${brl(fl.aCair)} ainda a cair` : ""}`);
   L.push("");
   L.push("Fechamento do caixa");
   L.push(`• ${c.fechados.toLocaleString("pt-BR")} de ${c.total.toLocaleString("pt-BR")} fechamentos concluídos (${pct(c.fechados, c.total)}%) · ${nLojas} lojas × ${nDias} dias × 3 formas`);
@@ -624,7 +632,7 @@ function fechKpis(){
       <div class="passo"><div class="lbl">Vendas no PDV</div><div class="val">${brl(fl.pdv)}</div><div class="sub">conciliado, já com as transferências de forma</div></div>
       <div class="passo" data-tone="${tone(r2(fl.maq - fl.pdv))}"><div class="lbl">Na maquininha</div><div class="val">${brl(fl.maq)}</div><div class="sub">${Math.abs(fl.maq - fl.pdv) <= 0.004 ? "igual ao PDV" : `${sinal(r2(fl.maq - fl.pdv))} contra o PDV`}</div></div>
       <div class="passo"><div class="lbl">Esperado na conta</div><div class="val">${brl(fl.esperado)}</div><div class="sub">já descontados MDR ${brl(fl.mdr)}${fl.antec ? ` · antecipação ${brl(fl.antec)}` : ""}${fl.aluguel ? ` · aluguel ${brl(fl.aluguel)}` : ""}</div></div>
-      <div class="passo" data-tone="${Math.abs(fl.dif) > TOL ? "erro" : "ok"}"><div class="lbl">Caiu no banco</div><div class="val">${brl(fl.caiu)}</div><div class="sub">${Math.abs(fl.dif) <= 0.004 ? "bate com o esperado" : `${sinalS(fl.dif)} contra o esperado`}${fl.aCair > 0.004 ? ` · ${brl(fl.aCair)} ainda a cair` : ""}</div></div>
+      <div class="passo" data-tone="${Math.abs(fl.dif) > TOL ? "erro" : "ok"}"><div class="lbl">Caiu no banco</div><div class="val">${brl(fl.caiu)}</div><div class="sub">${Math.abs(fl.dif) <= 0.004 ? "bate com o esperado" : `${sinalS(fl.dif)} contra o esperado · ${explicaDif(fl)}`}${fl.aCair > 0.004 ? ` · ${brl(fl.aCair)} ainda a cair` : ""}</div></div>
     </div>
   </div>
   <div class="bloco">
