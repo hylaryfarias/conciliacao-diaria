@@ -146,7 +146,9 @@ def classifica_sobra(sobra: pd.DataFrame, vendas: pd.DataFrame, devol: pd.DataFr
         v = vendas[(vendas["Filial"] == x["Loja"]) & (vendas["cent"] == x["cent"]) & (vendas["Data"].isin(dias))]
         dv = devol[(devol["Loja"] == x["Loja"]) & (devol["cent"] == x["cent"]) & (devol["doc"] == x["doc"]) & (devol["Data"] >= d)]
         c = sp[(sp["Filial"] == x["Loja"]) & (sp["cent"] == x["cent"]) & (sp["Data"].isin(dias)) & (~sp.index.isin(usados_sp))] if len(sp) else sp
-        ant = antes[(antes["Filial"] == x["Loja"]) & (antes["cent"] == x["cent"]) & (pd.to_datetime(antes["dt"]) >= pd.Timestamp(d) - pd.Timedelta(days=1)) & (pd.to_datetime(antes["dt"]) <= pd.Timestamp(d) + pd.Timedelta(days=1))] if antes is not None and len(antes) else pd.DataFrame()
+        # venda de antes do período que cai dentro dele: até 4 dias para trás, igual às vendas do período (sábado 31/10 cai
+        # na segunda 03/11; BIGGS 08 e 09 tinha 14 PIX assim marcados como "outra natureza" em novembro)
+        ant = antes[(antes["Filial"] == x["Loja"]) & (antes["cent"] == x["cent"]) & (pd.to_datetime(antes["dt"]) >= pd.Timestamp(d) - pd.Timedelta(days=4)) & (pd.to_datetime(antes["dt"]) <= pd.Timestamp(d) + pd.Timedelta(days=1))] if antes is not None and len(antes) else pd.DataFrame()
         if len(dv):
             cls.append("PIX EM DUPLICIDADE · DEVOLVIDO"); evid.append(f"devolvido em {dv['Data'].iloc[0]:%d/%m} ao mesmo pagador")
         elif len(ant):
