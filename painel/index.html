@@ -528,7 +528,7 @@ const tdS = x => `<td class="${x > TOL ? "pos" : x < -TOL ? "neg" : ""}">${brlS(
 // Estado de cada loja × forma × dia, para o mapa e os totais:
 //   bateu / sobra / falta = fechado no caixa (com o resultado do fechamento)
 //   olhar  = aberto com diferença real entre PDV e máquina (precisa de uma pessoa)
-//   limpo  = aberto, mas PDV e máquina batem (pode fechar)
+//   limpo  = (não usado desde 17/11: dia que bate conta como fechado, sem precisar do clique)
 //   vazio  = sem movimento nessa forma no dia · semmaq = PDV lançou, máquina ainda sem relatório · sempdv = máquina sem relatório do PDV
 const ESTADOS = {bateu:"fechado · bateu", sobra:"fechado · sobra na máquina", falta:"fechado · falta no caixa", olhar:"aberto · precisa de você", limpo:"aberto · PDV e máquina batem", vazio:"sem movimento", semmaq:"aguarda relatório da maquininha", sempdv:"aguarda relatório do PDV"};
 const PESO = {olhar:6, falta:5, sobra:4, semmaq:3, sempdv:3, limpo:2, bateu:1, vazio:0};
@@ -537,7 +537,7 @@ function estadoDia(l, m, d){
   if(d.maq === undefined) return d.pdv > 0.004 ? "semmaq" : "vazio";
   if(d.sem_pdv) return "sempdv";
   const bruto = r2((d.maq ?? 0) - d.pdv - viradaUtil(d));
-  return aberto(d) <= TOL && Math.abs(bruto) <= TOL ? "limpo" : "olhar";
+  return aberto(d) <= TOL && Math.abs(bruto) <= TOL ? "bateu" : "olhar";   // bate = fechado; o "Fechar dia" vira só um registro opcional (Hylary, 17/11)
 }
 const diasPeriodo = () => { const s = new Set(); for(const l of D.lojas) for(const m of Object.keys(TABS)) for(const d of l.mod[m].dias) if(d.data >= DE && d.data <= ATE) s.add(d.data); return [...s].sort(); };
 function mapaLoja(l){   // {mod: {data: estado}}
@@ -664,7 +664,7 @@ function fechLojas(){
   }).join("");
   ul.querySelectorAll(".loja").forEach(b => b.addEventListener("click", () => { sel = b.dataset.nome; try{localStorage.setItem("loja",sel)}catch(e){} fechLojas(); fechDetalhe(); vaiAoDetalhe(); }));
 }
-const legenda = () => `<div class="legenda">${["bateu","sobra","falta","limpo","olhar","vazio","semmaq"].map(e => `<span><i data-e="${e}"></i>${ESTADOS[e]}</span>`).join("")}</div>`;
+const legenda = () => `<div class="legenda">${["bateu","sobra","falta","olhar","vazio","semmaq"].map(e => `<span><i data-e="${e}"></i>${ESTADOS[e]}</span>`).join("")}</div>`;
 function mapaHtml(linhas, dias){   // linhas: [{rotulo, nome, estados:{data: estado}, titulos:{data: texto}}]
   const cab = `<div class="linha cab" style="--n:${dias.length}"><span></span>${dias.map(d => `<span class="dia-c" title="${dBR(d)}">${d.slice(8,10)}</span>`).join("")}</div>`;
   const corpo = linhas.map(r => `<div class="linha" style="--n:${dias.length}"><button type="button" class="rot" data-nome="${esc(r.nome)}">${esc(r.rotulo)}</button>${dias.map(d => { const e = r.estados[d]; return e ? `<button type="button" class="cel" data-e="${e}" data-nome="${esc(r.nome)}" data-data="${d}" title="${esc(r.titulos[d] || "")}"></button>` : `<span class="cel" data-e="fora"></span>`; }).join("")}</div>`).join("");
@@ -843,7 +843,7 @@ function tabela(m){
     ? `<span class="chip" data-s="ok" title="${esc(d.fechado.justificativa)}">fechado ✓</span>`
     : d.sem_pdv ? `<span style="color:var(--ink-muted)">aguarda PDV</span>`
     : d.maq !== undefined
-      ? (podeFechar ? `<button type="button" class="btn mini ${aberto(d) > TOL ? "" : "quieto"}" data-act="fechar" data-i="${i}">Fechar dia…</button>` : `<span style="color:var(--ink-muted)">aberto</span>`)
+      ? (podeFechar ? `<button type="button" class="btn mini ${aberto(d) > TOL ? "" : "quieto"}" data-act="fechar" data-i="${i}">${aberto(d) > TOL ? "Fechar dia…" : "Registrar…"}</button>` : `<span style="color:var(--ink-muted)">aberto</span>`)
       : `<span style="color:var(--ink-muted)">—</span>`;
   const rows = m.dias.map((d,i) => {
     const t = tone(d), fds = d.dow==="sáb"||d.dow==="dom"||d.feriado;
