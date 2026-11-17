@@ -876,7 +876,7 @@ function lancamentos(d){
   const L = d.lanc || [];
   const topo = d.fechado ? notaFech(d.fechado, true) : "";
   if(!L.length) return topo + `<div class="lanc-vazio">Nenhum lançamento de ${TABS[tab]} neste dia.</div>`;
-  const st = r => r.aj ? ["ajuste", r.s.toLowerCase()] : r.s==="AGUARDA PDV" ? ["pendente","aguarda PDV"] : /^(SEM PAR|MAQUININHA SEM PAR)/.test(r.s) ? ["pendente", "comanda parcial"] : r.s.startsWith("CONCILIADO") ? ["ok", r.s==="CONCILIADO" ? "conciliado" : r.s.toLowerCase().replace("conciliado ","")] : r.s.startsWith("SERVIÇO") ? ["erro", "serviço não baixado"] : r.s==="PDV" ? ["pdv","só PDV"] : ["erro", r.s.toLowerCase().replace("provável forma errada:","forma errada ·")];
+  const st = r => r.aj ? ["ajuste", r.s.toLowerCase()] : r.s==="AGUARDA PDV" ? ["pendente","aguarda PDV"] : /^(SEM PAR|MAQUININHA SEM PAR)/.test(r.s) ? ["pendente", r.s.startsWith("MAQUININHA") ? "sem cupom" : "sem pagamento"] : r.s.startsWith("CONCILIADO") ? ["ok", r.s==="CONCILIADO" ? "conciliado" : r.s.toLowerCase().replace("conciliado ","")] : r.s.startsWith("SERVIÇO") ? ["erro", "serviço não baixado"] : r.s==="PDV" ? ["pdv","só PDV"] : ["erro", r.s.toLowerCase().replace("provável forma errada:","forma errada ·")];
   const head = temMaq
     ? `<th>Hora PDV</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor PDV</th><th>Valor máq</th><th>Situação</th><th>Hora máq</th>${pix?"":"<th>Bandeira</th>"}<th>Terminal</th><th>Autorização</th>${pix?"<th>Pagador</th>":"<th>MDR</th>"}`
     : `<th>Hora</th><th>Cupom</th><th>Caixa</th><th>Forma</th><th>Valor</th>`;
