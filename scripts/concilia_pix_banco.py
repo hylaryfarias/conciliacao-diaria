@@ -136,6 +136,7 @@ def classifica_sobra(sobra: pd.DataFrame, vendas: pd.DataFrame, devol: pd.DataFr
         pagos["doc_pag"] = pagos["Pagador"].astype(str).str.extract(r"^(\d+)")[0]
     sp = pdv_sem_par_pix()
     usados_sp: set = set()
+    usados_ant: set = set()     # cada venda de antes do período explica UMA linha do extrato (antes, a mesma venda de 31/10 "explicava" quatro linhas de 39,90 em 03/11)
     cls, evid, cupons = [], [], []
     for _, x in sobra.iterrows():
         # pagadores B2B conhecidos (entrada/b2b_pagadores.csv): venda para empresa, não passa pelo PDV
@@ -148,11 +149,11 @@ def classifica_sobra(sobra: pd.DataFrame, vendas: pd.DataFrame, devol: pd.DataFr
         c = sp[(sp["Filial"] == x["Loja"]) & (sp["cent"] == x["cent"]) & (sp["Data"].isin(dias)) & (~sp.index.isin(usados_sp))] if len(sp) else sp
         # venda de antes do período que cai dentro dele: até 4 dias para trás, igual às vendas do período (sábado 31/10 cai
         # na segunda 03/11; BIGGS 08 e 09 tinha 14 PIX assim marcados como "outra natureza" em novembro)
-        ant = antes[(antes["Filial"] == x["Loja"]) & (antes["cent"] == x["cent"]) & (pd.to_datetime(antes["dt"]) >= pd.Timestamp(d) - pd.Timedelta(days=4)) & (pd.to_datetime(antes["dt"]) <= pd.Timestamp(d) + pd.Timedelta(days=1))] if antes is not None and len(antes) else pd.DataFrame()
+        ant = antes[(antes["Filial"] == x["Loja"]) & (antes["cent"] == x["cent"]) & (pd.to_datetime(antes["dt"]) >= pd.Timestamp(d) - pd.Timedelta(days=4)) & (pd.to_datetime(antes["dt"]) <= pd.Timestamp(d) + pd.Timedelta(days=1)) & (~antes.index.isin(usados_ant))] if antes is not None and len(antes) else pd.DataFrame()
         if len(dv):
             cls.append("PIX EM DUPLICIDADE · DEVOLVIDO"); evid.append(f"devolvido em {dv['Data'].iloc[0]:%d/%m} ao mesmo pagador")
         elif len(ant):
-            r = ant.iloc[0]
+            r = ant.iloc[0]; usados_ant.add(ant.index[0])
             cls.append("VENDA ANTES DO PERÍODO"); evid.append(f"PIX de R$ {x['Valor']:.2f} na máquina em {pd.Timestamp(r['dt']):%d/%m %H:%M} (dia de movimento {pd.Timestamp(r['Data']):%d/%m}, antes do início do painel); caiu na conta já dentro do período")
         elif len(c):
             j = c.index[0]; usados_sp.add(j); r = sp.loc[j]
@@ -241,6 +242,17 @@ def main() -> None:
     antes = pd.DataFrame()
     if de:
         antes = v[(v["Fonte"] == "Maquininha") & (v["Data"] < de)].copy()   # vendas da máquina antes do período (madrugada do dia anterior cai no banco já dentro dele)
+        # Só conta como "venda de antes do período" a venda que NÃO caiu na conta antes do período. Quando o extrato
+        # cobre dias anteriores, as vendas de antes casam primeiro com as linhas desses dias; o que sobra (sábado que
+        # cai na segunda) é o que pode explicar um crédito dentro do período. Sem isso, um PIX de 30/10 já creditado
+        # em 30/10 "roubava" a linha de 03/11 de um cupom TEF do próprio dia (BIGGS 07, 03/11: cinco cupons sem par).
+        if len(antes):
+            ex_antes = ex[ex["Data"] < de]
+            if len(ex_antes):
+                r_antes, _ = casa_banco(antes, ex_antes, de)
+                caiu = r_antes["Status"].eq("CONCILIADO") if len(r_antes) else pd.Series(dtype=bool)
+                chaves = set(zip(r_antes.loc[caiu, "Filial"], r_antes.loc[caiu, "dt"], r_antes.loc[caiu, "cent"])) if len(r_antes) else set()
+                antes = antes[[(f, t, c) not in chaves for f, t, c in zip(antes["Filial"], antes["dt"], antes["cent"])]]
         v = v[(v["Data"] >= de) | (v["Fonte"].eq("PDV") & (v["Dia movimento"] >= de))]
     if ate:
         v = v[(v["Data"] <= ate) | (v["Fonte"].eq("PDV") & (v["Dia movimento"] <= ate))]
