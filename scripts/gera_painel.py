@@ -356,7 +356,8 @@ def main() -> None:
                                 row["pdv_sem_par"] = r2(max(0, row.get("pdv_sem_par", 0) - r["v"]))
                                 # lojas com PIX pela TEF sem relatório da TEF (a partir de 02/11): a ponta é PDV × banco.
                                 # O cupom confirmado pelo extrato conta como pago, igual a uma venda da maquininha.
-                                if filial in TEF_LOJAS and pd.Timestamp(row["data"]).date() > tef_ate and "maq" in row:
+                                cal = pd.Timestamp(row["data"]).date() + pd.Timedelta(days=1 if str(r.get("h", "")) < "10:00" else 0)   # madrugada = calendário do dia seguinte
+                                if filial in TEF_LOJAS and cal > tef_ate and "maq" in row:
                                     r["vm"] = r["v"]; r["t"] = "TEF (banco)"
                                     row["maq"] = r2(row["maq"] + r["v"]); row["maq_qtd"] = row.get("maq_qtd", 0) + 1
                                     row["conc"] = r2(row.get("conc", 0) + r["v"]); row["delta"] = r2(row.get("delta", 0) - r["v"])
