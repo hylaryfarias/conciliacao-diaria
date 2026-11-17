@@ -106,7 +106,9 @@ def pdv_sem_par_pix() -> pd.DataFrame:
     if not fs:
         return pd.DataFrame()
     df = pd.concat([pd.read_excel(f, sheet_name="PDV sem par") for f in fs], ignore_index=True)
-    df = df[df["Status"].astype(str).str.startswith("SEM PAR")].copy()
+    # "PROVÁVEL FORMA ERRADA" é só uma pista (cartão no mesmo minuto na TEF); se o PIX do cupom caiu na conta, a
+    # conta decide: o cupom também entra aqui (BIGGS 01, 01/11: oito TEF-PIX com crédito em 03/11 ficavam sem par)
+    df = df[df["Status"].astype(str).str.startswith(("SEM PAR", "PROVÁVEL FORMA ERRADA"))].copy()
     df["Data"] = pd.to_datetime(df["Data"]).dt.date
     df["cent"] = (pd.to_numeric(df["Vl. pagamento"]) * 100).round().astype(int)
     return df
