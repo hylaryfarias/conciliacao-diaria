@@ -315,6 +315,8 @@ footer{font-size:12.5px;color:var(--ink-muted);padding-block:0 8px;display:flex;
 let D0 = /*DADOS*/;
 const EMBUTIDO = !!D0;      // cópia do Claude: dados dentro da página. Na Vercel: um arquivo por mês em dados/<AAAA-MM>.json
 let MESES = [], MES = D0 ? D0.de.slice(0, 7) : null;
+// mês fechado (ajustes/meses_fechados.json, via dados/meses.json): nada de transferir, fechar, reabrir ou desfazer; a API também recusa (423)
+const mesTravado = () => (MESES.find(m => m.mes === MES) || {}).fechado || null;
 let D = D0 ? JSON.parse(JSON.stringify(D0)) : {lojas: []};
 const TOL = 1.004;  // até R$ 1,00 para mais ou para menos é conciliado
 const aberto = d => Math.abs((d.pdv_sem_par ?? 0) - (d.maq_sem_par ?? 0)) + (d.nao_caiu ?? 0) + (d.servico ?? 0);   // sobras dos dois lados se compensam (comanda parcial)
@@ -381,7 +383,7 @@ function tabs(){
     const nErro = st.filter(x=>x.s==="erro").length, nOk = st.filter(x=>x.s==="ok").length;
     const badge = nErro ? `<span class="n" data-s="erro">${nErro} em aberto</span>` : nOk ? `<span class="n" data-s="ok">${nOk} ok</span>` : "";
     return `<button class="tab" role="tab" id="tab-${k}" data-tab="${k}" aria-selected="${k===tab}">${v}${badge}</button>`;
-  }).join("") + `<button class="tab" role="tab" id="tab-fech" data-tab="fech" aria-selected="${tab==="fech"}">Fechamentos</button>` + `<label class="ate">${MESES.length ? `<select id="mes" aria-label="Mês">${MESES.map(m => `<option value="${m.mes}" ${m.mes===MES?"selected":""}>${m.rotulo}</option>`).join("")}</select>` : ""}de <input type="date" id="de" value="${DE}" min="${D0.de}" max="${ATE}"> até <input type="date" id="ate" value="${ATE}" min="${DE}" max="${D0.ate}">${(ATE < D0.ate || DE > D0.de) ? `<button type="button" id="ate-tudo">todo o período</button>` : ""}</label>`;
+  }).join("") + `<button class="tab" role="tab" id="tab-fech" data-tab="fech" aria-selected="${tab==="fech"}">Fechamentos</button>` + `<label class="ate">${MESES.length ? `<select id="mes" aria-label="Mês">${MESES.map(m => `<option value="${m.mes}" ${m.mes===MES?"selected":""}>${m.rotulo}${m.fechado ? " 🔒" : ""}</option>`).join("")}</select>` : ""}de <input type="date" id="de" value="${DE}" min="${D0.de}" max="${ATE}"> até <input type="date" id="ate" value="${ATE}" min="${DE}" max="${D0.ate}">${(ATE < D0.ate || DE > D0.de) ? `<button type="button" id="ate-tudo">todo o período</button>` : ""}</label>`;
   document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => { tab = b.dataset.tab; try{localStorage.setItem("tab",tab)}catch(e){} render(); }));
   const muda = (de, ate) => {
     if(!ate || ate < D0.de || ate > D0.ate) ate = D0.ate;
@@ -755,7 +757,7 @@ function bancoHtml(l, bl, meus){
   } else html += `<p class="vazio">Nenhum PIX sem venda nesta loja no período.</p>`;
   return html;
 }
-const notaFech = (f, comBotao) => `<div class="ajuste-nota fech-nota"><b>Dia fechado no caixa</b> · conferido ${brl(f.caixa)} no caixa físico contra ${brl(f.aberto)} em aberto no painel.<br>${esc(f.justificativa)}<br><small>registrado em ${quando(f.criado_em)}<span data-por="${esc(f.por||"")}"></span></small>${comBotao && dbRef && podeEscrever !== false ? `<div class="acoes"><button type="button" class="btn" data-act="reabrir" data-id="${esc(idFech(f))}">Reabrir dia</button></div>` : ""}</div>`;
+const notaFech = (f, comBotao) => `<div class="ajuste-nota fech-nota"><b>Dia fechado no caixa</b> · conferido ${brl(f.caixa)} no caixa físico contra ${brl(f.aberto)} em aberto no painel.<br>${esc(f.justificativa)}<br><small>registrado em ${quando(f.criado_em)}<span data-por="${esc(f.por||"")}"></span></small>${comBotao && dbRef && podeEscrever !== false && !mesTravado() ? `<div class="acoes"><button type="button" class="btn" data-act="reabrir" data-id="${esc(idFech(f))}">Reabrir dia</button></div>` : ""}</div>`;
 function detalhe(){
   if(tab === "fech"){ fechDetalhe(); return; }
   const el = document.getElementById("detalhe");
@@ -809,7 +811,7 @@ function detalhe(){
   }
   html += tabela(m);
   if(m.pendencias.length){
-    const podeAjustar = !!dbRef && podeEscrever !== false;
+    const podeAjustar = !!dbRef && podeEscrever !== false && !mesTravado();
     html += `<h2>Pendências · ${m.pendencias.length}</h2><ul class="pend" id="pend">` + m.pendencias.map((p,i) => {
       const key = Object.keys(EXPL).find(k => p.status.startsWith(k)) || "";
       const s = (p.ajuste || p.fechado) ? "ajuste" : (p.comanda || p.valor <= TOL || /DEVOLVIDO|MÁQUINA NÃO REGISTROU|ANTES DO PERÍODO/.test(p.status)) ? "ok" : (/AGUARDA/.test(p.status) || /SEM PAR/.test(p.status) || p.banco) ? "pendente" : "erro";
@@ -838,7 +840,7 @@ function detalhe(){
 function tabela(m){
   const pix = tab === "pix";
   const f = v => v===undefined ? `<span style="color:var(--ink-muted)">—</span>` : brl(v);
-  const podeFechar = !!dbRef && podeEscrever !== false;
+  const podeFechar = !!dbRef && podeEscrever !== false && !mesTravado();
   const fech = (d,i) => d.fechado
     ? `<span class="chip" data-s="ok" title="${esc(d.fechado.justificativa)}">fechado ✓</span>`
     : d.sem_pdv ? `<span style="color:var(--ink-muted)">aguarda PDV</span>`
@@ -1155,8 +1157,9 @@ function avisoTopo(msg){
   el.textContent = msg;
 }
 
+const avisaTrava = () => { const t = mesTravado(); if(t) avisoTopo(`Mês fechado em ${dBR(t.fechado_em)}: os valores estão travados e nada é gravado sem autorização.`); return !!t; };
 async function salvaFechamento(f, botao){
-  if(!dbRef) return;
+  if(!dbRef || avisaTrava()) return;
   botao.disabled = true;
   try{
     await dbRef.collection("fechamentos").doc(idFech(f)).set(f);
@@ -1167,13 +1170,13 @@ async function salvaFechamento(f, botao){
   }
 }
 async function reabreDia(id, botao){
-  if(!dbRef) return;
+  if(!dbRef || avisaTrava()) return;
   botao.disabled = true;
   try{ await dbRef.collection("fechamentos").doc(id).delete(); }catch(e){ botao.disabled = false; }
 }
 
 async function salvaAjuste(a, botao){
-  if(!dbRef) return;
+  if(!dbRef || avisaTrava()) return;
   botao.disabled = true;
   try{
     await dbRef.collection("ajustes").doc(idAjuste(a)).set(a);
@@ -1184,7 +1187,7 @@ async function salvaAjuste(a, botao){
   }
 }
 async function desfazAjuste(id, botao){
-  if(!dbRef) return;
+  if(!dbRef || avisaTrava()) return;
   botao.disabled = true;
   try{ await dbRef.collection("ajustes").doc(id).delete(); }catch(e){ botao.disabled = false; }
 }
@@ -1251,7 +1254,7 @@ function ligaCliques(){
 function render(){ tabs(); if(tab === "fech"){ fechKpis(); fechLojas(); fechDetalhe(); stamp(); return; } document.getElementById("kpis").className = "kpis"; kpis(); lojas(); detalhe(); ligaDias(); ligaAjustes(); stamp(); }
 
 
-function stamp(){ if(!D0) return; document.getElementById("stamp").innerHTML = `<span>Período <b>${dBR(DE)} a ${dBR(ATE)}/${ATE.slice(0,4)}</b>${(ATE < D0.ate || DE > D0.de) ? ` <small>(relatório: ${dBR(D0.de)} a ${dBR(D0.ate)})</small>` : ""}</span><span>PDV lido até <b>${D.pdv_ate?dBR(D.pdv_ate):"—"}</b></span><span>Extrato lido até <b>${D.extrato_ate?dBR(D.extrato_ate):"—"}</b></span><span>Atualizado em ${D.gerado_em}</span>${ultimoRegistro() ? `<span>Último registro gravado em ${ultimoRegistro()}</span>` : ""}`; }
+function stamp(){ if(!D0) return; const tr = mesTravado(); document.getElementById("stamp").innerHTML = `${tr ? `<span><span class="chip" data-s="aviso" title="${esc(tr.nota||"")}">🔒 mês fechado em ${dBR(tr.fechado_em)} · valores travados</span></span>` : ""}<span>Período <b>${dBR(DE)} a ${dBR(ATE)}/${ATE.slice(0,4)}</b>${(ATE < D0.ate || DE > D0.de) ? ` <small>(relatório: ${dBR(D0.de)} a ${dBR(D0.ate)})</small>` : ""}</span><span>PDV lido até <b>${D.pdv_ate?dBR(D.pdv_ate):"—"}</b></span><span>Extrato lido até <b>${D.extrato_ate?dBR(D.extrato_ate):"—"}</b></span><span>Atualizado em ${D.gerado_em}</span>${ultimoRegistro() ? `<span>Último registro gravado em ${ultimoRegistro()}</span>` : ""}`; }
 function ultimoRegistro(){ let m = ""; for(const col of [AJ, FE, VI]) for(const d of Object.values(col || {})) if(d && d.criado_em > m) m = d.criado_em; return m ? quando(m) : ""; }
 async function carregaMes(mes, silencioso){
   const r = await fetch(`dados/${mes}.json`, {cache: "no-store"});

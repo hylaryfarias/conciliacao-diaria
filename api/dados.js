@@ -125,9 +125,9 @@ async function importarRepositorio(cfg){
   if(await redis(cfg, ["GET", chave])) return false;
   const cmds = [];
   for(const c of COLS){
-    for(const [id, doc] of Object.entries(imp[c] || {})) cmds.push(["HSETNX", KEY(c), id, JSON.stringify(doc)]);
-    for(const [id, doc] of Object.entries((imp.atualizar && imp.atualizar[c]) || {})) cmds.push(["HSET", KEY(c), id, JSON.stringify(doc)]);   // "atualizar": substitui mesmo se já existir
-    for(const id of (imp.remover && imp.remover[c]) || []) cmds.push(["HDEL", KEY(c), id]);
+    for(const [id, doc] of Object.entries(imp[c] || {})) if(!travado(c, id, doc, hash)) cmds.push(["HSETNX", KEY(c), id, JSON.stringify(doc)]);
+    for(const [id, doc] of Object.entries((imp.atualizar && imp.atualizar[c]) || {})) if(!travado(c, id, doc, hash)) cmds.push(["HSET", KEY(c), id, JSON.stringify(doc)]);   // "atualizar": substitui mesmo se já existir
+    for(const id of (imp.remover && imp.remover[c]) || []) if(!travado(c, id, null, hash)) cmds.push(["HDEL", KEY(c), id]);
   }
   cmds.push(["SET", chave, new Date().toISOString()], ["INCR", "painel:ver"]);
   await redisPipeline(cfg, cmds);
@@ -141,6 +141,26 @@ async function preparar(cfg){
   await semearSePreciso(cfg);
   await importarRepositorio(cfg);
   globalThis.__painelPronto = true;
+}
+
+// Meses fechados (ajustes/meses_fechados.json): nenhum ajuste ou fechamento desse mês entra, muda ou sai do banco
+// pelo painel nem pela importação do repositório. Para alterar algo, o mês sai do arquivo (com autorização) e volta depois.
+function mesesFechados(){
+  try{ return require("../ajustes/meses_fechados.json") || {}; }catch(e){ return {}; }
+}
+function mesDe(c, id, doc){
+  if(c === "vistos") return null;                                   // "visto" é só marcação de leitura, não altera valor
+  const m = doc && typeof doc.data === "string" && doc.data.match(/^\d{4}-\d{2}/);
+  if(m) return m[0];
+  const i = String(id || "").match(/(\d{4}-\d{2})-\d{2}/);             // ids: <loja>_<data>_<cupom>_... e <loja>_<mod>_<data>
+  return i ? i[1] : null;
+}
+function travado(c, id, doc, hashImport){
+  const mes = mesDe(c, id, doc);
+  const t = mes && mesesFechados()[mes];
+  if(!t) return null;
+  if(hashImport && t.importar_hash === hashImport) return null;   // a versão do importar.json selada junto com a trava ainda entra
+  return { mes, ...t };
 }
 
 function corpo(req){
@@ -191,11 +211,21 @@ module.exports = async (req, res) => {
         res.statusCode = 400;
         return res.end(JSON.stringify({ erro: "corpo precisa ser um objeto JSON" }));
       }
+      const t = travado(c, id, doc);
+      if(t){
+        res.statusCode = 423;
+        return res.end(JSON.stringify({ erro: `mês ${t.mes} fechado em ${t.fechado_em}: valores travados, nada é gravado sem autorização`, fechado: t }));
+      }
       await redis(cfg, ["HSET", KEY(c), id, JSON.stringify(doc)]);
       const ver = await redis(cfg, ["INCR", "painel:ver"]);
       return res.end(JSON.stringify({ ok: true, ver }));
     }
     if(req.method === "DELETE"){
+      const t = travado(c, id);
+      if(t){
+        res.statusCode = 423;
+        return res.end(JSON.stringify({ erro: `mês ${t.mes} fechado em ${t.fechado_em}: valores travados, nada é apagado sem autorização`, fechado: t }));
+      }
       await redis(cfg, ["HDEL", KEY(c), id]);
       const ver = await redis(cfg, ["INCR", "painel:ver"]);
       return res.end(JSON.stringify({ ok: true, ver }));

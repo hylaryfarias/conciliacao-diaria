@@ -64,10 +64,21 @@ def le(padrao: str, aba: str, col_data="Data") -> pd.DataFrame:
     return df
 
 
+def meses_fechados() -> dict:
+    """Meses travados em ajustes/meses_fechados.json: {"2026-10": {"fechado_em": ..., "por": ..., "nota": ...}}.
+    Um mês fechado não é regerado (os arquivos em painel/dados ficam como estão) a menos que se passe --destravar."""
+    f = RAIZ / "ajustes" / "meses_fechados.json"
+    return json.loads(f.read_text()) if f.exists() else {}
+
+
 def main() -> None:
     args = sys.argv[1:]
     de = pd.Timestamp(args[args.index("--de") + 1]).date()
     ate = pd.Timestamp(args[args.index("--ate") + 1]).date()
+    trava = meses_fechados().get(de.isoformat()[:7])
+    if trava and "--destravar" not in args:
+        sys.exit(f"{de.isoformat()[:7]} está FECHADO desde {trava.get('fechado_em')} ({trava.get('por')}): o painel desse mês não é regerado. "
+                 "Para mexer, é preciso autorização: rode de novo com --destravar (ou remova o mês de ajustes/meses_fechados.json).")
 
     b = ler_pdv(args[0])
     b["dt_pdv"] = pd.to_datetime(b["Data"].astype(str) + " " + b["Hora"].astype(str).str[:5])
@@ -464,17 +475,32 @@ def main() -> None:
             lanc[m] = {d["data"]: d.pop("lanc") for d in mod["dias"] if "lanc" in d}
         (pasta / mes / f"{slug(l['nome'])}.json").write_text(json.dumps(lanc, ensure_ascii=False))
     (pasta / f"{mes}.json").write_text(json.dumps(leve, ensure_ascii=False))
-    meses = []
-    for f in sorted(pasta.glob("????-??.json")):
-        j = json.loads(f.read_text()); mm = f.stem
-        meses.append({"mes": mm, "de": j["de"], "ate": j["ate"], "gerado_em": j["gerado_em"], "rotulo": f"{['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][int(mm[5:7])-1]}/{mm[:4]}"})
-    (pasta / "meses.json").write_text(json.dumps(meses, ensure_ascii=False))
-    tpl = (RAIZ / "painel/template.html").read_text()
-    out = RAIZ / "painel/index.html"
-    out.write_text(tpl.replace("/*DADOS*/", "null"))
-    (RAIZ / "painel/claude.html").write_text(tpl.replace("/*DADOS*/", json.dumps(dados, ensure_ascii=False)))
+    out = grava_shell()
+    (RAIZ / "painel/claude.html").write_text(tpl_painel().replace("/*DADOS*/", json.dumps(dados, ensure_ascii=False)))
     print(f"{len(lojas)} lojas · PIX com maquininha: {sum(l['mod']['pix']['tem_maq'] for l in lojas)} · com banco: {sum(l['mod']['pix']['tem_banco'] for l in lojas)} · gravado em {out}")
 
 
+def tpl_painel() -> str:
+    return (RAIZ / "painel/template.html").read_text()
+
+
+def grava_shell() -> Path:
+    """Regrava só a casca do painel (index.html a partir do template) e a lista de meses (dados/meses.json,
+    com a marca de mês fechado). Não toca nos dados de nenhum mês. `--so-shell` na linha de comando faz só isso."""
+    pasta = RAIZ / "painel" / "dados"
+    meses = []
+    for f in sorted(pasta.glob("????-??.json")):
+        j = json.loads(f.read_text()); mm = f.stem
+        meses.append({"mes": mm, "de": j["de"], "ate": j["ate"], "gerado_em": j["gerado_em"], "rotulo": f"{['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][int(mm[5:7])-1]}/{mm[:4]}",
+                      **({"fechado": meses_fechados()[mm]} if mm in meses_fechados() else {})})
+    (pasta / "meses.json").write_text(json.dumps(meses, ensure_ascii=False))
+    out = RAIZ / "painel/index.html"
+    out.write_text(tpl_painel().replace("/*DADOS*/", "null"))
+    return out
+
+
 if __name__ == "__main__":
-    main()
+    if "--so-shell" in sys.argv:
+        print("gravado em", grava_shell())
+    else:
+        main()

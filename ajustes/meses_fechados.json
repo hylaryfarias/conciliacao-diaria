@@ -1,0 +1,8 @@
+{
+ "2026-10": {
+  "fechado_em": "2026-11-17",
+  "por": "Financeiro",
+  "nota": "Outubro conferido loja a loja e enviado à diretoria. Valores travados: nenhuma transferência, fechamento, reabertura ou regeração do painel deste mês sem autorização expressa. A versão de ajustes/importar.json selada com a trava (importar_hash) ainda importa; versões posteriores não mexem neste mês.",
+  "importar_hash": "f464cecae140e659"
+ }
+}
