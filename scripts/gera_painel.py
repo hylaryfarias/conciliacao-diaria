@@ -347,12 +347,12 @@ def main() -> None:
                 if cp and cp != "nan":
                     item["cupom_pago"] = cp
                     for pp in pend:
-                        if pp.get("cupom") == cp and pp["status"].startswith("SEM PAR"):
-                            pp["status"] = "CONCILIADO COM O BANCO · máquina não registrou"; pp["detalhe"] = f"PIX de R$ {r2(q['Valor']):.2f} entrou na conta em {q['Data']:%d/%m} ({str(q['Descrição'])[16:]})"; pp["comanda"] = True
+                        if pp.get("cupom") == cp and pp["status"].startswith(("SEM PAR", "PROVÁVEL FORMA ERRADA")):   # o crédito na conta decide, mesmo com pista de forma errada
+                            pp["status"] = "CONCILIADO COM O BANCO · máquina não registrou"; pp.pop("aut", None); pp.pop("para", None); pp.pop("data_maq", None); pp["detalhe"] = f"PIX de R$ {r2(q['Valor']):.2f} entrou na conta em {q['Data']:%d/%m} ({str(q['Descrição'])[16:]})"; pp["comanda"] = True
                     for row in dias:
                         for r in row.get("lanc", []):
-                            if r.get("c") == cp and str(r.get("s", "")).startswith("SEM PAR"):
-                                r["s"] = "CONCILIADO COM O BANCO"; r["cr"] = q["Data"].isoformat(); r["pg"] = str(q["Descrição"])[16:]
+                            if r.get("c") == cp and str(r.get("s", "")).startswith(("SEM PAR", "PROVÁVEL FORMA ERRADA")):
+                                r["s"] = "CONCILIADO COM O BANCO"; r["cr"] = q["Data"].isoformat(); r["pg"] = str(q["Descrição"])[16:]; r.pop("hm", None); r.pop("a", None)
                                 row["pdv_sem_par"] = r2(max(0, row.get("pdv_sem_par", 0) - r["v"]))
                                 # lojas com PIX pela TEF sem relatório da TEF (a partir de 02/11): a ponta é PDV × banco.
                                 # O cupom confirmado pelo extrato conta como pago, igual a uma venda da maquininha.
