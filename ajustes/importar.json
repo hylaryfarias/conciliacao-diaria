@@ -7782,6 +7782,23 @@
    "aut": "JeKuno",
    "data_maq": "2026-11-07",
    "id": "BIGGS-13---ARTHUR-THOMAS_2026-11-07_24498_voucher_JeKuno"
+  },
+  "BIGGS-07---JAMIL-E-ACAI_2026-11-02_115470_debito_002596": {
+   "loja": "BIGGS 07 - JAMIL E ACAI",
+   "de": "debito",
+   "para": "voucher",
+   "data": "2026-11-02",
+   "cupom": "115470",
+   "caixa": "003 - BG07 - PDV 03 DELIVERY",
+   "hora": "01:29",
+   "forma": "CARTAO DEBITO",
+   "valor": 67.4,
+   "justificativa": "Baixa incorreta no PDV: cupom 115470 de entrega lançado como CARTAO DEBITO à 01:29, a venda passou na máquina como vale Fepas de R$ 67,40 às 22:12, terminal APT88F30 (aut. 002596). Valor único dos dois lados do dia; o outro cupom de 67,40 é pagamento online.",
+   "criado_em": "2026-11-17T18:31:23Z",
+   "por": null,
+   "aut": "002596",
+   "data_maq": "2026-11-02",
+   "id": "BIGGS-07---JAMIL-E-ACAI_2026-11-02_115470_debito_002596"
   }
  },
  "fechamentos": {
