@@ -20,9 +20,19 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
 from concilia_pix import HORA_VIRADA, carrega_lojas  # noqa: E402
+from portal_sicredi import ler_tef  # noqa: E402
+
+# Lojas cujo PIX passa pela TEF (não aparece no Histórico do Sicredi). Sem o relatório da TEF, o PIX delas é
+# conciliado PDV × banco: o cupom confirmado pelo extrato conta como pago.
+TEF_LOJAS = {"BIGGS 01 - MARINGA", "BIGGS 07 - JAMIL E ACAI", "BIGGS 11 - SANTO AMARO"}
+
 from pdv_pix import ler_pdv  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
+def _tef_ate():
+    t = ler_tef(str(RAIZ / "entrada" / "pix_tef_*.xlsx"))
+    return max(t["Data calendário"]) if len(t) else pd.Timestamp("2000-01-01").date()
+tef_ate = _tef_ate()   # último dia coberto pelo relatório da TEF
 DOW = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
 FERIADOS = {date(2026, 10, 12)}
 MARCA = {"ROBS": "robs", "MAPOLI": "mapoli"}
@@ -344,6 +354,13 @@ def main() -> None:
                             if r.get("c") == cp and str(r.get("s", "")).startswith("SEM PAR"):
                                 r["s"] = "CONCILIADO COM O BANCO"; r["cr"] = q["Data"].isoformat(); r["pg"] = str(q["Descrição"])[16:]
                                 row["pdv_sem_par"] = r2(max(0, row.get("pdv_sem_par", 0) - r["v"]))
+                                # lojas com PIX pela TEF sem relatório da TEF (a partir de 02/11): a ponta é PDV × banco.
+                                # O cupom confirmado pelo extrato conta como pago, igual a uma venda da maquininha.
+                                if filial in TEF_LOJAS and pd.Timestamp(row["data"]).date() > tef_ate and "maq" in row:
+                                    r["vm"] = r["v"]; r["t"] = "TEF (banco)"
+                                    row["maq"] = r2(row["maq"] + r["v"]); row["maq_qtd"] = row.get("maq_qtd", 0) + 1
+                                    row["conc"] = r2(row.get("conc", 0) + r["v"]); row["delta"] = r2(row.get("delta", 0) - r["v"])
+                                    if "banco" in row: row["banco"] = r2(row["banco"] + r["v"])
                 pend.append(item)
         pend = [q for q in pend if pd.Timestamp(q["data"]).date() <= pdv_ate]   # sem PDV não há o que apontar
         for row in dias:
