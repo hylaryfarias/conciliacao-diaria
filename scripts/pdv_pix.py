@@ -49,6 +49,23 @@ def sem_cancelados(df: pd.DataFrame) -> pd.DataFrame:
     return df[~mask]
 
 
+def _chave(nome: str) -> str:
+    t = str(nome).upper().replace("'", "").replace("-", " ").split()
+    return " ".join(t[:2]) if len(t) > 1 and t[1].isdigit() else t[0] if t else ""
+
+
+_CANON: dict | None = None
+def _canonico(nome: str) -> str:
+    global _CANON
+    if _CANON is None:
+        f = Path(__file__).resolve().parent.parent / "lojas.csv"
+        _CANON = {}
+        if f.exists():
+            t = pd.read_csv(f, dtype=str)
+            _CANON = {_chave(x): x.strip() for x in t["Filial"]}
+    return _CANON.get(_chave(nome), nome)
+
+
 def ler_pdv(caminho: str) -> pd.DataFrame:
     """Relatório de cupons de vendas. Aceita vários arquivos (separados por vírgula ou curinga), ex.: o
     relatório 01–14/10 mais o diário de 15/10; cupons repetidos entre arquivos entram uma vez só."""
@@ -68,6 +85,9 @@ def ler_pdv(caminho: str) -> pd.DataFrame:
     df = pd.concat(partes, ignore_index=True)
     df["Filial"] = df["Filial"].astype(str).str.strip()   # o relatório às vezes vem com espaço no fim ("BIGGS 04 - WINSTON ")
     df = df[df["Filial"] != ""]
+    # o nome da filial muda entre exports do PDV ("BIGGS 05 - PORTUGAL" virou "BIGG'S 05 - ZONA SUL", "BIGGS 08 e 09 -
+    # PARANAGUA / STREET" virou "BIGG'S 08 - PARANAGUA"): tudo vira o nome canônico de lojas.csv, pela chave "MARCA NN"
+    df["Filial"] = df["Filial"].map(lambda x: _canonico(x))
     chave = [c for c in ("Filial", "Caixa", "Data", "Hora", "Cupom", "Desc. pagam.", "Vl. pagamento") if c in df.columns]
     df["_seq"] = df.groupby(["_arq"] + chave).cumcount()
     df = df.drop_duplicates(subset=chave + ["_seq"]).drop(columns=["_arq", "_seq"])
