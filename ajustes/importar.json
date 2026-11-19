@@ -37226,8 +37226,8 @@
    "maq": 4026,
    "delta": 33.5,
    "motivo": "sobra",
-   "justificativa": "Dia fechado com sobra de R$ 33,50 no crédito: sobra de R$ 33,50: crédito Mastercard às 17:44 (R$ 33,50) na máquina sem cupom no PDV.",
-   "criado_em": "2026-11-17T20:23:35Z",
+   "justificativa": "Dia fechado com sobra de R$ 33,50 no crédito: crédito Mastercard às 17:44 (R$ 33,50) na máquina sem cupom no PDV. Inclui −R$ 126,80 de transferências de forma registradas no painel (cupons 50014 e 50015, crédito → voucher Alelo e Ticket, mesma venda na máquina). Substitui o registro anterior (falta de R$ 3,90), gravado antes das transferências.",
+   "criado_em": "2026-11-19T17:48:10Z",
    "por": null
   },
   "BIGGS-05---PORTUGAL_debito_2026-11-03": {
@@ -40615,6 +40615,22 @@
     "motivo": "sobra",
     "justificativa": "Dia fechado com sobra de R$ 20,25 no débito: sobra de R$ 20,25: débito Visa às 18:50 (R$ 20,25) na máquina sem cupom no PDV.",
     "criado_em": "2026-11-19T17:36:33Z",
+    "por": null
+   },
+   "BIGGS-02---SANTOS-DUMONT_credito_2026-11-03": {
+    "loja": "BIGGS 02 - SANTOS DUMONT",
+    "mod": "credito",
+    "data": "2026-11-03",
+    "aberto": 33.5,
+    "caixa": 33.5,
+    "pdv": 3992.5,
+    "pdv_rel": 4164.65,
+    "transf": -172.15,
+    "maq": 4026,
+    "delta": 33.5,
+    "motivo": "sobra",
+    "justificativa": "Dia fechado com sobra de R$ 33,50 no crédito: crédito Mastercard às 17:44 (R$ 33,50) na máquina sem cupom no PDV. Inclui −R$ 126,80 de transferências de forma registradas no painel (cupons 50014 e 50015, crédito → voucher Alelo e Ticket, mesma venda na máquina). Substitui o registro anterior (falta de R$ 3,90), gravado antes das transferências.",
+    "criado_em": "2026-11-19T17:48:10Z",
     "por": null
    }
   },
