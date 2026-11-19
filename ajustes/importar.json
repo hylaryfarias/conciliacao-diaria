@@ -38667,6 +38667,38 @@
    "justificativa": "Dia fechado com falta de R$ 21,54 no débito: falta de R$ 21,54: cupom 39434 (12:13, R$ 21,54, CARTAO DEBITO) sem pagamento correspondente na máquina em nenhuma forma.",
    "criado_em": "2026-11-19T16:00:32Z",
    "por": null
+  },
+  "BIGGS-07---JAMIL-E-ACAI_pix_2026-11-11": {
+   "loja": "BIGGS 07 - JAMIL E ACAI",
+   "mod": "pix",
+   "data": "2026-11-11",
+   "aberto": 86.45,
+   "caixa": -86.45,
+   "pdv": 3569.96,
+   "pdv_rel": 3569.96,
+   "transf": 0,
+   "maq": 3483.51,
+   "delta": -86.45,
+   "motivo": "falta",
+   "justificativa": "Dia fechado com falta de R$ 86,45 no PIX: falta de R$ 86,45: cupom 48471 (13:37, R$ 19,90, TEF - PIX), cupom 117668 (22:31, R$ 28,15, PIX MAQUININHA), cupom 48599 (23:23, R$ 38,40, TEF - PIX) sem pagamento correspondente na máquina em nenhuma forma. O extrato de 11/11 tem linhas de R$ 19,90 e R$ 38,40 consumidas por outras vendas do mesmo valor na cadeia de dias; a falta pode pertencer a um dia anterior da mesma loja, o total do período é o mesmo.",
+   "criado_em": "2026-11-19T16:13:18Z",
+   "por": null
+  },
+  "BIGGS-11---SANTO-AMARO_pix_2026-11-11": {
+   "loja": "BIGGS 11 - SANTO AMARO",
+   "mod": "pix",
+   "data": "2026-11-11",
+   "aberto": 45.96,
+   "caixa": 45.96,
+   "pdv": 1252.23,
+   "pdv_rel": 1252.23,
+   "transf": 0,
+   "maq": 1390.11,
+   "delta": 45.96,
+   "motivo": "sobra",
+   "justificativa": "Dia fechado com sobra de R$ 45,96 no PIX: sobra de R$ 45,96: PIX às 00:10 (R$ 45,96) na máquina sem cupom no PDV. Virada de dia de R$ 91,92 conciliada.",
+   "criado_em": "2026-11-19T16:13:18Z",
+   "por": null
   }
  },
  "vistos": {},

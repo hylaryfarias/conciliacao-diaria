@@ -100,7 +100,13 @@ def main() -> None:
     rec_v = le("concilia_cartao_banco_*.xlsx", "Por dia de venda", col_data="Venda")
     # pendências só do período do painel
     no_per = lambda df: df[(df["Data"] >= de) & (df["Data"] <= ate)] if len(df) else df
+    # crédito no banco depois do fim do período que paga um cupom DO período (madrugada do último dia cai no banco no
+    # dia seguinte; sábado cai na segunda): entra só para marcar o cupom como pago, não vira pendência do painel
+    e2s_fora = e2s[(e2s["Data"] > ate) & e2s["Cupom PDV"].notna()].copy() if len(e2s) and "Cupom PDV" in e2s.columns else pd.DataFrame()
     e1p, e1m, e2p, e2s = no_per(e1p), no_per(e1m), no_per(e2p), no_per(e2s)
+    if len(e2s_fora):
+        e2s_fora["_fora"] = True
+        e2s = pd.concat([e2s, e2s_fora], ignore_index=True)
     cart = {m: (r_, no_per(sm_), no_per(sp_)) for m, (r_, sm_, sp_) in cart.items()}
     csv_ = {m: no_per(x) for m, x in csv_.items()}
     banco_por_aut = {}
@@ -373,7 +379,8 @@ def main() -> None:
                                     row["maq"] = r2(row["maq"] + r["v"]); row["maq_qtd"] = row.get("maq_qtd", 0) + 1
                                     row["conc"] = r2(row.get("conc", 0) + r["v"]); row["delta"] = r2(row.get("delta", 0) - r["v"])
                                     if "banco" in row: row["banco"] = r2(row["banco"] + r["v"])
-                pend.append(item)
+                if not q.get("_fora", False):
+                    pend.append(item)
         pend = [q for q in pend if pd.Timestamp(q["data"]).date() <= pdv_ate]   # sem PDV não há o que apontar
         for row in dias:
             pend = aplica_comanda(filial, "pix", pd.Timestamp(row["data"]).date(), row, pend)

@@ -57,6 +57,10 @@ def _extrato_bruto(caminho: str) -> pd.DataFrame:
         h = next(i for i, r in enumerate(rows) if "Descrição" in r)
         partes.append(pd.DataFrame(rows[h + 1 :], columns=rows[h]))
     ex = pd.concat(partes, ignore_index=True)
+    # a data vem como data pura em alguns exports e como data+hora (12:00:00) em outros: normaliza para data,
+    # senão exports sobrepostos não se desduplicam e as linhas novas não casam (madrugada de 12/11 ficou sem par)
+    if "Data" in ex.columns:
+        ex["Data"] = pd.to_datetime(ex["Data"], errors="coerce").dt.date
     chave = [c for c in ("Data", "Descrição", "Valor", "Loja", "Saldo após") if c in ex.columns]
     ex = ex.drop_duplicates(subset=chave).reset_index(drop=True)
     # correções de categoria feitas pela Hylary no painel de extratos depois do export (entrada/extrato_categoria.csv:
