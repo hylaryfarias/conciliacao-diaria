@@ -36,7 +36,7 @@ def converte(arq: str, filial: str, sigla: str) -> pd.DataFrame:
                             "Itens": itens, "Chave": cup.strip(), "CPF/CNPJ": "", "Nome do cliente": cli.strip(), "Desc. pagam.": forma(f), "Nr. parc": 1,
                             "Vl. pagamento": float(v.replace(".", "").replace(",", ".")), "Modalidade": mod.strip(), "Forma Teknisa": f.strip()})
             itens = 0
-        elif c0 not in ("nan", "Código"):
+        elif c0 not in ("nan", "Código") and not c0.startswith(("Unidade:", "Total (")):
             itens += 1
     return pd.DataFrame(out)
 
