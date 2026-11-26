@@ -1278,12 +1278,13 @@ function caixaLinhas(l, data){
       return {forma:m, nome, pdv, maq, dif, estado: estadoDia(l, m, d), fech: d.fechado || null, qtd: d.pdv_qtd};
     }
     const c = cx[m] || {}; const pdv = r2((c.pdv || 0) + (extra[m] || 0));
-    if(m === "voucher"){ const maq = c.maq === undefined ? null : r2(c.maq); return {forma:m, nome, pdv, maq, dif: maq === null ? null : r2(maq - pdv), estado: maq === null ? "semmaq" : Math.abs(maq - pdv) <= TOL ? "bateu" : "olhar", qtd:c.qtd || 0}; }
+    if(m === "voucher"){ const maq = c.maq === undefined ? null : r2(c.maq); return {forma:m, nome, pdv, maq, dif: maq === null ? null : r2(maq - pdv), estado: maq === null ? "semmaq" : Math.abs(maq - pdv) <= TOL ? "bateu" : "difere", qtd:c.qtd || 0, voucher:true}; }
     return {forma:m, nome, pdv, maq: pdv, dif: 0, estado: pdv ? "pdv" : "vazio", qtd: c.qtd || 0, semAdq: true};
   }).filter(r => r.pdv || r.maq);
 }
 const cxTotais = linhas => ({pdv: sum(linhas, r => r.pdv), maq: sum(linhas, r => r.maq ?? r.pdv), dif: sum(linhas, r => r.dif ?? 0), aberto: linhas.some(r => r.estado === "olhar" && !(r.dif !== null && Math.abs(r.dif) <= TOL))});
 const cxSit = r => r.semAdq ? `<span class="chip" data-s="aguarda" title="não passa pela maquininha">só PDV</span>`
+  : r.estado === "difere" ? `<span class="chip" data-s="aviso" title="voucher ainda não é conciliado cupom a cupom: comparação só do total do dia">total difere</span>`
   : r.estado === "vazio" ? "" : r.estado === "semmaq" ? `<span class="chip" data-s="aguarda">aguarda máquina</span>`
   : r.fech ? `<span class="chip" data-s="${r.fech.motivo === "falta" ? "erro" : r.fech.motivo === "sobra" ? "aviso" : "ok"}" title="${esc(r.fech.justificativa || "")}">fechado · ${(MOTIVOS[r.fech.motivo] || r.fech.motivo || "").toLowerCase()}</span>`
   : r.estado === "bateu" || (r.estado === "olhar" && r.dif !== null && Math.abs(r.dif) <= TOL) ? `<span class="chip" data-s="ok">bateu</span>` : r.estado === "olhar" ? `<span class="chip" data-s="pendente">aberto</span>` : `<span class="chip" data-s="aguarda">${esc(ESTADOS[r.estado] || r.estado)}</span>`;
@@ -1310,8 +1311,7 @@ function caixaLojas(){
   const ul = document.getElementById("lojas"), data = cxDia();
   document.getElementById("lojas-n").textContent = D.lojas.length;
   const info = D.lojas.map(l => ({l, t: cxTotais(caixaLinhas(l, data))})).sort((a,b) => a.l.nome.localeCompare(b.l.nome));
-  ul.innerHTML = info.map(({l, t}) => { const s = t.aberto ? "pendente" : t.dif < -TOL ? "erro" : t.dif > TOL ? "aviso" : "ok"; const txt = t.aberto ? "em aberto" : Math.abs(t.dif) <= TOL ? "bateu" : (t.dif > 0 ? "sobra " : "falta ") + brl(Math.abs(t.dif));
-    return `<li><button class="loja" data-nome="${esc(l.nome)}" aria-pressed="${l.nome===sel}" style="--m:var(--${({ok:"ok",erro:"erro",aviso:"aviso",pendente:"pendente"})[s]})"><span class="bar"></span><span class="nm">${esc(l.nome)}<small>PDV ${brl(t.pdv)} · máquina ${brl(t.maq)}</small></span><span class="chip" data-s="${s}">${txt}</span></button></li>`; }).join("");
+  ul.innerHTML = info.map(({l}) => `<li><button class="loja" data-nome="${esc(l.nome)}" aria-pressed="${l.nome===sel}" style="--m:var(--ink-muted)"><span class="bar"></span><span class="nm">${esc(l.nome)}</span></button></li>`).join("");
   ul.querySelectorAll(".loja").forEach(b => b.addEventListener("click", () => { sel = (sel === b.dataset.nome) ? null : b.dataset.nome; try{ if(sel) localStorage.setItem("loja",sel); }catch(e){} render(); vaiAoDetalhe(); }));
 }
 function caixaDetalhe(){
