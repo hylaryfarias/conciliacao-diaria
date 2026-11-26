@@ -309,8 +309,16 @@ def main() -> None:
         return pend
 
     lojas = []
+    # loja que saiu do PDV (trocou de sistema): entrada/pdv_fim.csv (loja;ate;motivo). Depois de 'ate' os dias dela
+    # ficam como "aguarda PDV", em vez de aparecerem com toda a máquina sem cupom.
+    pdv_fim = {}
+    f_fim = RAIZ / "entrada" / "pdv_fim.csv"
+    if f_fim.exists():
+        t_fim = pd.read_csv(f_fim, sep=";", dtype=str).fillna("")
+        pdv_fim = {r["loja"].strip(): pd.Timestamp(r["ate"]).date() for _, r in t_fim.iterrows() if r.get("loja") and r.get("ate")}
     for filial in sorted(b["Filial"].unique()):
         mods = {}
+        pdv_ate_f = min(pdv_ate, pdv_fim.get(filial, pdv_ate))
         # ---- PIX
         dias, pend = [], []
         for d in pd.date_range(de, ate).date:
@@ -318,7 +326,7 @@ def main() -> None:
             x = pdv_dia["pix"].loc[(filial, d)] if (filial, d) in pdv_dia["pix"].index else None
             row["pdv_qtd"] = int(x["qtd"]) if x is not None else 0; row["pdv"] = r2(x["cent"] / 100) if x is not None else 0.0
             y = sel(e1, filial, d)
-            if y is not None and d > pdv_ate:
+            if y is not None and d > pdv_ate_f:
                 row.update(maq_qtd=int(y["PIX maquininha (qtd)"]), maq=r2(y["PIX maquininha (R$)"]), sem_pdv=True)
             elif y is not None:
                 row.update(maq_qtd=int(y["PIX maquininha (qtd)"]), maq=r2(y["PIX maquininha (R$)"]), conc=r2(y["Conciliado (R$)"]), servico=r2(y.get("Serviço não baixado (R$)", 0)),
@@ -382,7 +390,7 @@ def main() -> None:
                                     if "banco" in row: row["banco"] = r2(row["banco"] + r["v"])
                 if not q.get("_fora", False):
                     pend.append(item)
-        pend = [q for q in pend if pd.Timestamp(q["data"]).date() <= pdv_ate]   # sem PDV não há o que apontar
+        pend = [q for q in pend if pd.Timestamp(q["data"]).date() <= pdv_ate_f]   # sem PDV não há o que apontar
         for row in dias:
             pend = aplica_comanda(filial, "pix", pd.Timestamp(row["data"]).date(), row, pend)
         pend = aplica_viradas(filial, "pix", dias, pend)
@@ -396,7 +404,7 @@ def main() -> None:
                 x = pdv_dia[m].loc[(filial, d)] if (filial, d) in pdv_dia[m].index else None
                 row["pdv_qtd"] = int(x["qtd"]) if x is not None else 0; row["pdv"] = r2(x["cent"] / 100) if x is not None else 0.0
                 y = sel(res, filial, d)
-                if y is not None and d > pdv_ate:
+                if y is not None and d > pdv_ate_f:
                     row.update(maq_qtd=int(y["Maquininha (qtd)"]), maq=r2(y["Maquininha bruto (R$)"]), mdr=r2(y["MDR (R$)"]), liquido=r2(y["Líquido (R$)"]), sem_pdv=True)
                 elif y is not None:
                     row.update(maq_qtd=int(y["Maquininha (qtd)"]), maq=r2(y["Maquininha bruto (R$)"]), mdr=r2(y["MDR (R$)"]), liquido=r2(y["Líquido (R$)"]),
@@ -425,7 +433,7 @@ def main() -> None:
                 for _, q in sv[sv["Filial"] == filial].iterrows():
                     pend.append({"etapa": 1, "data": q["Data"].isoformat(), "valor": r2(q["Valor Bruto"]), "ref": f"cupom {q['Cupom']} · {q['Hora PDV']} · {q['Caixa']}", "status": str(q["Status"]),
                                  "detalhe": f"{q['Bandeira']} · terminal {q['Terminal']} · aut. {q['Autorização']} · máquina {q['Hora maq']}", "servico": r2(q["Serviço (R$)"])})
-            pend = [q for q in pend if pd.Timestamp(q["data"]).date() <= pdv_ate]
+            pend = [q for q in pend if pd.Timestamp(q["data"]).date() <= pdv_ate_f]
             for row in dias:
                 pend = aplica_comanda(filial, m, pd.Timestamp(row["data"]).date(), row, pend)
             pend = aplica_viradas(filial, m, dias, pend)
