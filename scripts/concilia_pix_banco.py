@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from concilia_pix import carrega_lojas  # noqa: E402
 from pdv_pix import HORA_VIRADA  # noqa: E402
 
-FERIADOS = {pd.Timestamp("2026-10-12").date()}
+FERIADOS = {pd.Timestamp("2026-10-12").date(), pd.Timestamp("2026-11-02").date(), pd.Timestamp("2026-11-15").date(), pd.Timestamp("2026-11-20").date()}
 
 
 def proximo_util(d):

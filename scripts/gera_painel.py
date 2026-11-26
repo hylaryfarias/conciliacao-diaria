@@ -34,7 +34,7 @@ def _tef_ate():
     return max(t["Data calendário"]) if len(t) else pd.Timestamp("2000-01-01").date()
 tef_ate = _tef_ate()   # último dia coberto pelo relatório da TEF
 DOW = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
-FERIADOS = {date(2026, 10, 12)}
+FERIADOS = {date(2026, 10, 12), date(2026, 11, 2), date(2026, 11, 15), date(2026, 11, 20)}
 MARCA = {"ROBS": "robs", "MAPOLI": "mapoli"}
 FORMAS = {
     "pix": {"PIX MAQUININHA", "PIX - TEF", "TEF - PIX"},
