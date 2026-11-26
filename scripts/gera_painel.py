@@ -383,7 +383,8 @@ def main() -> None:
                                 # maquininha, com ou sem relatório da TEF no dia (sem TEF a ponta é PDV × banco; com TEF, o PIX
                                 # que chegou na conta sem passar nem pela TEF nem pela maquininha — ex.: cliente empresa pagando
                                 # um pedido de delivery direto na conta — é pagamento do mesmo jeito).
-                                if filial in TEF_LOJAS and "maq" in row:
+                                # vale para toda loja: PIX que entrou na conta é pagamento, tenha ou não passado pela maquininha/TEF
+                                if "maq" in row:
                                     r["vm"] = r["v"]; r["t"] = "TEF (banco)"
                                     row["maq"] = r2(row["maq"] + r["v"]); row["maq_qtd"] = row.get("maq_qtd", 0) + 1
                                     row["conc"] = r2(row.get("conc", 0) + r["v"]); row["delta"] = r2(row.get("delta", 0) - r["v"])
