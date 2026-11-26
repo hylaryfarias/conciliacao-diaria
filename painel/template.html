@@ -1275,14 +1275,20 @@ function caixaLinhas(l, data){
       if(!d) return {forma:m, nome, pdv:0, maq:null, dif:0, estado:"vazio"};
       const pdv = r2(d.pdv), maq = d.maq === undefined || d.sem_pdv ? null : r2(d.maq);
       const dif = maq === null ? null : r2(maq - pdv - viradaUtil(d));
-      return {forma:m, nome, pdv, maq, dif, estado: estadoDia(l, m, d), fech: d.fechado || null, qtd: d.pdv_qtd};
+      let esp = null, caiu = null, bst = "", btone = "";
+      if(m === "pix"){ esp = maq; caiu = d.banco === undefined ? null : r2(d.banco);
+        if((d.nao_caiu || 0) > TOL){ bst = `não caiu ${brl(d.nao_caiu)}`; btone = "erro"; } else if((d.aguarda || 0) > TOL){ bst = "aguarda extrato"; btone = "aguarda"; } else if(caiu !== null){ bst = `caiu ${String(d.credito || "").replace(/\d{4}-(\d{2})-(\d{2})/g, "$2/$1")}`; btone = "ok"; } }
+      else { esp = d.liquido === undefined ? null : r2(d.liquido); caiu = d.liq_pago === undefined ? null : r2(d.liq_pago); const pe = String(d.pago_em || "").replace(/\d{4}-(\d{2})-(\d{2})/g, "$2/$1");
+        if(d.receb_st === "CONCILIADO"){ bst = `caiu ${pe}`; btone = "ok"; } else if(d.receb_st === "DIVERGENTE"){ bst = `diverge · ${pe}`; btone = "erro"; } else if(d.receb_st){ bst = String(d.receb_st).toLowerCase().replace("aguarda portal", "aguarda recebimentos"); btone = "aguarda"; } }
+      return {forma:m, nome, pdv, maq, dif, estado: estadoDia(l, m, d), fech: d.fechado || null, qtd: d.pdv_qtd, esp, caiu, bst, btone};
     }
     const c = cx[m] || {}; const pdv = r2((c.pdv || 0) + (extra[m] || 0));
     if(m === "voucher"){ const maq = c.maq === undefined ? null : r2(c.maq); return {forma:m, nome, pdv, maq, dif: maq === null ? null : r2(maq - pdv), estado: maq === null ? "semmaq" : Math.abs(maq - pdv) <= TOL ? "bateu" : "difere", qtd:c.qtd || 0, voucher:true}; }
     return {forma:m, nome, pdv, maq: pdv, dif: 0, estado: pdv ? "pdv" : "vazio", qtd: c.qtd || 0, semAdq: true};
   }).filter(r => r.pdv || r.maq);
 }
-const cxTotais = linhas => ({pdv: sum(linhas, r => r.pdv), maq: sum(linhas, r => r.maq ?? r.pdv), dif: sum(linhas, r => r.dif ?? 0), aberto: linhas.some(r => r.estado === "olhar" && !(r.dif !== null && Math.abs(r.dif) <= TOL))});
+const cxTotais = linhas => ({pdv: sum(linhas, r => r.pdv), maq: sum(linhas, r => r.maq ?? r.pdv), dif: sum(linhas, r => r.dif ?? 0), esp: sum(linhas, r => r.esp ?? 0), caiu: sum(linhas, r => r.caiu ?? 0), semBanco: linhas.some(r => r.esp !== null && r.esp !== undefined && (r.caiu === null || r.caiu === undefined)), aberto: linhas.some(r => r.estado === "olhar" && !(r.dif !== null && Math.abs(r.dif) <= TOL))});
+const cxBanco = r => !r.bst ? (r.esp === null || r.esp === undefined ? "" : `<span class="chip" data-s="aguarda">aguarda</span>`) : `<span class="chip" data-s="${r.btone || "aguarda"}">${esc(r.bst)}</span>`;
 const cxSit = r => r.semAdq ? `<span class="chip" data-s="aguarda" title="não passa pela maquininha">só PDV</span>`
   : r.estado === "difere" ? `<span class="chip" data-s="aviso" title="voucher ainda não é conciliado cupom a cupom: comparação só do total do dia">total difere</span>`
   : r.estado === "vazio" ? "" : r.estado === "semmaq" ? `<span class="chip" data-s="aguarda">aguarda máquina</span>`
@@ -1293,17 +1299,18 @@ function caixaKpis(){
   const data = cxDia(), l = D.lojas.find(x => x.nome === sel);
   const lojas = l ? [l] : D.lojas;
   const todas = lojas.map(x => cxTotais(caixaLinhas(x, data)));
-  const t = {pdv: sum(todas, x => x.pdv), maq: sum(todas, x => x.maq), dif: sum(todas, x => x.dif)};
-  const nAb = todas.filter(x => x.aberto).length;
+  const t = {pdv: sum(todas, x => x.pdv), maq: sum(todas, x => x.maq), dif: sum(todas, x => x.dif), esp: sum(todas, x => x.esp), caiu: sum(todas, x => x.caiu), semBanco: todas.some(x => x.semBanco)};
+  const nAb = todas.filter(x => x.aberto).length; const difB = r2(t.caiu - t.esp);
   const k = document.getElementById("kpis"); k.className = "kpis ger";
   k.innerHTML = `<div class="bloco">
     <div class="ger-top"><div><h4>Conciliador de caixa · ${l ? esc(l.nome) : `${D.lojas.length} lojas`} · ${dBR(data)}/${data.slice(0,4)}</h4>
       <div class="ger-chips">${nAb ? `<span class="chip" data-s="pendente">${nAb} ${l ? "forma" : "loja"}${nAb===1?"":"s"} em aberto</span>` : `<span class="chip" data-s="ok">dia fechado${l ? "" : " em todas as lojas"}</span>`}</div></div>
       <label class="ate">Dia <select id="cx-dia" aria-label="Dia">${cxDias().map(d => `<option value="${d}" ${d===data?"selected":""}>${dBR(d)}</option>`).join("")}</select></label></div>
-    <div class="resultado">
-      <div><div class="lbl">Venda sistema (PDV)</div><div class="val">${brl(t.pdv)}</div><div class="sub">todas as formas, já com as transferências</div></div>
-      <div><div class="lbl">Venda adquirente (Sicredi)</div><div class="val">${brl(t.maq)}</div><div class="sub">cartão, PIX e voucher na máquina · dinheiro, online e prazo pelo PDV</div></div>
-      <div data-tone="${Math.abs(t.dif) <= TOL ? "" : t.dif > 0 ? "aviso" : "erro"}"><div class="lbl">Diferença</div><div class="val">${brlS(t.dif)}</div><div class="sub">${Math.abs(t.dif) <= TOL ? "bate" : t.dif > 0 ? "a máquina recebeu mais que o PDV" : "o PDV registrou mais que a máquina"}</div></div>
+    <div class="fluxo">
+      <div class="passo"><div class="lbl">Venda sistema (PDV)</div><div class="val">${brl(t.pdv)}</div><div class="sub">todas as formas, já com as transferências</div></div>
+      <div class="passo" data-tone="${Math.abs(t.dif) <= TOL ? "ok" : "erro"}"><div class="lbl">Venda adquirente (Sicredi)</div><div class="val">${brl(t.maq)}</div><div class="sub">${Math.abs(t.dif) <= TOL ? "igual ao PDV" : `${sinal(t.dif)} contra o PDV`} · dinheiro, online e prazo pelo PDV</div></div>
+      <div class="passo"><div class="lbl">Esperado na conta</div><div class="val">${brl(t.esp)}</div><div class="sub">PIX integral · cartão líquido de MDR e antecipação · voucher fora</div></div>
+      <div class="passo" data-tone="${t.semBanco ? "" : Math.abs(difB) <= TOL ? "ok" : "erro"}"><div class="lbl">Caiu na conta</div><div class="val">${brl(t.caiu)}</div><div class="sub">${t.semBanco ? "parte ainda sem extrato ou recebimentos" : Math.abs(difB) <= TOL ? "bate com o esperado" : `${sinal(difB)} contra o esperado`}</div></div>
     </div></div>`;
   const sd = document.getElementById("cx-dia"); if(sd) sd.addEventListener("change", ev => { CXD = ev.target.value; try{localStorage.setItem("cx-dia",CXD)}catch(e){} render(); });
 }
@@ -1321,18 +1328,18 @@ function caixaDetalhe(){
   if(l){
     const linhas = caixaLinhas(l, data), t = cxTotais(linhas);
     html += `<div class="det-head"><h3>${esc(l.nome)} · ${dBR(data)}</h3><span class="meta">PDV × adquirente por forma de pagamento · clique na loja de novo para ver todas</span></div>
-    <div class="tablewrap"><table class="fech-t"><thead><tr><th>Forma</th><th>Cupons</th><th>Venda (PDV)</th><th>Máquina (Sicredi)</th><th>Diferença</th><th>Situação</th></tr></thead><tbody>
-    ${linhas.map(r => `<tr><td>${esc(r.nome)}</td><td>${r.qtd ?? ""}</td>${tdV(r.pdv)}${tdV(r.semAdq ? null : r.maq)}${r.dif === null ? "<td>—</td>" : tdS(r.dif)}<td>${cxSit(r)}</td></tr>`).join("")}
-    <tr class="total"><td><b>Total</b></td><td></td><td><b>${brl(t.pdv)}</b></td><td><b>${brl(t.maq)}</b></td>${tdS(t.dif)}<td></td></tr></tbody></table></div>`;
+    <div class="tablewrap"><table class="fech-t"><thead><tr><th>Forma</th><th>Cupons</th><th>Venda (PDV)</th><th>Máquina (Sicredi)</th><th>Diferença</th><th>Situação</th><th>Esperado na conta</th><th>Caiu na conta</th><th>Banco</th></tr></thead><tbody>
+    ${linhas.map(r => `<tr><td>${esc(r.nome)}</td><td>${r.qtd ?? ""}</td>${tdV(r.pdv)}${tdV(r.semAdq ? null : r.maq)}${r.dif === null ? "<td>—</td>" : tdS(r.dif)}<td>${cxSit(r)}</td>${tdV(r.esp ?? null)}${tdV(r.caiu ?? null)}<td>${cxBanco(r)}</td></tr>`).join("")}
+    <tr class="total"><td><b>Total</b></td><td></td><td><b>${brl(t.pdv)}</b></td><td><b>${brl(t.maq)}</b></td>${tdS(t.dif)}<td></td><td><b>${brl(t.esp)}</b></td><td><b>${brl(t.caiu)}</b></td>${tdS(r2(t.caiu - t.esp))}</tr></tbody></table></div>`;
     const fechs = linhas.filter(r => r.fech);
     if(fechs.length) html += `<div class="det-head"><h3>Como o dia fechou</h3><span class="meta">registrado no painel</span></div><div class="tablewrap"><table class="fech-t"><thead><tr><th>Forma</th><th>Motivo</th><th>Diferença</th><th>Justificativa</th></tr></thead><tbody>${fechs.map(r => `<tr><td>${esc(r.nome)}</td><td>${esc(MOTIVOS[r.fech.motivo] || r.fech.motivo || "")}</td>${tdS(r.dif ?? 0)}<td style="white-space:normal;max-width:60ch">${esc(r.fech.justificativa || "")}</td></tr>`).join("")}</tbody></table></div>`;
   }
   const linhasL = D.lojas.map(x => ({x, t: cxTotais(caixaLinhas(x, data))})).sort((a,b) => a.x.nome.localeCompare(b.x.nome));
-  const tt = {pdv: sum(linhasL, y => y.t.pdv), maq: sum(linhasL, y => y.t.maq), dif: sum(linhasL, y => y.t.dif)};
+  const tt = {pdv: sum(linhasL, y => y.t.pdv), maq: sum(linhasL, y => y.t.maq), dif: sum(linhasL, y => y.t.dif), esp: sum(linhasL, y => y.t.esp), caiu: sum(linhasL, y => y.t.caiu)};
   html += `<div class="det-head"><h3>Todas as lojas · ${dBR(data)}</h3><span class="meta">PDV × adquirente, todas as formas · clique para abrir a loja</span></div>
-  <div class="tablewrap"><table class="fech-t"><thead><tr><th>Loja</th><th>Venda (PDV)</th><th>Máquina (Sicredi)</th><th>Diferença</th><th>Situação</th></tr></thead><tbody>
-  ${linhasL.map(({x, t}) => `<tr><td><button type="button" class="link" data-nome="${esc(x.nome)}">${esc(x.nome)}</button></td>${tdV(t.pdv)}${tdV(t.maq)}${tdS(t.dif)}<td>${t.aberto ? `<span class="chip" data-s="pendente">em aberto</span>` : Math.abs(t.dif) <= TOL ? `<span class="chip" data-s="ok">bateu</span>` : `<span class="chip" data-s="${t.dif > 0 ? "aviso" : "erro"}">${t.dif > 0 ? "sobra" : "falta"}</span>`}</td></tr>`).join("")}
-  <tr class="total"><td><b>Total</b></td><td><b>${brl(tt.pdv)}</b></td><td><b>${brl(tt.maq)}</b></td>${tdS(tt.dif)}<td></td></tr></tbody></table></div>`;
+  <div class="tablewrap"><table class="fech-t"><thead><tr><th>Loja</th><th>Venda (PDV)</th><th>Máquina (Sicredi)</th><th>Diferença</th><th>Situação</th><th>Esperado na conta</th><th>Caiu na conta</th><th>Banco</th></tr></thead><tbody>
+  ${linhasL.map(({x, t}) => { const db = r2(t.caiu - t.esp); return `<tr><td><button type="button" class="link" data-nome="${esc(x.nome)}">${esc(x.nome)}</button></td>${tdV(t.pdv)}${tdV(t.maq)}${tdS(t.dif)}<td>${t.aberto ? `<span class="chip" data-s="pendente">em aberto</span>` : Math.abs(t.dif) <= TOL ? `<span class="chip" data-s="ok">bateu</span>` : `<span class="chip" data-s="${t.dif > 0 ? "aviso" : "erro"}">${t.dif > 0 ? "sobra" : "falta"}</span>`}</td>${tdV(t.esp)}${tdV(t.caiu)}<td>${t.semBanco ? `<span class="chip" data-s="aguarda">aguarda</span>` : Math.abs(db) <= TOL ? `<span class="chip" data-s="ok">bate</span>` : `<span class="chip" data-s="erro">${sinal(db)}</span>`}</td></tr>`; }).join("")}
+  <tr class="total"><td><b>Total</b></td><td><b>${brl(tt.pdv)}</b></td><td><b>${brl(tt.maq)}</b></td>${tdS(tt.dif)}<td></td><td><b>${brl(tt.esp)}</b></td><td><b>${brl(tt.caiu)}</b></td>${tdS(r2(tt.caiu - tt.esp))}</tr></tbody></table></div>`;
   el.innerHTML = html;
   el.querySelectorAll("button.link").forEach(b => b.addEventListener("click", () => { sel = b.dataset.nome; try{localStorage.setItem("loja",sel)}catch(e){} render(); }));
 }
