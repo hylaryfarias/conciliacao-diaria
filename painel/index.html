@@ -1278,7 +1278,8 @@ function caixaLinhas(l, data){
       let esp = null, caiu = null, bst = "", btone = "";
       if(m === "pix"){ esp = maq; caiu = d.banco === undefined ? null : r2(d.banco);
         if((d.nao_caiu || 0) > TOL){ bst = `não caiu ${brl(d.nao_caiu)}`; btone = "erro"; } else if((d.aguarda || 0) > TOL){ bst = "aguarda extrato"; btone = "aguarda"; } else if(caiu !== null){ bst = `caiu ${String(d.credito || "").replace(/\d{4}-(\d{2})-(\d{2})/g, "$2/$1")}`; btone = "ok"; } }
-      else { esp = d.liquido === undefined ? null : r2(d.liquido); caiu = d.liq_pago === undefined ? null : r2(d.liq_pago); const pe = String(d.pago_em || "").replace(/\d{4}-(\d{2})-(\d{2})/g, "$2/$1");
+      else { esp = d.liquido === undefined ? null : r2(d.liquido); caiu = (d.receb_st === "CONCILIADO" || d.receb_st === "DIVERGENTE") && d.liq_pago !== undefined ? r2(d.liq_pago) : null;   // só o que a Sicredi confirmou pago; "aguarda" = relatório de recebimentos ainda não cobre a data do pagamento
+        const pe = String(d.pago_em || "").replace(/\d{4}-(\d{2})-(\d{2})/g, "$2/$1");
         if(d.receb_st === "CONCILIADO"){ bst = `caiu ${pe}`; btone = "ok"; } else if(d.receb_st === "DIVERGENTE"){ bst = `diverge · ${pe}`; btone = "erro"; } else if(d.receb_st){ bst = String(d.receb_st).toLowerCase().replace("aguarda portal", "aguarda recebimentos"); btone = "aguarda"; } }
       return {forma:m, nome, pdv, maq, dif, estado: estadoDia(l, m, d), fech: d.fechado || null, qtd: d.pdv_qtd, esp, caiu, bst, btone};
     }
