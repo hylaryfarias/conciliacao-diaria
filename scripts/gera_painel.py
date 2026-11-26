@@ -20,7 +20,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
 from concilia_pix import HORA_VIRADA, carrega_lojas  # noqa: E402
-from portal_sicredi import ler_tef  # noqa: E402
+from portal_sicredi import ler_portais, ler_tef  # noqa: E402
 
 # Lojas cujo PIX passa pela TEF (não aparece no Histórico do Sicredi). Sem o relatório da TEF, o PIX delas é
 # conciliado PDV × banco: o cupom confirmado pelo extrato conta como pago.
@@ -87,6 +87,26 @@ def main() -> None:
     b = b[(b["Data"] >= de) & (b["Data"] <= ate)]
     b["forma"] = b["Desc. pagam."].str.upper()
     pdv_dia = {m: b[b["forma"].isin(f)].groupby(["Filial", "Data"])["cent"].agg(qtd="count", cent="sum") for m, f in FORMAS.items()}
+    # ---- visão de caixa: todas as formas do PDV por loja e dia (as que não passam pela maquininha também) e o voucher da máquina
+    def cat_forma(f: str) -> str:
+        for m, fs in FORMAS.items():
+            if f in fs:
+                return m
+        if "VOUCHER" in f or "VALE" in f: return "voucher"
+        if "DINHEIRO" in f: return "dinheiro"
+        if "ONLINE" in f or "IFOOD" in f: return "online"
+        if "PRAZO" in f: return "prazo"
+        return "outros"
+    b["cat"] = b["forma"].map(cat_forma)
+    cx_pdv = b[~b["cat"].isin(FORMAS)].groupby(["Filial", "Data", "cat"])["cent"].agg(qtd="count", cent="sum")
+    cx_maq = {}   # (filial, data) -> (qtd, cent) de voucher aprovado na maquininha (portal Sicredi)
+    try:
+        for (fil, _ec), pdf in ler_portais(sorted(glob.glob(str(RAIZ / "entrada" / "portal" / "*detalhado*.xlsx"))), carrega_lojas()).items():
+            v = pdf[(pdf["Produto"].astype(str).str.upper().str.strip() == "VOUCHER") & (pdf["Status"].astype(str).str.upper().isin({"APROVADA", "AUTORIZADA"}))]
+            for d_, g in v.groupby("Data"):
+                cx_maq[(fil, d_)] = (len(g), int(g["cent"].sum()))
+    except Exception as e:   # sem portal não há voucher da máquina; a visão de caixa segue só com o PDV
+        print("voucher da máquina indisponível:", e, file=sys.stderr)
 
     e1 = le("concilia_pix_2*.xlsx", "Resumo loja x dia"); e1p = le("concilia_pix_2*.xlsx", "PDV sem par"); e1m = le("concilia_pix_2*.xlsx", "Maquininha sem par")
     e2 = le("concilia_pix_banco_*.xlsx", "Resumo loja x dia", "Venda"); e2p = le("concilia_pix_banco_*.xlsx", "Pendências"); e2s = le("concilia_pix_banco_*.xlsx", "Banco sem venda")
@@ -474,7 +494,17 @@ def main() -> None:
                             for r in d.get("lanc", []):
                                 if r.get("c") == p.get("cupom") and str(r.get("s", "")).startswith("PROVÁVEL"):
                                     r["s"] = "SEM PAR NA MAQUININHA"; r.pop("hm", None); r.pop("t", None); r.pop("a", None)
-        lojas.append({"nome": filial, "marca": marca(filial), "ec": ec_de.get(filial), "aluguel": sorted(aluguel_de.get(filial, []), key=lambda a: a["data"]), "aluguel_outros": aluguel_outros.get(filial, []), "mod": mods})
+        caixa = {}
+        for d in pd.date_range(de, ate).date:
+            cx = {}
+            for cat in ("voucher", "dinheiro", "online", "prazo", "outros"):
+                if (filial, d, cat) in cx_pdv.index:
+                    x = cx_pdv.loc[(filial, d, cat)]; cx[cat] = {"pdv": r2(x["cent"] / 100), "qtd": int(x["qtd"])}
+            if (filial, d) in cx_maq:
+                q, c = cx_maq[(filial, d)]; cx.setdefault("voucher", {"pdv": 0.0, "qtd": 0}); cx["voucher"].update(maq=r2(c / 100), maq_qtd=q)
+            if cx:
+                caixa[d.isoformat()] = cx
+        lojas.append({"nome": filial, "marca": marca(filial), "ec": ec_de.get(filial), "aluguel": sorted(aluguel_de.get(filial, []), key=lambda a: a["data"]), "aluguel_outros": aluguel_outros.get(filial, []), "mod": mods, "caixa": caixa})
 
     dados = {"gerado_em": datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M"), "de": de.isoformat(), "ate": ate.isoformat(),
              "extrato_ate": extrato_ate.isoformat() if extrato_ate else None, "pdv_ate": pdv_ate.isoformat(), "lojas": lojas}

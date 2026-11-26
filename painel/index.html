@@ -97,6 +97,7 @@ main .inner{padding-block:22px 48px;display:grid;grid-template-columns:minmax(0,
 .chip[data-s="aguarda"]{background:var(--bg-soft);color:var(--ink-muted)}
 
 /* detalhe */
+.fech-t tr.total td{border-top:2px solid var(--ink-muted);background:var(--bg-soft)} .fech-t td.pos{color:var(--aviso);font-weight:600} .fech-t td.neg{color:var(--erro);font-weight:600} button.link{font:inherit;background:none;border:0;padding:0;color:var(--ink);text-decoration:underline;cursor:pointer;text-align:left}
 .det-head{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline;justify-content:space-between;padding:16px 16px 6px}
 .det-head h3{margin:0;font-size:20px;font-weight:700;letter-spacing:-.01em}
 .det-head .meta{font-size:12.5px;color:var(--ink-muted)}
@@ -383,7 +384,7 @@ function tabs(){
     const nErro = st.filter(x=>x.s==="erro").length, nOk = st.filter(x=>x.s==="ok").length;
     const badge = nErro ? `<span class="n" data-s="erro">${nErro} em aberto</span>` : nOk ? `<span class="n" data-s="ok">${nOk} ok</span>` : "";
     return `<button class="tab" role="tab" id="tab-${k}" data-tab="${k}" aria-selected="${k===tab}">${v}${badge}</button>`;
-  }).join("") + `<button class="tab" role="tab" id="tab-fech" data-tab="fech" aria-selected="${tab==="fech"}">Fechamentos</button>` + `<label class="ate">${MESES.length ? `<select id="mes" aria-label="Mês">${MESES.map(m => `<option value="${m.mes}" ${m.mes===MES?"selected":""}>${m.rotulo}${m.fechado ? " 🔒" : ""}</option>`).join("")}</select>` : ""}de <input type="date" id="de" value="${DE}" min="${D0.de}" max="${ATE}"> até <input type="date" id="ate" value="${ATE}" min="${DE}" max="${D0.ate}">${(ATE < D0.ate || DE > D0.de) ? `<button type="button" id="ate-tudo">todo o período</button>` : ""}</label>`;
+  }).join("") + `<button class="tab" role="tab" id="tab-fech" data-tab="fech" aria-selected="${tab==="fech"}">Fechamentos</button><button class="tab" role="tab" id="tab-caixa" data-tab="caixa" aria-selected="${tab==="caixa"}">Caixa</button>` + `<label class="ate">${MESES.length ? `<select id="mes" aria-label="Mês">${MESES.map(m => `<option value="${m.mes}" ${m.mes===MES?"selected":""}>${m.rotulo}${m.fechado ? " 🔒" : ""}</option>`).join("")}</select>` : ""}de <input type="date" id="de" value="${DE}" min="${D0.de}" max="${ATE}"> até <input type="date" id="ate" value="${ATE}" min="${DE}" max="${D0.ate}">${(ATE < D0.ate || DE > D0.de) ? `<button type="button" id="ate-tudo">todo o período</button>` : ""}</label>`;
   document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => { tab = b.dataset.tab; try{localStorage.setItem("tab",tab)}catch(e){} render(); }));
   const muda = (de, ate) => {
     if(!ate || ate < D0.de || ate > D0.ate) ate = D0.ate;
@@ -399,6 +400,8 @@ function tabs(){
   nota.hidden = tab === "pix";
   nota.textContent = tab === "credito"
     ? "Crédito · PDV × maquininha pelo valor bruto, cupom a cupom; e o que a Sicredi pagou na conta, por data de pagamento (D+1 útil, descontados MDR e a antecipação automática, cuja taxa muda por dia e sai do próprio extrato)."
+    : tab === "caixa"
+    ? "Caixa · conciliador de caixa: PDV × adquirente (Sicredi) por forma de pagamento, loja a loja e dia a dia, com o resultado do fechamento. Dinheiro, pagamento online e venda a prazo não passam pela maquininha: entram só pelo PDV."
     : tab === "fech"
     ? "Fechamentos · quanto do período já está fechado no caixa, para onde o dinheiro foi (PDV → maquininha → conta) e o que ainda precisa de uma pessoa. No mapa, cada quadrado é um dia de uma loja."
     : "Débito · PDV × maquininha pelo valor bruto, cupom a cupom; e o que a Sicredi pagou na conta, por data de pagamento (D+1 útil, descontado o MDR).";
@@ -759,6 +762,7 @@ function bancoHtml(l, bl, meus){
 }
 const notaFech = (f, comBotao) => `<div class="ajuste-nota fech-nota"><b>Dia fechado no caixa</b> · conferido ${brl(f.caixa)} no caixa físico contra ${brl(f.aberto)} em aberto no painel.<br>${esc(f.justificativa)}<br><small>registrado em ${quando(f.criado_em)}<span data-por="${esc(f.por||"")}"></span></small>${comBotao && dbRef && podeEscrever !== false && !mesTravado() ? `<div class="acoes"><button type="button" class="btn" data-act="reabrir" data-id="${esc(idFech(f))}">Reabrir dia</button></div>` : ""}</div>`;
 function detalhe(){
+  if(tab === "caixa"){ caixaDetalhe(); return; }
   if(tab === "fech"){ fechDetalhe(); return; }
   const el = document.getElementById("detalhe");
   const l = D.lojas.find(x => x.nome===sel);
@@ -906,7 +910,7 @@ function formFechar(l, d){
 }
 let abertos = new Set();
 function ligaDias(){
-  if(tab === "fech") return;
+  if(tab === "fech" || tab === "caixa") return;
   const l = D.lojas.find(x => x.nome===sel); if(!l) return;
   const m = M(l);
   document.querySelectorAll("#tab-dias td.dia button").forEach(b => b.addEventListener("click", () => {
@@ -1056,6 +1060,7 @@ async function ligaBanco(){
   dbRef.collection("vistos").onSnapshot(snap => {
     VI = {};
     snap.docs.forEach(d => { if(d.exists) VI[d.id] = d.data(); });
+    if(tab === "caixa" || tab === "fech"){ render(); return; }
     detalhe(); ligaDias(); ligaAjustes(); stamp();
   }, err => { console.warn("vistos:", err); });
 }
@@ -1251,7 +1256,87 @@ function ligaCliques(){
   const set = ab => { corpo.hidden = !ab; bt.textContent = ab ? "recolher" : "mostrar"; bt.setAttribute("aria-expanded", String(ab)); };
   let ab = false; try{ ab = localStorage.getItem("regras") === "1"; }catch(e){}
   set(ab); bt.addEventListener("click", () => { ab = corpo.hidden; set(ab); try{ localStorage.setItem("regras", ab ? "1" : "0"); }catch(e){} }); })();
-function render(){ tabs(); if(tab === "fech"){ fechKpis(); fechLojas(); fechDetalhe(); stamp(); return; } document.getElementById("kpis").className = "kpis"; kpis(); lojas(); detalhe(); ligaDias(); ligaAjustes(); stamp(); }
+
+// ---- aba Caixa · conciliador de caixa (PDV × adquirente por forma de pagamento) ----
+let CXD = null; try{ CXD = localStorage.getItem("cx-dia"); }catch(e){}   // dia selecionado na aba Caixa (AAAA-MM-DD); null = último dia do recorte
+const CX_FORMAS = [["credito","Crédito"],["debito","Débito"],["pix","PIX"],["voucher","Voucher"],["dinheiro","Dinheiro"],["online","Pagamento online"],["prazo","Venda a prazo"],["outros","Outros"]];
+const CX_SEM_ADQ = new Set(["dinheiro","online","prazo","outros"]);   // não passam pela maquininha: adquirente = PDV
+const cxDia = () => (CXD && CXD >= DE && CXD <= ATE) ? CXD : ATE;
+// linhas de uma loja num dia: {forma, nome, pdv, maq, dif, estado, fech}
+function caixaLinhas(l, data){
+  const cx = (l.caixa || {})[data] || {};
+  // transferências de forma que saem/entram nas formas sem aba (voucher, dinheiro, prazo): as abas já aplicam as delas
+  const aj = Object.values(AJ || {}).filter(a => a.loja === l.nome && (a.data === data || a.data_maq === data));
+  const extra = {};
+  for(const a of aj){ const v = r2(a.valor); if(!TABS[a.de] && a.data === data) extra[a.de] = r2((extra[a.de] || 0) - v); if(!TABS[a.para] && (a.data_maq || a.data) === data) extra[a.para] = r2((extra[a.para] || 0) + v); }
+  return CX_FORMAS.map(([m, nome]) => {
+    if(TABS[m]){
+      const d = l.mod[m].dias.find(x => x.data === data);
+      if(!d) return {forma:m, nome, pdv:0, maq:null, dif:0, estado:"vazio"};
+      const pdv = r2(d.pdv), maq = d.maq === undefined || d.sem_pdv ? null : r2(d.maq);
+      const dif = maq === null ? null : r2(maq - pdv - viradaUtil(d));
+      return {forma:m, nome, pdv, maq, dif, estado: estadoDia(l, m, d), fech: d.fechado || null, qtd: d.pdv_qtd};
+    }
+    const c = cx[m] || {}; const pdv = r2((c.pdv || 0) + (extra[m] || 0));
+    if(m === "voucher"){ const maq = c.maq === undefined ? null : r2(c.maq); return {forma:m, nome, pdv, maq, dif: maq === null ? null : r2(maq - pdv), estado: maq === null ? "semmaq" : Math.abs(maq - pdv) <= TOL ? "bateu" : "olhar", qtd:c.qtd || 0}; }
+    return {forma:m, nome, pdv, maq: pdv, dif: 0, estado: pdv ? "pdv" : "vazio", qtd: c.qtd || 0, semAdq: true};
+  }).filter(r => r.pdv || r.maq);
+}
+const cxTotais = linhas => ({pdv: sum(linhas, r => r.pdv), maq: sum(linhas, r => r.maq ?? r.pdv), dif: sum(linhas, r => r.dif ?? 0), aberto: linhas.some(r => r.estado === "olhar" && !(r.dif !== null && Math.abs(r.dif) <= TOL))});
+const cxSit = r => r.semAdq ? `<span class="chip" data-s="aguarda" title="não passa pela maquininha">só PDV</span>`
+  : r.estado === "vazio" ? "" : r.estado === "semmaq" ? `<span class="chip" data-s="aguarda">aguarda máquina</span>`
+  : r.fech ? `<span class="chip" data-s="${r.fech.motivo === "falta" ? "erro" : r.fech.motivo === "sobra" ? "aviso" : "ok"}" title="${esc(r.fech.justificativa || "")}">fechado · ${(MOTIVOS[r.fech.motivo] || r.fech.motivo || "").toLowerCase()}</span>`
+  : r.estado === "bateu" || (r.estado === "olhar" && r.dif !== null && Math.abs(r.dif) <= TOL) ? `<span class="chip" data-s="ok">bateu</span>` : r.estado === "olhar" ? `<span class="chip" data-s="pendente">aberto</span>` : `<span class="chip" data-s="aguarda">${esc(ESTADOS[r.estado] || r.estado)}</span>`;
+const cxDias = () => { const s = new Set(); for(const l of D.lojas){ for(const m of Object.keys(TABS)) for(const d of l.mod[m].dias) if(d.data >= DE && d.data <= ATE && (d.pdv || d.maq !== undefined)) s.add(d.data); for(const k of Object.keys(l.caixa || {})) if(k >= DE && k <= ATE) s.add(k); } return [...s].sort(); };
+function caixaKpis(){
+  const data = cxDia(), l = D.lojas.find(x => x.nome === sel);
+  const lojas = l ? [l] : D.lojas;
+  const todas = lojas.map(x => cxTotais(caixaLinhas(x, data)));
+  const t = {pdv: sum(todas, x => x.pdv), maq: sum(todas, x => x.maq), dif: sum(todas, x => x.dif)};
+  const nAb = todas.filter(x => x.aberto).length;
+  const k = document.getElementById("kpis"); k.className = "kpis ger";
+  k.innerHTML = `<div class="bloco">
+    <div class="ger-top"><div><h4>Conciliador de caixa · ${l ? esc(l.nome) : `${D.lojas.length} lojas`} · ${dBR(data)}/${data.slice(0,4)}</h4>
+      <div class="ger-chips">${nAb ? `<span class="chip" data-s="pendente">${nAb} ${l ? "forma" : "loja"}${nAb===1?"":"s"} em aberto</span>` : `<span class="chip" data-s="ok">dia fechado${l ? "" : " em todas as lojas"}</span>`}</div></div>
+      <label class="ate">Dia <select id="cx-dia" aria-label="Dia">${cxDias().map(d => `<option value="${d}" ${d===data?"selected":""}>${dBR(d)}</option>`).join("")}</select></label></div>
+    <div class="resultado">
+      <div><div class="lbl">Venda sistema (PDV)</div><div class="val">${brl(t.pdv)}</div><div class="sub">todas as formas, já com as transferências</div></div>
+      <div><div class="lbl">Venda adquirente (Sicredi)</div><div class="val">${brl(t.maq)}</div><div class="sub">cartão, PIX e voucher na máquina · dinheiro, online e prazo pelo PDV</div></div>
+      <div data-tone="${Math.abs(t.dif) <= TOL ? "" : t.dif > 0 ? "aviso" : "erro"}"><div class="lbl">Diferença</div><div class="val">${brlS(t.dif)}</div><div class="sub">${Math.abs(t.dif) <= TOL ? "bate" : t.dif > 0 ? "a máquina recebeu mais que o PDV" : "o PDV registrou mais que a máquina"}</div></div>
+    </div></div>`;
+  const sd = document.getElementById("cx-dia"); if(sd) sd.addEventListener("change", ev => { CXD = ev.target.value; try{localStorage.setItem("cx-dia",CXD)}catch(e){} render(); });
+}
+function caixaLojas(){
+  const ul = document.getElementById("lojas"), data = cxDia();
+  document.getElementById("lojas-n").textContent = D.lojas.length;
+  const info = D.lojas.map(l => ({l, t: cxTotais(caixaLinhas(l, data))})).sort((a,b) => a.l.nome.localeCompare(b.l.nome));
+  ul.innerHTML = info.map(({l, t}) => { const s = t.aberto ? "pendente" : t.dif < -TOL ? "erro" : t.dif > TOL ? "aviso" : "ok"; const txt = t.aberto ? "em aberto" : Math.abs(t.dif) <= TOL ? "bateu" : (t.dif > 0 ? "sobra " : "falta ") + brl(Math.abs(t.dif));
+    return `<li><button class="loja" data-nome="${esc(l.nome)}" aria-pressed="${l.nome===sel}" style="--m:var(--${({ok:"ok",erro:"erro",aviso:"aviso",pendente:"pendente"})[s]})"><span class="bar"></span><span class="nm">${esc(l.nome)}<small>PDV ${brl(t.pdv)} · máquina ${brl(t.maq)}</small></span><span class="chip" data-s="${s}">${txt}</span></button></li>`; }).join("");
+  ul.querySelectorAll(".loja").forEach(b => b.addEventListener("click", () => { sel = (sel === b.dataset.nome) ? null : b.dataset.nome; try{ if(sel) localStorage.setItem("loja",sel); }catch(e){} render(); vaiAoDetalhe(); }));
+}
+function caixaDetalhe(){
+  const el = document.getElementById("detalhe"), data = cxDia(), l = D.lojas.find(x => x.nome === sel);
+  const tdV = v => `<td>${v === null || v === undefined ? `<span style="color:var(--ink-muted)">—</span>` : brl(v)}</td>`;
+  let html = "";
+  if(l){
+    const linhas = caixaLinhas(l, data), t = cxTotais(linhas);
+    html += `<div class="det-head"><h3>${esc(l.nome)} · ${dBR(data)}</h3><span class="meta">PDV × adquirente por forma de pagamento · clique na loja de novo para ver todas</span></div>
+    <div class="tablewrap"><table class="fech-t"><thead><tr><th>Forma</th><th>Cupons</th><th>Venda (PDV)</th><th>Máquina (Sicredi)</th><th>Diferença</th><th>Situação</th></tr></thead><tbody>
+    ${linhas.map(r => `<tr><td>${esc(r.nome)}</td><td>${r.qtd ?? ""}</td>${tdV(r.pdv)}${tdV(r.semAdq ? null : r.maq)}${r.dif === null ? "<td>—</td>" : tdS(r.dif)}<td>${cxSit(r)}</td></tr>`).join("")}
+    <tr class="total"><td><b>Total</b></td><td></td><td><b>${brl(t.pdv)}</b></td><td><b>${brl(t.maq)}</b></td>${tdS(t.dif)}<td></td></tr></tbody></table></div>`;
+    const fechs = linhas.filter(r => r.fech);
+    if(fechs.length) html += `<div class="det-head"><h3>Como o dia fechou</h3><span class="meta">registrado no painel</span></div><div class="tablewrap"><table class="fech-t"><thead><tr><th>Forma</th><th>Motivo</th><th>Diferença</th><th>Justificativa</th></tr></thead><tbody>${fechs.map(r => `<tr><td>${esc(r.nome)}</td><td>${esc(MOTIVOS[r.fech.motivo] || r.fech.motivo || "")}</td>${tdS(r.dif ?? 0)}<td style="white-space:normal;max-width:60ch">${esc(r.fech.justificativa || "")}</td></tr>`).join("")}</tbody></table></div>`;
+  }
+  const linhasL = D.lojas.map(x => ({x, t: cxTotais(caixaLinhas(x, data))})).sort((a,b) => a.x.nome.localeCompare(b.x.nome));
+  const tt = {pdv: sum(linhasL, y => y.t.pdv), maq: sum(linhasL, y => y.t.maq), dif: sum(linhasL, y => y.t.dif)};
+  html += `<div class="det-head"><h3>Todas as lojas · ${dBR(data)}</h3><span class="meta">PDV × adquirente, todas as formas · clique para abrir a loja</span></div>
+  <div class="tablewrap"><table class="fech-t"><thead><tr><th>Loja</th><th>Venda (PDV)</th><th>Máquina (Sicredi)</th><th>Diferença</th><th>Situação</th></tr></thead><tbody>
+  ${linhasL.map(({x, t}) => `<tr><td><button type="button" class="link" data-nome="${esc(x.nome)}">${esc(x.nome)}</button></td>${tdV(t.pdv)}${tdV(t.maq)}${tdS(t.dif)}<td>${t.aberto ? `<span class="chip" data-s="pendente">em aberto</span>` : Math.abs(t.dif) <= TOL ? `<span class="chip" data-s="ok">bateu</span>` : `<span class="chip" data-s="${t.dif > 0 ? "aviso" : "erro"}">${t.dif > 0 ? "sobra" : "falta"}</span>`}</td></tr>`).join("")}
+  <tr class="total"><td><b>Total</b></td><td><b>${brl(tt.pdv)}</b></td><td><b>${brl(tt.maq)}</b></td>${tdS(tt.dif)}<td></td></tr></tbody></table></div>`;
+  el.innerHTML = html;
+  el.querySelectorAll("button.link").forEach(b => b.addEventListener("click", () => { sel = b.dataset.nome; try{localStorage.setItem("loja",sel)}catch(e){} render(); }));
+}
+function render(){ tabs(); if(tab === "caixa"){ caixaKpis(); caixaLojas(); caixaDetalhe(); stamp(); return; } if(tab === "fech"){ fechKpis(); fechLojas(); fechDetalhe(); stamp(); return; } document.getElementById("kpis").className = "kpis"; kpis(); lojas(); detalhe(); ligaDias(); ligaAjustes(); stamp(); }
 
 
 function stamp(){ if(!D0) return; const tr = mesTravado(); document.getElementById("stamp").innerHTML = `${tr ? `<span><span class="chip" data-s="aviso" title="${esc(tr.nota||"")}">🔒 mês fechado em ${dBR(tr.fechado_em)} · valores travados</span></span>` : ""}<span>Período <b>${dBR(DE)} a ${dBR(ATE)}/${ATE.slice(0,4)}</b>${(ATE < D0.ate || DE > D0.de) ? ` <small>(relatório: ${dBR(D0.de)} a ${dBR(D0.ate)})</small>` : ""}</span><span>PDV lido até <b>${D.pdv_ate?dBR(D.pdv_ate):"—"}</b></span><span>Extrato lido até <b>${D.extrato_ate?dBR(D.extrato_ate):"—"}</b></span><span>Atualizado em ${D.gerado_em}</span>${ultimoRegistro() ? `<span>Último registro gravado em ${ultimoRegistro()}</span>` : ""}`; }
@@ -1276,7 +1361,7 @@ async function carregaLanc(nome){
   l0.lancOK = true; l0.lancPedido = false;
 }
 (async () => {
-  try{ sel = localStorage.getItem("loja"); const t = localStorage.getItem("tab"); if(TABS[t] || t === "fech") tab = t; }catch(e){}
+  try{ sel = localStorage.getItem("loja"); const t = localStorage.getItem("tab"); if(TABS[t] || t === "fech" || t === "caixa") tab = t; }catch(e){}
   if(EMBUTIDO){
     if(!D.lojas.some(l=>l.nome===sel)) sel = (D.lojas.find(l=>l.mod.pix.tem_maq) || D.lojas[0] || {}).nome || null;
     document.getElementById("rodape").textContent = `Gerado em ${D.gerado_em} · scripts/gera_painel.py`;
